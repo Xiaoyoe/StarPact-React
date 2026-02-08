@@ -1,6 +1,6 @@
 import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 
-interface CodeEditorProps {
+interface NovelEditorProps {
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
@@ -11,7 +11,7 @@ interface CodeEditorProps {
   readOnly?: boolean;
 }
 
-export function CodeEditor({
+export function NovelEditor({
   value,
   onChange,
   placeholder = '',
@@ -20,7 +20,7 @@ export function CodeEditor({
   diffs = null,
   showLineNumbers = true,
   readOnly = false,
-}: CodeEditorProps) {
+}: NovelEditorProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const highlightRef = useRef<HTMLDivElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
@@ -33,16 +33,13 @@ export function CodeEditor({
   const lines = useMemo(() => value.split('\n'), [value]);
   const lineCount = lines.length;
 
-  // Calculate gutter width based on digit count
   const gutterWidth = useMemo(() => {
     const digits = Math.max(1, Math.floor(Math.log10(Math.max(1, lineCount))) + 1);
     return Math.max(44, 18 + fontSize * 0.62 * digits);
   }, [lineCount, fontSize]);
 
-  // Track measured heights for each logical line
   const [lineHeights, setLineHeights] = useState<number[]>([]);
 
-  // Shared font/text style (must be identical on textarea, measure div, and highlight overlay)
   const sharedFontStyle = useMemo<React.CSSProperties>(() => ({
     fontSize,
     lineHeight: `${lineHeight}px`,
@@ -53,13 +50,11 @@ export function CodeEditor({
     letterSpacing: 'normal',
   }), [fontSize, lineHeight]);
 
-  // Measure each logical line's rendered height using a hidden mirror div
   const measureLines = useCallback(() => {
     const measureEl = measureRef.current;
     const ta = textareaRef.current;
     if (!measureEl || !ta) return;
 
-    // The measure div must have the same width as the textarea content area
     const taStyle = window.getComputedStyle(ta);
     const contentWidth = ta.clientWidth
       - parseFloat(taStyle.paddingLeft)
@@ -69,13 +64,11 @@ export function CodeEditor({
 
     const heights: number[] = [];
     for (let i = 0; i < lines.length; i++) {
-      // Use a non-breaking space for empty lines so they still have height
       const text = lines[i] || '\u00A0';
       measureEl.textContent = text;
       heights.push(measureEl.offsetHeight);
     }
 
-    // Only update state if heights actually changed
     setLineHeights(prev => {
       if (prev.length === heights.length && prev.every((h, idx) => h === heights[idx])) {
         return prev;
@@ -84,7 +77,6 @@ export function CodeEditor({
     });
   }, [lines]);
 
-  // Re-measure on value change, font size change, or window resize
   useEffect(() => {
     measureLines();
 
@@ -97,7 +89,6 @@ export function CodeEditor({
     return () => ro.disconnect();
   }, [measureLines]);
 
-  // Scroll sync: textarea -> gutter + highlight
   const handleScroll = useCallback(() => {
     const ta = textareaRef.current;
     if (!ta) return;
@@ -139,7 +130,6 @@ export function CodeEditor({
     [value, onChange],
   );
 
-  // Handle Tab key for indentation
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === 'Tab') {
@@ -158,7 +148,6 @@ export function CodeEditor({
     [value, onChange],
   );
 
-  // Build gutter line number elements with measured heights
   const gutterElements = useMemo(() => {
     return lines.map((_, i) => {
       const h = lineHeights[i] || lineHeight;
@@ -167,7 +156,7 @@ export function CodeEditor({
           key={i}
           style={{
             height: h,
-            lineHeight: `${lineHeight}px`, // text baseline aligns to first visual row
+            lineHeight: `${lineHeight}px`,
             fontSize,
             textAlign: 'right',
             paddingRight: 10,
@@ -183,13 +172,11 @@ export function CodeEditor({
     });
   }, [lines, lineHeights, lineHeight, fontSize]);
 
-  // Total content height for the gutter (sum of all measured line heights)
   const totalGutterHeight = useMemo(() => {
     if (lineHeights.length === 0) return lineCount * lineHeight;
     return lineHeights.reduce((sum, h) => sum + h, 0);
   }, [lineHeights, lineCount, lineHeight]);
 
-  // Diff highlight nodes
   const highlightNodes = useMemo(() => {
     if (!diffs || diffs.length === 0) return null;
     return diffs.map((d, i) => (
@@ -216,7 +203,6 @@ export function CodeEditor({
         border: '1px solid var(--border-primary)',
       }}
     >
-      {/* Optional label bar */}
       {label && (
         <div
           style={{
@@ -234,7 +220,6 @@ export function CodeEditor({
         </div>
       )}
 
-      {/* Hidden measuring element — must replicate textarea text styles exactly */}
       <div
         ref={measureRef}
         aria-hidden="true"
@@ -247,13 +232,10 @@ export function CodeEditor({
           padding: 0,
           margin: 0,
           border: 'none',
-          // width is set dynamically in measureLines()
         }}
       />
 
-      {/* Editor body */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
-        {/* Line number gutter */}
         {showLineNumbers && (
           <div
             ref={gutterRef}
@@ -277,9 +259,7 @@ export function CodeEditor({
           </div>
         )}
 
-        {/* Textarea + highlight overlay */}
         <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          {/* Diff highlight underlay */}
           {showHighlight && (
             <div
               ref={highlightRef}
@@ -305,7 +285,6 @@ export function CodeEditor({
             </div>
           )}
 
-          {/* Actual textarea */}
           <textarea
             ref={textareaRef}
             value={value}

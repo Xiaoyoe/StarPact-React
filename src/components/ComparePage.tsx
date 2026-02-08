@@ -8,6 +8,7 @@ import {
   type CharDiff,
   type UnifiedDiffLine,
 } from '../utils/diffEngine';
+import { NovelEditor } from './NovelEditor';
 
 // ---- Storage helpers (localStorage-based persistence) ----
 const STORAGE_PREFIX = 'text_compare_';
@@ -180,203 +181,6 @@ function modalBtnStyle(variant: 'primary' | 'secondary'): React.CSSProperties {
     background: variant === 'primary' ? 'var(--btn-primary-bg)' : 'var(--btn-secondary-bg)',
     color: variant === 'primary' ? 'var(--btn-primary-text)' : 'var(--btn-secondary-text)',
   };
-}
-
-// ---- Editor panel with line numbers ----
-function EditorPanel({
-  value,
-  onChange,
-  placeholder,
-  diffs,
-  fontSize,
-  label,
-  currentLine,
-  onCursorChange,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  placeholder: string;
-  diffs: CharDiff[] | null;
-  fontSize: number;
-  label: string;
-  currentLine: number;
-  onCursorChange: (line: number) => void;
-  readOnly?: boolean;
-}) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const highlightRef = useRef<HTMLDivElement>(null);
-  const lineRef = useRef<HTMLDivElement>(null);
-  const showHighlight = diffs !== null && diffs.length > 0;
-
-  const lines = value.split('\n');
-  const lineCount = lines.length || 1;
-
-  const handleScroll = () => {
-    const ta = textareaRef.current;
-    if (ta && lineRef.current) {
-      lineRef.current.scrollTop = ta.scrollTop;
-    }
-    if (ta && highlightRef.current) {
-      highlightRef.current.scrollTop = ta.scrollTop;
-      highlightRef.current.scrollLeft = ta.scrollLeft;
-    }
-  };
-
-  const handleCursorUpdate = () => {
-    if (textareaRef.current) {
-      const pos = textareaRef.current.selectionStart;
-      const textBefore = value.substring(0, pos);
-      const line = (textBefore.match(/\n/g) || []).length + 1;
-      onCursorChange(line);
-    }
-  };
-
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    onChange(e.target.value);
-  };
-
-  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
-    e.preventDefault();
-    const plainText = e.clipboardData.getData('text/plain');
-    const ta = e.currentTarget;
-    const start = ta.selectionStart;
-    const end = ta.selectionEnd;
-    const newValue = value.substring(0, start) + plainText + value.substring(end);
-    onChange(newValue);
-    // Set cursor position after paste
-    requestAnimationFrame(() => {
-      const newPos = start + plainText.length;
-      ta.selectionStart = newPos;
-      ta.selectionEnd = newPos;
-    });
-  };
-
-  // Render diff-highlighted content as overlay
-  const renderHighlight = () => {
-    if (!diffs || diffs.length === 0) return null;
-    return diffs.map((d, i) => (
-      <span
-        key={i}
-        style={{
-          color: d.type === 'same' ? 'var(--diff-same-text)' : 'var(--diff-different-text)',
-        }}
-      >
-        {d.text}
-      </span>
-    ));
-  };
-
-  // Build line number width
-  const lineNumWidth = Math.max(30, String(lineCount).length * 10 + 16);
-
-  const sharedTextStyle: React.CSSProperties = {
-    fontSize: fontSize,
-    lineHeight: `${fontSize * 1.6}px`,
-    fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-all',
-    padding: 8,
-    margin: 0,
-    border: 'none',
-  };
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      {/* Label */}
-      <div style={{
-        padding: '6px 12px',
-        background: 'var(--bg-tertiary)',
-        color: 'var(--text-secondary)',
-        fontSize: 12,
-        fontWeight: 600,
-        borderBottom: '1px solid var(--border-primary)',
-        letterSpacing: 0.5,
-      }}>
-        {label}
-      </div>
-      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Line numbers */}
-        <div
-          ref={lineRef}
-          style={{
-            width: lineNumWidth,
-            minWidth: lineNumWidth,
-            background: 'var(--bg-line-number)',
-            borderRight: '1px solid var(--border-primary)',
-            overflowY: 'hidden',
-            overflowX: 'hidden',
-            userSelect: 'none',
-            paddingTop: 8,
-          }}
-        >
-          {Array.from({ length: lineCount }, (_, i) => (
-            <div
-              key={i}
-              style={{
-                height: `${fontSize * 1.6}px`,
-                lineHeight: `${fontSize * 1.6}px`,
-                fontSize: fontSize,
-                textAlign: 'right',
-                paddingRight: 8,
-                color: 'var(--text-line-number)',
-                background: currentLine === i + 1 ? 'var(--bg-current-line)' : 'transparent',
-              }}
-            >
-              {i + 1}
-            </div>
-          ))}
-        </div>
-        {/* Text area container */}
-        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-          {/* Highlight overlay (shown when diffs exist) */}
-          {showHighlight && (
-            <div
-              ref={highlightRef}
-              style={{
-                ...sharedTextStyle,
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                width: '100%',
-                height: '100%',
-                overflow: 'auto',
-                background: 'var(--bg-editor)',
-                pointerEvents: 'none',
-                zIndex: 1,
-              }}
-            >
-              {renderHighlight()}
-            </div>
-          )}
-          {/* Actual textarea for editing */}
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={handleChange}
-            onScroll={handleScroll}
-            onClick={handleCursorUpdate}
-            onKeyUp={handleCursorUpdate}
-            onPaste={handlePaste}
-            placeholder={placeholder}
-            spellCheck={false}
-            style={{
-              ...sharedTextStyle,
-              width: '100%',
-              height: '100%',
-              resize: 'none',
-              outline: 'none',
-              background: showHighlight ? 'transparent' : 'var(--bg-editor)',
-              color: showHighlight ? 'transparent' : 'var(--text-primary)',
-              caretColor: 'var(--text-primary)',
-              position: 'relative',
-              zIndex: 2,
-              overflow: 'auto',
-            }}
-          />
-        </div>
-      </div>
-    </div>
-  );
 }
 
 // ---- Git diff result view ----
@@ -660,8 +464,6 @@ export function ComparePage() {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalSide, setModalSide] = useState<'left' | 'right'>('left');
-  const [leftCursorLine, setLeftCursorLine] = useState(1);
-  const [rightCursorLine, setRightCursorLine] = useState(1);
   const [leftWidth, setLeftWidth] = useState(50); // percentage
   const [toolbarVisible, setToolbarVisible] = useState(true);
 
@@ -921,15 +723,14 @@ export function ComparePage() {
               display: 'flex',
               flexDirection: 'column',
             }}>
-              <EditorPanel
+              <NovelEditor
                 value={leftText}
                 onChange={setLeftText}
                 placeholder="在此输入原始文本..."
                 diffs={leftDiffs}
                 fontSize={fontSize}
                 label="原始文本 (左侧)"
-                currentLine={leftCursorLine}
-                onCursorChange={setLeftCursorLine}
+                showLineNumbers={true}
               />
             </div>
 
@@ -943,15 +744,14 @@ export function ComparePage() {
               display: 'flex',
               flexDirection: 'column',
             }}>
-              <EditorPanel
+              <NovelEditor
                 value={rightText}
                 onChange={setRightText}
                 placeholder="在此输入修改后文本..."
                 diffs={rightDiffs}
                 fontSize={fontSize}
                 label="修改后文本 (右侧)"
-                currentLine={rightCursorLine}
-                onCursorChange={setRightCursorLine}
+                showLineNumbers={true}
               />
             </div>
           </>
