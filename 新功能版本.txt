@@ -1,430 +1,203 @@
-# 系统日志弹窗设计方案
-
-## 🎨 设计概览
-
-这是一个基于 React + Tailwind CSS + Framer Motion 实现的深色科技风系统日志弹窗组件，具有以下特点：
-
-- 🔍 多级别日志过滤（ALL/DEBUG/INFO/WARNING/ERROR）
-- 🎭 平滑的动画过渡效果
-- 🎨 按级别区分的颜色标识系统
-- 💾 日志清空和导出功能
-- 📱 响应式设计，适配不同屏幕尺寸
-- 🔄 实时更新的日志显示
-
-## 📁 组件结构
-
-```tsx
-LogsPanel/
-├── 主容器（固定定位，全屏覆盖）
-├── 日志面板（卡片式设计）
-│   ├── 头部（标题、统计、操作按钮）
-│   ├── 过滤栏（日志级别过滤按钮）
-│   ├── 日志列表（按级别着色显示）
-│   └── 空状态（无日志时显示）
-└── 动画效果（使用 framer-motion）
+## 一、核心组件架构
+### 1. LineNumberArea类（行号显示区域）
 ```
-
-## 🎯 核心功能
-
-### 1. 日志级别颜色系统
-
-| 级别 | 背景色 | 文本色 | 点颜色 | 用途 |
-|------|--------|--------|--------|------|
-| DEBUG | `bg-white/5` | `text-white/40` | `bg-white/30` | 调试信息 |
-| INFO | `bg-[#165DFF]/5` | `text-[#165DFF]` | `bg-[#165DFF]` | 普通信息 |
-| WARNING | `bg-[#FF7D00]/5` | `text-[#FF7D00]` | `bg-[#FF7D00]` | 警告信息 |
-| ERROR | `bg-[#F53F3F]/5` | `text-[#F53F3F]` | `bg-[#F53F3F]` | 错误信息 |
-
-### 2. 动画效果
-
-- **淡入淡出**：弹窗出现和消失时的透明度动画
-- **缩放效果**：弹窗出现时的轻微缩放动画
-- **平滑过渡**：所有状态变化的平滑过渡
-
-### 3. 交互功能
-
-- **点击遮罩关闭**：点击弹窗外部的遮罩区域关闭弹窗
-- **清空日志**：一键清空所有日志记录
-- **导出日志**：导出日志为文件
-- **级别过滤**：按日志级别过滤显示内容
-- **悬停效果**：日志条目悬停时的背景色变化
-
-## 📋 完整实现代码
-
-### 类型定义
-
-```typescript
-// types/index.ts
-export interface LogEntry {
-  id: string;
-  level: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR';
-  message: string;
-  timestamp: number;
-  module?: string;
-}
+class LineNumberArea(QWidget):
+    """行号显示区域"""
+    def __init__(self, editor):
+        super().__init__(editor)
+        self.codeEditor = editor
+        self.setFixedWidth(40)  # 行号区域宽度
 ```
+功能 ：
 
-### 状态管理
-
-```typescript
-// store/index.ts
-import { create } from 'zustand';
-import type { LogEntry } from '@/types';
-
-export interface AppState {
-  // 其他状态...
-  logsPanelOpen: boolean;
-  logs: LogEntry[];
-  setLogsPanelOpen: (open: boolean) => void;
-  addLog: (log: Omit<LogEntry, 'id' | 'timestamp'>) => void;
-  clearLogs: () => void;
-}
-
-export const useAppStore = create<AppState>((set) => ({
-  // 其他状态...
-  logsPanelOpen: false,
-  logs: [],
-  
-  setLogsPanelOpen: (open) => set({ logsPanelOpen: open }),
-  
-  addLog: (log) => set((state) => ({
-    logs: [
-      {
-        ...log,
-        id: crypto.randomUUID(),
-        timestamp: Date.now(),
-      },
-      ...state.logs,
-    ].slice(0, 1000), // 限制日志数量
-  })),
-  
-  clearLogs: () => set({ logs: [] }),
-}));
+- 继承自QWidget，作为独立的行号显示组件
+- 与编辑器关联，接收编辑器引用
+- 固定宽度40px（后续会动态调整）
+### 2. CodeEditor类（带行号的编辑器）
 ```
-
-### 组件实现
-
-```tsx
-// components/LogsPanel.tsx
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Download, Filter } from 'lucide-react';
-import { useAppStore } from '@/store';
-import { cn } from '@/utils/cn';
-import type { LogEntry } from '@/types';
-
-const levelColors: Record<LogEntry['level'], { bg: string; text: string; dot: string }> = {
-  DEBUG: { bg: 'bg-white/5', text: 'text-white/40', dot: 'bg-white/30' },
-  INFO: { bg: 'bg-[#165DFF]/5', text: 'text-[#165DFF]', dot: 'bg-[#165DFF]' },
-  WARNING: { bg: 'bg-[#FF7D00]/5', text: 'text-[#FF7D00]', dot: 'bg-[#FF7D00]' },
-  ERROR: { bg: 'bg-[#F53F3F]/5', text: 'text-[#F53F3F]', dot: 'bg-[#F53F3F]' },
-};
-
-export function LogsPanel() {
-  const { logsPanelOpen, logs, setLogsPanelOpen, clearLogs } = useAppStore();
-  const [levelFilter, setLevelFilter] = useState<LogEntry['level'] | 'ALL'>('ALL');
-
-  const filteredLogs = levelFilter === 'ALL'
-    ? logs
-    : logs.filter(l => l.level === levelFilter);
-
-  if (!logsPanelOpen) return null;
-
-  return (
-    <AnimatePresence>
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
-        onClick={() => setLogsPanelOpen(false)}
-      >
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          className="w-[700px] max-w-[95vw] h-[500px] max-h-[85vh] bg-[#161830] border border-white/[0.08] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
-          onClick={e => e.stopPropagation()}
-        >
-          {/* 头部 */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
-            <div>
-              <h2 className="text-sm font-semibold text-white/85">系统日志</h2>
-              <p className="text-[11px] text-white/30 mt-0.5">{filteredLogs.length} 条日志记录</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={clearLogs}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white/40 hover:text-white/60 hover:bg-white/5 rounded-lg transition-colors"
-              >
-                <Trash2 className="w-3 h-3" /> 清空
-              </button>
-              <button className="flex items-center gap-1 px-2.5 py-1.5 text-xs text-white/40 hover:text-white/60 hover:bg-white/5 rounded-lg transition-colors">
-                <Download className="w-3 h-3" /> 导出
-              </button>
-              <button
-                onClick={() => setLogsPanelOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-              >
-                <X className="w-4 h-4 text-white/30" />
-              </button>
-            </div>
-          </div>
-
-          {/* 过滤栏 */}
-          <div className="flex items-center gap-2 px-5 py-3 border-b border-white/[0.06]">
-            <Filter className="w-3.5 h-3.5 text-white/25" />
-            {(['ALL', 'DEBUG', 'INFO', 'WARNING', 'ERROR'] as const).map(level => (
-              <button
-                key={level}
-                onClick={() => setLevelFilter(level)}
-                className={cn(
-                  'px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all',
-                  levelFilter === level
-                    ? 'bg-white/10 text-white/80'
-                    : 'text-white/30 hover:text-white/50 hover:bg-white/5'
-                )}
-              >
-                {level === 'ALL' ? '全部' : level}
-              </button>
-            ))}
-          </div>
-
-          {/* 日志列表 */}
-          <div className="flex-1 overflow-y-auto scrollbar-thin">
-            {filteredLogs.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-white/20">
-                <p className="text-sm">暂无日志</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-white/[0.03]">
-                {filteredLogs.map(log => {
-                  const colors = levelColors[log.level];
-                  return (
-                    <div
-                      key={log.id}
-                      className={cn('flex items-start gap-3 px-5 py-2.5 hover:bg-white/[0.02] transition-colors', colors.bg)}
-                    >
-                      <div className={cn('w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0', colors.dot)} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className={cn('text-[10px] font-semibold uppercase tracking-wider', colors.text)}>
-                            {log.level}
-                          </span>
-                          {log.module && (
-                            <span className="text-[10px] text-white/20 px-1.5 py-0.5 bg-white/5 rounded">
-                              {log.module}
-                            </span>
-                          )}
-                          <span className="text-[10px] text-white/15 ml-auto">
-                            {new Date(log.timestamp).toLocaleTimeString()}
-                          </span>
-                        </div>
-                        <p className="text-xs text-white/50 break-all">{log.message}</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
-  );
-}
+class CodeEditor(QPlainTextEdit):
+    """带行号的代码编辑器"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.lineNumberArea = LineNumberArea(self)  # 创建行号区域
 ```
+功能 ：
 
-### 样式补充
-
-```css
-/* 滚动条样式（添加到 index.css） */
-.scrollbar-thin::-webkit-scrollbar {
-  width: 4px;
-}
-
-.scrollbar-thin::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
-}
-
-.scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
+- 继承自QPlainTextEdit，提供文本编辑功能
+- 包含LineNumberArea实例作为子组件
+- 管理行号显示和文本编辑的协调
+## 二、自动更新机制（信号槽机制）
+### 3. 信号连接（核心机制）
 ```
-
-## 🚀 使用方法
-
-### 1. 打开日志面板
-
-```tsx
-import { useAppStore } from '@/store';
-import { LogsPanel } from '@/components/LogsPanel';
-
-function Header() {
-  const { setLogsPanelOpen } = useAppStore();
-
-  return (
-    <header>
-      {/* 其他内容 */}
-      <button
-        onClick={() => setLogsPanelOpen(true)}
-        className="p-2 hover:bg-white/5 rounded-lg"
-      >
-        {/* 日志图标 */}
-      </button>
-      <LogsPanel />
-    </header>
-  );
-}
+# 连接信号
+self.blockCountChanged.connect(self.updateLineNumberAreaWidth)
+self.updateRequest.connect(self.updateLineNumberArea)
+self.cursorPositionChanged.connect(self.highlightCurrentLine)
 ```
-
-### 2. 添加日志
-
-```tsx
-import { useAppStore } from '@/store';
-
-function SomeComponent() {
-  const { addLog } = useAppStore();
-
-  // 添加不同级别的日志
-  const logInfo = () => {
-    addLog({
-      level: 'INFO',
-      message: '用户登录成功',
-      module: 'auth',
-    });
-  };
-
-  const logError = () => {
-    addLog({
-      level: 'ERROR',
-      message: '网络请求失败',
-      module: 'api',
-    });
-  };
-
-  return (
-    // 组件内容
-  );
-}
+三个关键信号 ：
+ 3.1 blockCountChanged信号
+- 触发时机 ：当文本块（行）数量发生变化时
+- 连接方法 ： updateLineNumberAreaWidth
+- 功能 ：自动重新计算行号区域宽度 3.2 updateRequest信号
+- 触发时机 ：当编辑器需要更新显示时（滚动、编辑等）
+- 连接方法 ： updateLineNumberArea
+- 功能 ：自动更新行号区域的显示内容 3.3 cursorPositionChanged信号
+- 触发时机 ：当光标位置发生变化时
+- 连接方法 ： highlightCurrentLine
+- 功能 ：自动高亮当前行
+## 三、行号宽度自动调整
+### 4. lineNumberAreaWidth方法
 ```
-
-## 🎨 设计细节
-
-### 颜色方案
-
-- **主背景**：`#161830` - 深蓝黑色调
-- **边框**：`border-white/[0.06]` - 几乎透明的白色边框
-- **文本**：从 `text-white/85` 到 `text-white/15` 的分级透明度
-- **阴影**：`shadow-2xl` - 深沉的阴影效果
-- **遮罩**：`bg-black/60 backdrop-blur-sm` - 半透明模糊遮罩
-
-### 排版系统
-
-- **标题**：`text-sm font-semibold text-white/85`
-- **副标题**：`text-[11px] text-white/30`
-- **按钮文本**：`text-xs text-white/40`
-- **日志级别**：`text-[10px] font-semibold uppercase tracking-wider`
-- **日志时间**：`text-[10px] text-white/15`
-- **日志内容**：`text-xs text-white/50`
-
-### 间距系统
-
-- **内部间距**：`px-5 py-2.5`（日志条目）
-- **外部间距**：`gap-2`（按钮间距）、`gap-3`（日志内容间距）
-- **边框间距**：`border-b border-white/[0.06]`（分割线）
-
-## 📱 响应式设计
-
-- **最大宽度**：`w-[700px] max-w-[95vw]` - 适配不同屏幕
-- **最大高度**：`h-[500px] max-h-[85vh]` - 避免占满整个屏幕
-- **滚动条**：`overflow-y-auto scrollbar-thin` - 长列表时自动滚动
-
-## 🎭 动画效果
-
-### 打开动画
-1. 遮罩：从 `opacity: 0` 到 `opacity: 1`
-2. 面板：从 `opacity: 0, scale: 0.95` 到 `opacity: 1, scale: 1`
-
-### 关闭动画
-1. 遮罩：从 `opacity: 1` 到 `opacity: 0`
-2. 面板：从 `opacity: 1, scale: 1` 到 `opacity: 0, scale: 0.95`
-
-### 过渡时间
-- 使用 Framer Motion 的默认过渡时间（约 0.3 秒）
-- 所有状态变化都有平滑的过渡效果
-
-## 🔧 技术栈
-
-- **框架**：React 19+
-- **样式**：Tailwind CSS v4+
-- **动画**：Framer Motion v12+
-- **状态管理**：Zustand v5+
-- **类型系统**：TypeScript 5+
-
-## 📈 性能优化
-
-1. **日志数量限制**：默认最多显示 1000 条日志
-2. **虚拟滚动**：对于大量日志，可以集成 `react-window`
-3. **防抖处理**：频繁添加日志时使用防抖
-4. **条件渲染**：`if (!logsPanelOpen) return null` - 未打开时不渲染
-
-## 🎯 最佳实践
-
-1. **模块化**：将日志相关功能封装为独立模块
-2. **类型安全**：使用 TypeScript 确保类型正确
-3. **可扩展性**：预留导出、筛选等功能的扩展点
-4. **用户体验**：添加加载状态、错误处理等
-5. **可测试性**：分离业务逻辑和 UI 渲染
-
-## 📝 日志格式建议
-
-```typescript
-// 推荐的日志结构
-const logEntry = {
-  level: 'INFO',        // 日志级别
-  message: '操作描述',   // 日志内容
-  module: '模块名称',    // 模块标识（可选）
-  data: { ... },        // 附加数据（可选）
-};
+def lineNumberAreaWidth(self):
+    """计算行号区域宽度，确保足够宽，不挡住内容"""
+    digits = 1
+    max_value = max(1, self.blockCount())
+    while max_value >= 10:
+        max_value /= 10
+        digits += 1
+    
+    # 增加行号区域宽度，确保行号和内容之间有足够间距
+    # 额外增加10px空间，确保内容不会被行号挡住
+    space = 15 + self.fontMetrics().horizontalAdvance('9') * digits
+    return max(50, space)  # 确保行号区域至少有50px宽
 ```
+计算逻辑 ：
 
-## 🎨 主题定制
-
-要修改颜色方案，只需更新 `levelColors` 对象：
-
-```typescript
-const levelColors = {
-  DEBUG: { bg: 'bg-white/5', text: 'text-white/40', dot: 'bg-white/30' },
-  INFO: { bg: 'bg-blue-500/5', text: 'text-blue-400', dot: 'bg-blue-500' },
-  WARNING: { bg: 'bg-yellow-500/5', text: 'text-yellow-400', dot: 'bg-yellow-500' },
-  ERROR: { bg: 'bg-red-500/5', text: 'text-red-400', dot: 'bg-red-500' },
-};
+1. 计算行数位数 ：根据总行数计算需要的位数
+   - 例如：100行需要3位，1000行需要4位
+2. 计算宽度 ： 15px + 字体宽度 * 位数
+   - 15px：基础间距
+   - 字体宽度 * 位数 ：行号数字所需宽度
+3. 最小宽度 ：确保至少50px宽，避免行号被截断
+### 5. updateLineNumberAreaWidth方法
 ```
+def updateLineNumberAreaWidth(self, _):
+    """更新行号区域宽度"""
+    self.setViewportMargins(self.lineNumberAreaWidth(), 0, 0, 0)
+```
+功能 ：
 
-## 🚀 部署建议
+- 调用 lineNumberAreaWidth() 计算新的宽度
+- 使用 setViewportMargins() 设置编辑器的左边距
+- 左边距等于行号区域宽度，为行号预留空间
+## 四、行号区域更新
+### 6. updateLineNumberArea方法
+```
+def updateLineNumberArea(self, rect, dy):
+    """更新行号区域"""
+    if dy:
+        self.lineNumberArea.scroll(0, dy)  # 滚动更新
+    else:
+        self.lineNumberArea.update(0, rect.y(), self.lineNumberArea.width(), rect.
+        height())  # 局部更新
+    
+    if rect.contains(self.viewport().rect()):
+        self.updateLineNumberAreaWidth(0)  # 如果需要，更新宽度
+```
+更新策略 ：
 
-1. **生产环境**：使用 Vite 构建，确保代码压缩
-2. **开发环境**：启用热更新，实时查看日志
-3. **测试环境**：添加日志测试用例
-4. **监控**：集成错误监控服务
+1. 滚动更新 ：如果 dy 不为0（垂直滚动），同步滚动行号区域
+2. 局部更新 ：如果 dy 为0（编辑更新），只更新可见区域
+3. 宽度检查 ：检查是否需要更新行号区域宽度
+## 五、行号绘制机制
+### 7. lineNumberAreaPaintEvent方法
+```
+def lineNumberAreaPaintEvent(self, event):
+    """绘制行号区域，背景透明"""
+    painter = QPainter(self.lineNumberArea)
+    # 背景设为透明
+    painter.fillRect(event.rect(), QColor(255, 255, 255, 0))
+    
+    block = self.firstVisibleBlock()  # 获取第一个可见的文本块
+    blockNumber = block.blockNumber()  # 获取块号（行号）
+    top = self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
+    bottom = top + self.blockBoundingRect(block).height()
+    
+    # 设置行号字体和颜色
+    font = painter.font()
+    font.setBold(True)
+    painter.setFont(font)
+    painter.setPen(QColor(100, 100, 100))  # 行号颜色稍深，增加可读性
+    
+    while block.isValid() and top <= event.rect().bottom():
+        if block.isVisible() and bottom >= event.rect().top():
+            number = str(blockNumber + 1)
+            painter.drawText(
+                5,  # 左侧边距
+                int(top), 
+                self.lineNumberArea.width() - 10,  # 右侧边距
+                self.fontMetrics().height(), 
+                Qt.AlignmentFlag.AlignRight, 
+                number
+            )
+        
+        block = block.next()
+        top = bottom
+        bottom = top + self.blockBoundingRect(block).height()
+        blockNumber += 1
+```
+绘制逻辑 ：
 
-## 📄 许可证
+1. 获取可见块 ：从第一个可见的文本块开始
+2. 计算位置 ：计算每个块（行）的垂直位置
+3. 绘制行号 ：只绘制可见区域的行号
+4. 样式设置 ：加粗字体，深灰色文字，右对齐
+5. 背景透明 ：背景设为透明，不遮挡内容
+## 六、窗口大小调整
+### 8. resizeEvent方法
+```
+def resizeEvent(self, event):
+    """调整大小事件"""
+    super().resizeEvent(event)
+    cr = self.contentsRect()
+    self.lineNumberArea.setGeometry(QRect(cr.left(), cr.top(), self.
+    lineNumberAreaWidth(), cr.height()))
+```
+功能 ：
 
-MIT License - 自由使用、修改和分发
-
-## 🌟 特色亮点
-
-1. **视觉效果**：深色科技风设计，符合现代 UI 趋势
-2. **用户体验**：平滑的动画过渡和直观的交互
-3. **功能完整**：涵盖日志管理的核心功能
-4. **代码质量**：TypeScript 类型安全，结构清晰
-5. **性能优化**：考虑了大量日志的处理方式
-6. **扩展性**：易于添加新功能和主题定制
-
-这个日志弹窗组件不仅功能完整，而且视觉效果出色，是现代 Web 应用中系统监控和调试的理想选择！
+- 窗口大小变化时自动调用
+- 重新设置行号区域的位置和大小
+- 确保行号区域始终在编辑器左侧
+## 七、自动更新流程总结
+### 完整的自动更新流程：
+1. 文本内容变化 → 触发 blockCountChanged 信号
+   
+   - 调用 updateLineNumberAreaWidth()
+   - 重新计算行号区域宽度
+   - 更新编辑器的左边距
+2. 编辑器滚动/编辑 → 触发 updateRequest 信号
+   
+   - 调用 updateLineNumberArea()
+   - 同步滚动行号区域或局部更新
+   - 检查是否需要更新宽度
+3. 光标移动 → 触发 cursorPositionChanged 信号
+   
+   - 调用 highlightCurrentLine()
+   - 高亮显示当前行
+4. 窗口大小变化 → 触发 resizeEvent 事件
+   
+   - 重新设置行号区域的位置和大小
+   - 确保行号区域正确显示
+## 八、关键技术点
+### 1. 信号槽机制
+- Qt的核心特性，实现组件间通信
+- 自动响应各种事件，无需手动调用
+### 2. 只绘制可见区域
+- 性能优化，避免绘制不可见的行号
+- 根据滚动位置动态更新
+### 3. 动态宽度计算
+- 根据行数自动调整行号区域宽度
+- 确保行号不被截断，同时不浪费空间
+### 4. 透明背景
+- 行号区域背景透明，不遮挡内容
+- 只绘制行号数字，不影响文本显示
+### 5. 同步滚动
+- 行号区域与文本内容同步滚动
+- 保持行号与文本行的对应关系
+## 九、优势特点
+1. 完全自动化 ：无需手动调用更新方法，信号槽机制自动处理
+2. 性能优化 ：只绘制可见区域，避免不必要的重绘
+3. 自适应宽度 ：根据行数自动调整宽度，避免截断
+4. 实时同步 ：与文本内容实时同步，始终保持准确
+5. 用户体验好 ：当前行高亮，便于定位和编辑
+这种实现方式充分利用了Qt的信号槽机制，实现了高效、自动、准确的行号显示功能。

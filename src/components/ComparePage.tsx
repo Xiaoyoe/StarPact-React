@@ -1,863 +1,1064 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  FileText, Copy, Trash2, Download, Upload, Save,
-  Minus, Plus, RotateCcw, Check, X, ChevronRight, Link2, Link2Off
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+  getCharDiffs,
+  generateUnifiedDiff,
+  extractFromContent,
+  getTimestamp,
+  isValidSaveName,
+  type CharDiff,
+  type UnifiedDiffLine,
+} from '../utils/diffEngine';
 
-interface SavedContent {
+// ---- Storage helpers (localStorage-based persistence) ----
+const STORAGE_PREFIX = 'text_compare_';
+const AUTO_SAVE_KEY = STORAGE_PREFIX + 'auto_save';
+const SAVES_INDEX_KEY = STORAGE_PREFIX + 'saves_index';
+
+interface SavedFile {
+  id: string;
   name: string;
   content: string;
   side: 'left' | 'right';
+  timestamp: string;
 }
 
-interface DiffLine {
-  left: string;
-  right: string;
-  status: 'same' | 'different' | 'left-only' | 'right-only';
+function loadAutoSave(): { left: string; right: string } | null {
+  try {
+    const raw = localStorage.getItem(AUTO_SAVE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return null;
 }
 
-export function ComparePage() {
-  const [leftText, setLeftText] = useState('');
-  const [rightText, setRightText] = useState('');
-  const [fontSize, setFontSize] = useState(12);
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
-  const [savedContents, setSavedContents] = useState<SavedContent[]>([]);
-  const [showDiff, setShowDiff] = useState(false);
-  const [diffResult, setDiffResult] = useState('');
-  const [showSaveModal, setShowSaveModal] = useState(false);
-  const [saveSide, setSaveSide] = useState<'left' | 'right'>('left');
-  const [saveName, setSaveName] = useState('');
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
-  const [leftWidth, setLeftWidth] = useState(50);
-  const [syncScroll, setSyncScroll] = useState(false);
-  const [diffLines, setDiffLines] = useState<DiffLine[]>([]);
-  const [showEditorHighlight, setShowEditorHighlight] = useState(false);
+function saveAutoSave(left: string, right: string) {
+  try {
+    localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify({ left, right, time: new Date().toISOString() }));
+  } catch { /* ignore */ }
+}
 
-  const leftEditorRef = useRef<HTMLTextAreaElement>(null);
-  const rightEditorRef = useRef<HTMLTextAreaElement>(null);
-  const leftLineNumbersRef = useRef<HTMLDivElement>(null);
-  const rightLineNumbersRef = useRef<HTMLDivElement>(null);
-  const leftEditorContainerRef = useRef<HTMLDivElement>(null);
-  const rightEditorContainerRef = useRef<HTMLDivElement>(null);
-  const autoSaveTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const isScrollingRef = useRef<{ left: boolean; right: boolean }>({ left: false, right: false });
+function loadSavesIndex(): SavedFile[] {
+  try {
+    const raw = localStorage.getItem(SAVES_INDEX_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  return [];
+}
+
+function persistSavesIndex(saves: SavedFile[]) {
+  try {
+    localStorage.setItem(SAVES_INDEX_KEY, JSON.stringify(saves));
+  } catch { /* ignore */ }
+}
+
+// ---- Toast component ----
+interface ToastMessage {
+  id: number;
+  text: string;
+  type: 'success' | 'error' | 'info';
+}
+
+let toastId = 0;
+
+function ToastContainer({ toasts, onRemove }: { toasts: ToastMessage[]; onRemove: (id: number) => void }) {
+  return (
+    <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {toasts.map(t => (
+        <div
+          key={t.id}
+          onClick={() => onRemove(t.id)}
+          style={{
+            padding: '10px 20px',
+            borderRadius: 'var(--border-radius)',
+            fontSize: 13,
+            fontWeight: 500,
+            cursor: 'pointer',
+            boxShadow: 'var(--shadow-md)',
+            transition: 'opacity var(--transition-speed)',
+            background: t.type === 'success' ? 'var(--toast-success-bg)' : t.type === 'error' ? 'var(--toast-error-bg)' : 'var(--toast-info-bg)',
+            color: t.type === 'success' ? 'var(--toast-success-text)' : t.type === 'error' ? 'var(--toast-error-text)' : 'var(--toast-info-text)',
+            borderLeft: `4px solid ${t.type === 'success' ? 'var(--toast-success-border)' : t.type === 'error' ? 'var(--toast-error-border)' : 'var(--toast-info-border)'}`,
+          }}
+        >
+          {t.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---- Modal component ----
+function SaveModal({
+  visible,
+  onSave,
+  onCancel,
+}: {
+  visible: boolean;
+  onSave: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    loadSavedContents();
-    loadAutoSavedContent();
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearInterval(autoSaveTimerRef.current);
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    if (autoSaveEnabled) {
-      autoSaveTimerRef.current = setInterval(() => {
-        localStorage.setItem('autoSaveLeft', leftText);
-        localStorage.setItem('autoSaveRight', rightText);
-      }, 30000);
-    } else {
-      if (autoSaveTimerRef.current) {
-        clearInterval(autoSaveTimerRef.current);
-      }
+    if (visible) {
+      setName('');
+      setError('');
+      setTimeout(() => inputRef.current?.focus(), 100);
     }
-    return () => {
-      if (autoSaveTimerRef.current) {
-        clearInterval(autoSaveTimerRef.current);
-      }
-    };
-  }, [autoSaveEnabled, leftText, rightText]);
+  }, [visible]);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
+  if (!visible) return null;
 
-  const loadSavedContents = () => {
-    const saved = JSON.parse(localStorage.getItem('savedContents') || '[]');
-    setSavedContents(saved);
-  };
-
-  const loadAutoSavedContent = () => {
-    const autoSaveLeft = localStorage.getItem('autoSaveLeft');
-    const autoSaveRight = localStorage.getItem('autoSaveRight');
-    if (autoSaveLeft) setLeftText(autoSaveLeft);
-    if (autoSaveRight) setRightText(autoSaveRight);
-  };
-
-  const handleSaveContent = (side: 'left' | 'right') => {
-    setSaveSide(side);
-    setSaveName(`${side === 'left' ? '左侧' : '右侧'}内容_${Date.now()}`);
-    setShowSaveModal(true);
-  };
-
-  const confirmSave = () => {
-    if (!saveName.trim()) {
-      showToast('请输入保存名称', 'error');
+  const handleSave = () => {
+    if (!name.trim()) {
+      setError('名称不能为空');
       return;
     }
-    const content = saveSide === 'left' ? leftText : rightText;
-    const newSaved = [...savedContents, { name: saveName, content, side: saveSide }];
-    setSavedContents(newSaved);
-    localStorage.setItem('savedContents', JSON.stringify(newSaved));
-    setShowSaveModal(false);
-    showToast(`已保存：${saveName}`, 'success');
-  };
-
-  const handleLoadContent = (item: SavedContent) => {
-    if (item.side === 'left') {
-      setLeftText(item.content);
-    } else {
-      setRightText(item.content);
+    if (!isValidSaveName(name)) {
+      setError('只能输入英文、数字和下划线');
+      return;
     }
-    setShowEditorHighlight(false);
-    showToast(`已加载：${item.name}`, 'success');
-  };
-
-  const handleDeleteContent = (index: number, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const newSaved = savedContents.filter((_, i) => i !== index);
-    setSavedContents(newSaved);
-    localStorage.setItem('savedContents', JSON.stringify(newSaved));
-    showToast('已删除保存的内容', 'info');
-  };
-
-  const handleCompare = () => {
-    const leftLines = leftText.split('\n');
-    const rightLines = rightText.split('\n');
-    const maxLines = Math.max(leftLines.length, rightLines.length);
-
-    const newDiffLines: DiffLine[] = [];
-    for (let i = 0; i < maxLines; i++) {
-      const leftLine = leftLines[i] || '';
-      const rightLine = rightLines[i] || '';
-
-      if (leftLine === rightLine) {
-        newDiffLines.push({ left: leftLine, right: rightLine, status: 'same' });
-      } else if (leftLine && !rightLine) {
-        newDiffLines.push({ left: leftLine, right: '', status: 'left-only' });
-      } else if (!leftLine && rightLine) {
-        newDiffLines.push({ left: '', right: rightLine, status: 'right-only' });
-      } else {
-        newDiffLines.push({ left: leftLine, right: rightLine, status: 'different' });
-      }
-    }
-
-    setDiffLines(newDiffLines);
-
-    let diffHtml = '';
-    diffHtml += `<div style="color: var(--primary-color); font-weight: bold;">--- 左侧内容</div>`;
-    diffHtml += `<div style="color: var(--primary-color); font-weight: bold;">+++ 右侧内容</div>`;
-    diffHtml += `<div style="color: var(--primary-color); font-weight: bold;">@@ -1,${leftLines.length} +1,${rightLines.length} @@</div>`;
-
-    for (let i = 0; i < maxLines; i++) {
-      const leftLine = leftLines[i] || '';
-      const rightLine = rightLines[i] || '';
-
-      if (leftLine === rightLine) {
-        diffHtml += `<div style="color: var(--success-color);"> ${leftLine}</div>`;
-      } else if (leftLine && !rightLine) {
-        diffHtml += `<div style="background-color: rgba(245, 63, 63, 0.1); color: var(--error-color);">-${leftLine}</div>`;
-      } else if (!leftLine && rightLine) {
-        diffHtml += `<div style="background-color: rgba(0, 180, 42, 0.1); color: var(--success-color);">+${rightLine}</div>`;
-      } else {
-        diffHtml += `<div style="background-color: rgba(245, 63, 63, 0.1); color: var(--error-color);">-${leftLine}</div>`;
-        diffHtml += `<div style="background-color: rgba(0, 180, 42, 0.1); color: var(--success-color);">+${rightLine}</div>`;
-      }
-    }
-
-    diffHtml += `<div style="color: var(--primary-color); font-weight: bold; margin-top: 16px;">=== 结构对比 ===</div>`;
-    diffHtml += `<div>左侧行数: ${leftLines.length} | 右侧行数: ${rightLines.length}</div>`;
-    diffHtml += `<div>左侧段落数: ${leftText.split(/\n\s*\n/).length} | 右侧段落数: ${rightText.split(/\n\s*\n/).length}</div>`;
-
-    setDiffResult(diffHtml);
-    setShowDiff(true);
-    setShowEditorHighlight(true);
-    showToast('对比完成', 'success');
-  };
-
-  const handleClearContent = () => {
-    setLeftText('');
-    setRightText('');
-    setDiffResult('');
-    setDiffLines([]);
-    setShowDiff(false);
-    setShowEditorHighlight(false);
-    showToast('内容已清空', 'info');
-  };
-
-  const handleClearStyle = () => {
-    setLeftText(leftText.replace(/<[^>]*>/g, ''));
-    setRightText(rightText.replace(/<[^>]*>/g, ''));
-    showToast('样式已清空', 'info');
-  };
-
-  const handleSaveResult = () => {
-    const blob = new Blob([diffResult], { type: 'text/markdown' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `文本对比结果_${Date.now()}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast('对比结果已导出为Markdown', 'success');
-  };
-
-  const adjustFontSize = (delta: number) => {
-    const newSize = Math.max(6, Math.min(18, fontSize + delta));
-    setFontSize(newSize);
-    showToast(`字体大小: ${newSize}px`, 'info');
-  };
-
-  const resetFontSize = () => {
-    setFontSize(12);
-    showToast('字体大小已重置', 'info');
-  };
-
-  const getLineNumbers = (text: string) => {
-    const lines = text.split('\n');
-    return Array.from({ length: Math.max(lines.length, 1) }, (_, i) => i + 1);
-  };
-
-  const handleLeftScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
-    const target = e.target as HTMLTextAreaElement;
-    
-    if (leftLineNumbersRef.current) {
-      leftLineNumbersRef.current.scrollTop = target.scrollTop;
-    }
-
-    if (syncScroll && !isScrollingRef.current.right) {
-      isScrollingRef.current.left = true;
-      if (rightEditorRef.current) {
-        rightEditorRef.current.scrollTop = target.scrollTop;
-        rightEditorRef.current.scrollLeft = target.scrollLeft;
-      }
-      if (rightLineNumbersRef.current) {
-        rightLineNumbersRef.current.scrollTop = target.scrollTop;
-      }
-      setTimeout(() => {
-        isScrollingRef.current.left = false;
-      }, 50);
-    }
-  };
-
-  const handleRightScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
-    const target = e.target as HTMLTextAreaElement;
-    
-    if (rightLineNumbersRef.current) {
-      rightLineNumbersRef.current.scrollTop = target.scrollTop;
-    }
-
-    if (syncScroll && !isScrollingRef.current.left) {
-      isScrollingRef.current.right = true;
-      if (leftEditorRef.current) {
-        leftEditorRef.current.scrollTop = target.scrollTop;
-        leftEditorRef.current.scrollLeft = target.scrollLeft;
-      }
-      if (leftLineNumbersRef.current) {
-        leftLineNumbersRef.current.scrollTop = target.scrollTop;
-      }
-      setTimeout(() => {
-        isScrollingRef.current.right = false;
-      }, 50);
-    }
-  };
-
-  const getLineStyle = (status: DiffLine['status']) => {
-    if (status === 'same') {
-      return { backgroundColor: 'rgba(0, 180, 42, 0.15)', color: 'var(--success-color)' };
-    } else if (status === 'different') {
-      return { backgroundColor: 'rgba(245, 63, 63, 0.15)', color: 'var(--error-color)' };
-    } else if (status === 'left-only') {
-      return { backgroundColor: 'rgba(245, 63, 63, 0.15)', color: 'var(--error-color)' };
-    } else if (status === 'right-only') {
-      return { backgroundColor: 'rgba(245, 63, 63, 0.15)', color: 'var(--error-color)' };
-    }
-    return {};
+    onSave(name);
   };
 
   return (
-    <div className="flex h-screen flex-col" style={{ backgroundColor: 'var(--bg-primary)' }}>
-      {/* 顶部工具栏 */}
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 10000,
+        background: 'var(--bg-modal-overlay)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}
+      onClick={onCancel}
+    >
       <div
-        className="flex items-center gap-2 border-b px-4 py-2"
-        style={{ borderColor: 'var(--border-color)' }}
+        style={{
+          background: 'var(--bg-modal)',
+          borderRadius: 'var(--border-radius)',
+          padding: 24,
+          minWidth: 360,
+          boxShadow: 'var(--shadow-lg)',
+        }}
+        onClick={e => e.stopPropagation()}
       >
-        <div className="flex items-center gap-2">
-          <FileText size={18} style={{ color: 'var(--primary-color)' }} />
-          <span className="text-sm font-semibold" style={{ color: 'var(--primary-color)' }}>
-            保存的内容：
-          </span>
+        <h3 style={{ marginBottom: 16, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>自定义保存名称</h3>
+        <input
+          ref={inputRef}
+          value={name}
+          onChange={e => { setName(e.target.value); setError(''); }}
+          onKeyDown={e => e.key === 'Enter' && handleSave()}
+          placeholder="输入名称（英文、数字、下划线）"
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            border: `1px solid ${error ? 'var(--btn-danger-bg)' : 'var(--border-primary)'}`,
+            borderRadius: 'var(--border-radius-sm)',
+            fontSize: 14,
+            outline: 'none',
+            background: 'var(--bg-editor)',
+            color: 'var(--text-primary)',
+          }}
+        />
+        {error && <p style={{ color: 'var(--btn-danger-bg)', fontSize: 12, marginTop: 4 }}>{error}</p>}
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <button onClick={onCancel} style={modalBtnStyle('secondary')}>取消</button>
+          <button onClick={handleSave} style={modalBtnStyle('primary')}>保存</button>
         </div>
-        <div className="flex-1 overflow-x-auto">
-          <div className="flex gap-2">
-            <AnimatePresence>
-              {savedContents.map((item, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  className="flex items-center gap-1.5 rounded-full px-3 py-1 cursor-pointer transition-colors hover:opacity-80"
-                  style={{
-                    backgroundColor: 'var(--bg-tertiary)',
-                  }}
-                  onClick={() => handleLoadContent(item)}
-                >
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                    {item.name}
-                  </span>
-                  <button
-                    onClick={(e) => handleDeleteContent(index, e)}
-                    className="flex h-4 w-4 items-center justify-center rounded-full transition-colors"
-                    style={{ backgroundColor: 'var(--error-color)', color: 'var(--text-inverse)' }}
-                  >
-                    <X size={8} />
-                  </button>
-                </motion.div>
-              ))}
-            </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function modalBtnStyle(variant: 'primary' | 'secondary'): React.CSSProperties {
+  return {
+    padding: '6px 18px',
+    borderRadius: 'var(--border-radius-sm)',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: 13,
+    fontWeight: 500,
+    background: variant === 'primary' ? 'var(--btn-primary-bg)' : 'var(--btn-secondary-bg)',
+    color: variant === 'primary' ? 'var(--btn-primary-text)' : 'var(--btn-secondary-text)',
+  };
+}
+
+// ---- Editor panel with line numbers ----
+function EditorPanel({
+  value,
+  onChange,
+  placeholder,
+  diffs,
+  fontSize,
+  label,
+  currentLine,
+  onCursorChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  diffs: CharDiff[] | null;
+  fontSize: number;
+  label: string;
+  currentLine: number;
+  onCursorChange: (line: number) => void;
+  readOnly?: boolean;
+}) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const highlightRef = useRef<HTMLDivElement>(null);
+  const lineRef = useRef<HTMLDivElement>(null);
+  const showHighlight = diffs !== null && diffs.length > 0;
+
+  const lines = value.split('\n');
+  const lineCount = lines.length || 1;
+
+  const handleScroll = () => {
+    const ta = textareaRef.current;
+    if (ta && lineRef.current) {
+      lineRef.current.scrollTop = ta.scrollTop;
+    }
+    if (ta && highlightRef.current) {
+      highlightRef.current.scrollTop = ta.scrollTop;
+      highlightRef.current.scrollLeft = ta.scrollLeft;
+    }
+  };
+
+  const handleCursorUpdate = () => {
+    if (textareaRef.current) {
+      const pos = textareaRef.current.selectionStart;
+      const textBefore = value.substring(0, pos);
+      const line = (textBefore.match(/\n/g) || []).length + 1;
+      onCursorChange(line);
+    }
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    onChange(e.target.value);
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    e.preventDefault();
+    const plainText = e.clipboardData.getData('text/plain');
+    const ta = e.currentTarget;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const newValue = value.substring(0, start) + plainText + value.substring(end);
+    onChange(newValue);
+    // Set cursor position after paste
+    requestAnimationFrame(() => {
+      const newPos = start + plainText.length;
+      ta.selectionStart = newPos;
+      ta.selectionEnd = newPos;
+    });
+  };
+
+  // Render diff-highlighted content as overlay
+  const renderHighlight = () => {
+    if (!diffs || diffs.length === 0) return null;
+    return diffs.map((d, i) => (
+      <span
+        key={i}
+        style={{
+          color: d.type === 'same' ? 'var(--diff-same-text)' : 'var(--diff-different-text)',
+        }}
+      >
+        {d.text}
+      </span>
+    ));
+  };
+
+  // Build line number width
+  const lineNumWidth = Math.max(30, String(lineCount).length * 10 + 16);
+
+  const sharedTextStyle: React.CSSProperties = {
+    fontSize: fontSize,
+    lineHeight: `${fontSize * 1.6}px`,
+    fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-all',
+    padding: 8,
+    margin: 0,
+    border: 'none',
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+      {/* Label */}
+      <div style={{
+        padding: '6px 12px',
+        background: 'var(--bg-tertiary)',
+        color: 'var(--text-secondary)',
+        fontSize: 12,
+        fontWeight: 600,
+        borderBottom: '1px solid var(--border-primary)',
+        letterSpacing: 0.5,
+      }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Line numbers */}
+        <div
+          ref={lineRef}
+          style={{
+            width: lineNumWidth,
+            minWidth: lineNumWidth,
+            background: 'var(--bg-line-number)',
+            borderRight: '1px solid var(--border-primary)',
+            overflowY: 'hidden',
+            overflowX: 'hidden',
+            userSelect: 'none',
+            paddingTop: 8,
+          }}
+        >
+          {Array.from({ length: lineCount }, (_, i) => (
+            <div
+              key={i}
+              style={{
+                height: `${fontSize * 1.6}px`,
+                lineHeight: `${fontSize * 1.6}px`,
+                fontSize: fontSize,
+                textAlign: 'right',
+                paddingRight: 8,
+                color: 'var(--text-line-number)',
+                background: currentLine === i + 1 ? 'var(--bg-current-line)' : 'transparent',
+              }}
+            >
+              {i + 1}
+            </div>
+          ))}
+        </div>
+        {/* Text area container */}
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          {/* Highlight overlay (shown when diffs exist) */}
+          {showHighlight && (
+            <div
+              ref={highlightRef}
+              style={{
+                ...sharedTextStyle,
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                overflow: 'auto',
+                background: 'var(--bg-editor)',
+                pointerEvents: 'none',
+                zIndex: 1,
+              }}
+            >
+              {renderHighlight()}
+            </div>
+          )}
+          {/* Actual textarea for editing */}
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={handleChange}
+            onScroll={handleScroll}
+            onClick={handleCursorUpdate}
+            onKeyUp={handleCursorUpdate}
+            onPaste={handlePaste}
+            placeholder={placeholder}
+            spellCheck={false}
+            style={{
+              ...sharedTextStyle,
+              width: '100%',
+              height: '100%',
+              resize: 'none',
+              outline: 'none',
+              background: showHighlight ? 'transparent' : 'var(--bg-editor)',
+              color: showHighlight ? 'transparent' : 'var(--text-primary)',
+              caretColor: 'var(--text-primary)',
+              position: 'relative',
+              zIndex: 2,
+              overflow: 'auto',
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---- Git diff result view ----
+function DiffResultView({ diffLines, fontSize }: { diffLines: UnifiedDiffLine[]; fontSize: number }) {
+  if (diffLines.length === 0) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        height: '100%', color: 'var(--text-tertiary)', fontSize: 14,
+      }}>
+        点击"一键对比"查看差异结果
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      height: '100%', overflowY: 'auto', padding: 12,
+      background: 'var(--bg-editor)',
+      fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
+      fontSize: fontSize,
+      lineHeight: `${fontSize * 1.6}px`,
+    }}>
+      {/* Title */}
+      <div style={{
+        color: 'var(--diff-header-text)',
+        fontWeight: 700,
+        fontSize: fontSize + 2,
+        marginBottom: 4,
+      }}>
+        Git风格对比结果：
+      </div>
+      <div style={{
+        color: 'var(--diff-separator)',
+        fontWeight: 700,
+        marginBottom: 8,
+      }}>
+        {'='.repeat(60)}
+      </div>
+
+      {diffLines.map((line, i) => {
+        let bg = 'transparent';
+        let color = 'var(--diff-context-text)';
+        let fontWeight: number | string = 'normal';
+
+        switch (line.type) {
+          case 'file-old':
+          case 'file-new':
+            color = 'var(--diff-header-text)';
+            fontWeight = 700;
+            break;
+          case 'hunk':
+            color = 'var(--diff-separator)';
+            fontWeight = 600;
+            break;
+          case 'add':
+            bg = 'var(--diff-added-bg)';
+            color = 'var(--diff-added-text)';
+            break;
+          case 'delete':
+            bg = 'var(--diff-deleted-bg)';
+            color = 'var(--diff-deleted-text)';
+            break;
+          case 'context':
+            color = 'var(--diff-context-text)';
+            break;
+        }
+
+        const displayContent = line.type === 'hunk' && line.simplified
+          ? line.simplified
+          : line.content;
+
+        return (
+          <div
+            key={i}
+            style={{
+              background: bg,
+              color: color,
+              fontWeight: fontWeight,
+              padding: '1px 6px',
+              borderRadius: 2,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+            }}
+          >
+            {displayContent}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---- Splitter ----
+function Splitter({ onDrag }: { onDrag: (dx: number) => void }) {
+  const dragging = useRef(false);
+  const lastX = useRef(0);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault();
+    dragging.current = true;
+    lastX.current = e.clientX;
+
+    const handleMouseMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const dx = ev.clientX - lastX.current;
+      lastX.current = ev.clientX;
+      onDrag(dx);
+    };
+
+    const handleMouseUp = () => {
+      dragging.current = false;
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+  };
+
+  return (
+    <div
+      onMouseDown={handleMouseDown}
+      style={{
+        width: 6,
+        minWidth: 6,
+        cursor: 'col-resize',
+        background: 'var(--bg-splitter)',
+        transition: 'background var(--transition-speed)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-splitter-hover)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-splitter)')}
+    >
+      <div style={{
+        width: 2,
+        height: 30,
+        borderRadius: 1,
+        background: 'var(--text-tertiary)',
+        opacity: 0.5,
+      }} />
+    </div>
+  );
+}
+
+// ---- Saved file list item ----
+function SavedItem({
+  file,
+  onClick,
+  onDelete,
+}: {
+  file: SavedFile;
+  onClick: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        padding: '4px 10px',
+        background: 'var(--bg-saved-item)',
+        borderRadius: 'var(--border-radius-sm)',
+        fontSize: 12,
+        whiteSpace: 'nowrap',
+        cursor: 'pointer',
+        border: '1px solid var(--border-primary)',
+        transition: 'background var(--transition-speed)',
+      }}
+      onClick={onClick}
+      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-saved-item-hover)')}
+      onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-saved-item)')}
+    >
+      <span style={{ color: 'var(--text-primary)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+        {file.name}
+      </span>
+      <span
+        onClick={e => { e.stopPropagation(); onDelete(); }}
+        style={{
+          marginLeft: 4,
+          color: 'var(--btn-danger-bg)',
+          fontWeight: 700,
+          fontSize: 14,
+          lineHeight: '14px',
+          cursor: 'pointer',
+          padding: '0 2px',
+        }}
+        title="删除"
+      >
+        ×
+      </span>
+    </div>
+  );
+}
+
+// ---- Button helper ----
+function ToolButton({
+  children,
+  onClick,
+  variant = 'secondary',
+  disabled = false,
+  title,
+  small = false,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  variant?: 'primary' | 'secondary' | 'danger' | 'success' | 'warning';
+  disabled?: boolean;
+  title?: string;
+  small?: boolean;
+}) {
+  const bgMap: Record<string, string> = {
+    primary: 'var(--btn-primary-bg)',
+    secondary: 'var(--btn-secondary-bg)',
+    danger: 'var(--btn-danger-bg)',
+    success: 'var(--btn-success-bg)',
+    warning: 'var(--btn-warning-bg)',
+  };
+  const hoverMap: Record<string, string> = {
+    primary: 'var(--btn-primary-hover)',
+    secondary: 'var(--btn-secondary-hover)',
+    danger: 'var(--btn-danger-hover)',
+    success: 'var(--btn-success-hover)',
+    warning: 'var(--btn-warning-hover)',
+  };
+  const colorMap: Record<string, string> = {
+    primary: 'var(--btn-primary-text)',
+    secondary: 'var(--btn-secondary-text)',
+    danger: 'var(--btn-danger-text)',
+    success: 'var(--btn-success-text)',
+    warning: 'var(--btn-warning-text)',
+  };
+
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <button
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      title={title}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        padding: small ? '3px 8px' : '5px 14px',
+        borderRadius: 'var(--border-radius-sm)',
+        border: 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        fontSize: small ? 11 : 12,
+        fontWeight: 500,
+        background: disabled ? 'var(--btn-disabled-bg)' : (hovered ? hoverMap[variant] : bgMap[variant]),
+        color: disabled ? 'var(--btn-disabled-text)' : colorMap[variant],
+        transition: 'background var(--transition-speed)',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+// ===================== MAIN COMPONENT =====================
+export function ComparePage() {
+  // ---- State ----
+  const [leftText, setLeftText] = useState('');
+  const [rightText, setRightText] = useState('');
+  const [leftDiffs, setLeftDiffs] = useState<CharDiff[] | null>(null);
+  const [rightDiffs, setRightDiffs] = useState<CharDiff[] | null>(null);
+  const [diffLines, setDiffLines] = useState<UnifiedDiffLine[]>([]);
+  const [viewMode, setViewMode] = useState<'editor' | 'diff'>('editor');
+  const [diffReady, setDiffReady] = useState(false);
+  const [fontSize, setFontSize] = useState(13);
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+  const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [modalSide, setModalSide] = useState<'left' | 'right'>('left');
+  const [leftCursorLine, setLeftCursorLine] = useState(1);
+  const [rightCursorLine, setRightCursorLine] = useState(1);
+  const [leftWidth, setLeftWidth] = useState(50); // percentage
+  const [toolbarVisible, setToolbarVisible] = useState(true);
+
+  // ---- Toast helpers ----
+  const addToast = useCallback((text: string, type: ToastMessage['type'] = 'info', duration = 3000) => {
+    const id = ++toastId;
+    setToasts(prev => [...prev, { id, text, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
+  }, []);
+
+  const removeToast = useCallback((id: number) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // ---- Auto load on mount ----
+  useEffect(() => {
+    // Load auto save
+    const saved = loadAutoSave();
+    if (saved) {
+      setLeftText(saved.left);
+      setRightText(saved.right);
+      addToast('已自动加载上次保存的内容', 'info');
+    }
+    // Load saved files list
+    const files = loadSavesIndex();
+    setSavedFiles(files);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- Auto save timer ----
+  useEffect(() => {
+    if (!autoSaveEnabled) return;
+    const interval = setInterval(() => {
+      saveAutoSave(leftText, rightText);
+      addToast('自动保存成功', 'success', 2000);
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [autoSaveEnabled, leftText, rightText, addToast]);
+
+  // ---- Compare ----
+  const handleCompare = useCallback(() => {
+    if (!leftText.trim() && !rightText.trim()) {
+      addToast('请输入文本后再进行对比', 'error');
+      return;
+    }
+
+    // Character-level diff
+    const { leftDiffs: ld, rightDiffs: rd } = getCharDiffs(leftText, rightText);
+    setLeftDiffs(ld);
+    setRightDiffs(rd);
+
+    // Git-style diff
+    const unified = generateUnifiedDiff(leftText, rightText);
+    setDiffLines(unified);
+
+    setDiffReady(true);
+    setViewMode('diff');
+    addToast('对比完成', 'success');
+  }, [leftText, rightText, addToast]);
+
+  // ---- Clear ----
+  const handleClear = useCallback(() => {
+    setLeftText('');
+    setRightText('');
+    setLeftDiffs(null);
+    setRightDiffs(null);
+    setDiffLines([]);
+    setDiffReady(false);
+    setViewMode('editor');
+    setLeftWidth(50);
+    addToast('已清空所有内容', 'info');
+  }, [addToast]);
+
+  // ---- Clear styles only ----
+  const handleClearStyles = useCallback(() => {
+    setLeftDiffs(null);
+    setRightDiffs(null);
+    addToast('样式已清空', 'info');
+  }, [addToast]);
+
+  // ---- Save helpers ----
+  const doSave = useCallback((side: 'left' | 'right', customName?: string) => {
+    const content = side === 'left' ? leftText : rightText;
+    if (!content.trim()) {
+      addToast(`${side === 'left' ? '左侧' : '右侧'}内容为空，无法保存`, 'error');
+      return;
+    }
+
+    const fromContent = extractFromContent(content);
+    const defaultName = fromContent || (side === 'left' ? '左侧内容' : '右侧内容');
+    const name = customName || `${defaultName}_${getTimestamp()}`;
+
+    const file: SavedFile = {
+      id: `compare_${getTimestamp()}_${Math.random().toString(36).slice(2, 6)}`,
+      name,
+      content,
+      side,
+      timestamp: new Date().toISOString(),
+    };
+
+    const newSaves = [...savedFiles, file];
+    setSavedFiles(newSaves);
+    persistSavesIndex(newSaves);
+    addToast(`保存成功：${name}`, 'success');
+  }, [leftText, rightText, savedFiles, addToast]);
+
+  const handleSaveLeft = useCallback(() => doSave('left'), [doSave]);
+  const handleSaveRight = useCallback(() => doSave('right'), [doSave]);
+
+  const handleCustomSave = useCallback((side: 'left' | 'right') => {
+    setModalSide(side);
+    setModalVisible(true);
+  }, []);
+
+  const handleModalSave = useCallback((name: string) => {
+    doSave(modalSide, name);
+    setModalVisible(false);
+  }, [doSave, modalSide]);
+
+  // ---- Load saved file ----
+  const handleLoadFile = useCallback((file: SavedFile) => {
+    setRightText(file.content);
+    addToast(`已加载：${file.name}`, 'success');
+  }, [addToast]);
+
+  // ---- Delete saved file ----
+  const handleDeleteFile = useCallback((id: string) => {
+    const newSaves = savedFiles.filter(f => f.id !== id);
+    setSavedFiles(newSaves);
+    persistSavesIndex(newSaves);
+    addToast('删除成功', 'success');
+  }, [savedFiles, addToast]);
+
+  // ---- Export result ----
+  const handleExportResult = useCallback(() => {
+    if (diffLines.length === 0) {
+      addToast('没有对比结果可导出', 'error');
+      return;
+    }
+
+    let md = '# 文本对比结果\n\n';
+    md += `> 导出时间：${new Date().toLocaleString()}\n\n`;
+    md += '```diff\n';
+    for (const line of diffLines) {
+      const content = line.type === 'hunk' && line.simplified ? line.simplified : line.content;
+      md += content + '\n';
+    }
+    md += '```\n';
+
+    const blob = new Blob([md], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `diff_result_${getTimestamp()}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    addToast('导出成功', 'success');
+  }, [diffLines, addToast]);
+
+  // ---- Font size ----
+  const handleFontIncrease = useCallback(() => {
+    setFontSize(prev => Math.min(prev + 2, 18));
+  }, []);
+  const handleFontDecrease = useCallback(() => {
+    setFontSize(prev => Math.max(prev - 2, 6));
+  }, []);
+  const handleFontReset = useCallback(() => {
+    setFontSize(13);
+  }, []);
+
+  // ---- Splitter drag ----
+  const containerRef = useRef<HTMLDivElement>(null);
+  const handleSplitterDrag = useCallback((dx: number) => {
+    if (!containerRef.current) return;
+    const totalWidth = containerRef.current.offsetWidth;
+    const pctChange = (dx / totalWidth) * 100;
+    setLeftWidth(prev => Math.max(20, Math.min(80, prev + pctChange)));
+  }, []);
+
+  // ---- View toggle ----
+  const handleToggleView = useCallback(() => {
+    setViewMode(prev => prev === 'editor' ? 'diff' : 'editor');
+  }, []);
+
+  // ---- Manual save to auto save ----
+  const handleManualAutoSave = useCallback(() => {
+    saveAutoSave(leftText, rightText);
+    addToast('手动保存成功', 'success');
+  }, [leftText, rightText, addToast]);
+
+  return (
+    <div style={{
+      width: '100%',
+      height: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      background: 'var(--bg-primary)',
+      overflow: 'hidden',
+    }}>
+      {/* Toasts */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+
+      {/* Save Modal */}
+      <SaveModal
+        visible={modalVisible}
+        onSave={handleModalSave}
+        onCancel={() => setModalVisible(false)}
+      />
+
+      {/* ======= Saved files bar ======= */}
+      {savedFiles.length > 0 && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '4px 12px',
+          background: 'var(--bg-tertiary)',
+          borderBottom: '1px solid var(--border-primary)',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          minHeight: 'var(--saved-list-height)',
+        }}>
+          <span style={{ fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap', marginRight: 4 }}>
+            已保存:
+          </span>
+          {savedFiles.map(f => (
+            <SavedItem
+              key={f.id}
+              file={f}
+              onClick={() => handleLoadFile(f)}
+              onDelete={() => handleDeleteFile(f.id)}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* ======= Main content area ======= */}
+      <div
+        ref={containerRef}
+        style={{
+          flex: 1,
+          display: 'flex',
+          overflow: 'hidden',
+          position: 'relative',
+        }}
+      >
+        {viewMode === 'editor' ? (
+          <>
+            {/* Left editor */}
+            <div style={{
+              width: `${leftWidth}%`,
+              minWidth: '20%',
+              maxWidth: '80%',
+              overflow: 'hidden',
+              borderRight: 'none',
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
+              <EditorPanel
+                value={leftText}
+                onChange={setLeftText}
+                placeholder="在此输入原始文本..."
+                diffs={leftDiffs}
+                fontSize={fontSize}
+                label="原始文本 (左侧)"
+                currentLine={leftCursorLine}
+                onCursorChange={setLeftCursorLine}
+              />
+            </div>
+
+            {/* Splitter */}
+            <Splitter onDrag={handleSplitterDrag} />
+
+            {/* Right editor */}
+            <div style={{
+              flex: 1,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
+              <EditorPanel
+                value={rightText}
+                onChange={setRightText}
+                placeholder="在此输入修改后文本..."
+                diffs={rightDiffs}
+                fontSize={fontSize}
+                label="修改后文本 (右侧)"
+                currentLine={rightCursorLine}
+                onCursorChange={setRightCursorLine}
+              />
+            </div>
+          </>
+        ) : (
+          /* Diff result view */
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+            <DiffResultView diffLines={diffLines} fontSize={fontSize} />
+          </div>
+        )}
+      </div>
+
+      {/* ======= Bottom Toolbar ======= */}
+      {toolbarVisible && (
+        <div style={{
+          background: 'var(--bg-secondary)',
+          borderTop: '1px solid var(--border-primary)',
+          padding: '0 12px',
+        }}>
+          {/* Toolbar row */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            height: 'var(--toolbar-height)',
+            flexWrap: 'wrap',
+            paddingTop: 6,
+          }}>
+            {/* Compare */}
+            <ToolButton onClick={handleCompare} variant="primary">⚡ 一键对比</ToolButton>
+
+            {/* View toggle */}
+            <ToolButton
+              onClick={handleToggleView}
+              disabled={!diffReady}
+              variant="secondary"
+            >
+              {viewMode === 'editor' ? '📊 查看结果' : '📝 查看原文'}
+            </ToolButton>
+
+            <div style={{ width: 1, height: 20, background: 'var(--border-primary)', margin: '0 2px' }} />
+
+            {/* Save buttons */}
+            <ToolButton onClick={handleSaveLeft} variant="success">💾 保存左侧</ToolButton>
+            <ToolButton onClick={handleSaveRight} variant="success">💾 保存右侧</ToolButton>
+            <ToolButton onClick={() => handleCustomSave('left')} variant="secondary" title="自定义名称保存左侧">📋 自定义保存左</ToolButton>
+            <ToolButton onClick={() => handleCustomSave('right')} variant="secondary" title="自定义名称保存右侧">📋 自定义保存右</ToolButton>
+            <ToolButton onClick={handleManualAutoSave} variant="secondary">💾 手动保存</ToolButton>
+
+            <div style={{ width: 1, height: 20, background: 'var(--border-primary)', margin: '0 2px' }} />
+
+            {/* Export */}
+            <ToolButton onClick={handleExportResult} variant="warning" disabled={!diffReady}>📤 导出结果</ToolButton>
+
+            <div style={{ width: 1, height: 20, background: 'var(--border-primary)', margin: '0 2px' }} />
+
+            {/* Clear */}
+            <ToolButton onClick={handleClear} variant="danger">🗑️ 清空内容</ToolButton>
+            <ToolButton onClick={handleClearStyles} variant="secondary">🧹 清空样式</ToolButton>
+
+            <div style={{ width: 1, height: 20, background: 'var(--border-primary)', margin: '0 2px' }} />
+
+            {/* Font size */}
+            <ToolButton onClick={handleFontDecrease} small>A-</ToolButton>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 28, textAlign: 'center' }}>{fontSize}px</span>
+            <ToolButton onClick={handleFontIncrease} small>A+</ToolButton>
+            <ToolButton onClick={handleFontReset} small>重置</ToolButton>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* 主内容区 */}
-      <div className="relative flex flex-1 gap-1 p-3 overflow-hidden">
-        {/* 编辑器视图 */}
-        <AnimatePresence mode="wait">
-          {!showDiff && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex w-full gap-1"
-            >
-              {/* 左侧编辑器 */}
-              <motion.div
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                ref={leftEditorContainerRef}
-                className="flex rounded-lg overflow-hidden border"
-                style={{
-                  width: `${leftWidth}%`,
-                  backgroundColor: 'var(--bg-secondary)',
-                  borderColor: 'var(--border-color)',
-                }}
-              >
-                <div
-                  ref={leftLineNumbersRef}
-                  className="flex flex-col items-end justify-start py-2 pr-2 select-none overflow-hidden"
-                  style={{
-                    width: '50px',
-                    backgroundColor: 'var(--bg-tertiary)',
-                    fontSize: `${fontSize}px`,
-                    color: 'var(--text-tertiary)',
-                  }}
-                >
-                  {getLineNumbers(leftText).map((num) => (
-                    <div key={num} className="leading-[1.4]">
-                      {num}
-                    </div>
-                  ))}
-                </div>
-                <textarea
-                  ref={leftEditorRef}
-                  value={leftText}
-                  onChange={(e) => setLeftText(e.target.value)}
-                  onScroll={handleLeftScroll}
-                  placeholder="在此输入或粘贴要对比的原始文本..."
-                  className="flex-1 resize-none bg-transparent p-2 outline-none overflow-auto"
-                  style={{
-                    fontSize: `${fontSize}px`,
-                    color: 'var(--text-primary)',
-                    fontFamily: 'Consolas, Monaco, Fira Code, Source Code Pro, monospace',
-                    lineHeight: 1.4,
-                  }}
-                />
-              </motion.div>
-
-              {/* 分割器 */}
-              <div
-                className="w-1 cursor-col-resize transition-colors hover:opacity-100"
-                style={{ backgroundColor: 'var(--border-color)' }}
-                onMouseDown={(e) => {
-                  const startX = e.clientX;
-                  const startWidth = leftWidth;
-                  const container = e.currentTarget.parentElement;
-                  if (!container) return;
-
-                  const handleMouseMove = (moveEvent: MouseEvent) => {
-                    const containerRect = container.getBoundingClientRect();
-                    const deltaX = moveEvent.clientX - startX;
-                    const deltaPercent = (deltaX / containerRect.width) * 100;
-                    const newWidth = Math.max(20, Math.min(80, startWidth + deltaPercent));
-                    setLeftWidth(newWidth);
-                  };
-
-                  const handleMouseUp = () => {
-                    document.removeEventListener('mousemove', handleMouseMove);
-                    document.removeEventListener('mouseup', handleMouseUp);
-                  };
-
-                  document.addEventListener('mousemove', handleMouseMove);
-                  document.addEventListener('mouseup', handleMouseUp);
-                }}
-              />
-
-              {/* 右侧编辑器 */}
-              <motion.div
-                initial={{ opacity: 0, x: 10 }}
-                animate={{ opacity: 1, x: 0 }}
-                ref={rightEditorContainerRef}
-                className="flex flex-1 rounded-lg overflow-hidden border"
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  borderColor: 'var(--border-color)',
-                }}
-              >
-                <div
-                  ref={rightLineNumbersRef}
-                  className="flex flex-col items-end justify-start py-2 pr-2 select-none overflow-hidden"
-                  style={{
-                    width: '50px',
-                    backgroundColor: 'var(--bg-tertiary)',
-                    fontSize: `${fontSize}px`,
-                    color: 'var(--text-tertiary)',
-                  }}
-                >
-                  {getLineNumbers(rightText).map((num) => (
-                    <div key={num} className="leading-[1.4]">
-                      {num}
-                    </div>
-                  ))}
-                </div>
-                <textarea
-                  ref={rightEditorRef}
-                  value={rightText}
-                  onChange={(e) => setRightText(e.target.value)}
-                  onScroll={handleRightScroll}
-                  placeholder="在此输入或粘贴要对比的修改文本..."
-                  className="flex-1 resize-none bg-transparent p-2 outline-none overflow-auto"
-                  style={{
-                    fontSize: `${fontSize}px`,
-                    color: 'var(--text-primary)',
-                    fontFamily: 'Consolas, Monaco, Fira Code, Source Code Pro, monospace',
-                    lineHeight: 1.4,
-                  }}
-                />
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* 对比结果视图 */}
-        <AnimatePresence mode="wait">
-          {showDiff && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-3 rounded-lg border overflow-hidden flex flex-col"
-              style={{
-                backgroundColor: 'var(--bg-secondary)',
-                borderColor: 'var(--border-color)',
-              }}
-            >
-              <div
-                className="border-b px-4 py-2 flex-shrink-0"
-                style={{ borderColor: 'var(--border-light)' }}
-              >
-                <span className="text-sm font-semibold" style={{ color: 'var(--primary-color)' }}>
-                  对比区别显示 (Git风格)
-                </span>
-              </div>
-              <div
-                className="flex-1 p-4 overflow-auto"
-                style={{
-                  fontSize: `${fontSize}px`,
-                  color: 'var(--text-primary)',
-                  fontFamily: 'Consolas, Monaco, Fira Code, Source Code Pro, monospace',
-                  lineHeight: 1.4,
-                }}
-                dangerouslySetInnerHTML={{ __html: diffResult }}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* 编辑器高亮视图 */}
-        <AnimatePresence mode="wait">
-          {showEditorHighlight && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="absolute inset-3 rounded-lg border overflow-hidden flex flex-col"
-              style={{
-                backgroundColor: 'var(--bg-secondary)',
-                borderColor: 'var(--border-color)',
-              }}
-            >
-              <div
-                className="border-b px-4 py-2 flex-shrink-0"
-                style={{ borderColor: 'var(--border-light)' }}
-              >
-                <span className="text-sm font-semibold" style={{ color: 'var(--primary-color)' }}>
-                  编辑器差异高亮
-                </span>
-              </div>
-              <div className="flex flex-1 overflow-hidden">
-                {/* 左侧高亮编辑器 */}
-                <div
-                  className="flex rounded-lg overflow-hidden border"
-                  style={{
-                    width: `${leftWidth}%`,
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderColor: 'var(--border-color)',
-                  }}
-                >
-                  <div
-                    className="flex flex-col items-end justify-start py-2 pr-2 select-none overflow-hidden"
-                    style={{
-                      width: '50px',
-                      backgroundColor: 'var(--bg-tertiary)',
-                      fontSize: `${fontSize}px`,
-                      color: 'var(--text-tertiary)',
-                    }}
-                  >
-                    {getLineNumbers(leftText).map((num) => (
-                      <div key={num} className="leading-[1.4]">
-                        {num}
-                      </div>
-                    ))}
-                  </div>
-                  <div
-                    className="flex-1 p-2 overflow-auto"
-                    style={{
-                      fontSize: `${fontSize}px`,
-                      fontFamily: 'Consolas, Monaco, Fira Code, Source Code Pro, monospace',
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    {diffLines.map((line, index) => (
-                      <div
-                        key={index}
-                        style={{
-                          ...getLineStyle(line.status),
-                          padding: '2px 4px',
-                          margin: '0',
-                        }}
-                      >
-                        {line.left}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 分割器 */}
-                <div
-                  className="w-1"
-                  style={{ backgroundColor: 'var(--border-color)' }}
-                />
-
-                {/* 右侧高亮编辑器 */}
-                <div
-                  className="flex flex-1 rounded-lg overflow-hidden border"
-                  style={{
-                    backgroundColor: 'var(--bg-secondary)',
-                    borderColor: 'var(--border-color)',
-                  }}
-                >
-                  <div
-                    className="flex flex-col items-end justify-start py-2 pr-2 select-none overflow-hidden"
-                    style={{
-                      width: '50px',
-                      backgroundColor: 'var(--bg-tertiary)',
-                      fontSize: `${fontSize}px`,
-                      color: 'var(--text-tertiary)',
-                    }}
-                  >
-                    {getLineNumbers(rightText).map((num) => (
-                      <div key={num} className="leading-[1.4]">
-                        {num}
-                      </div>
-                    ))}
-                  </div>
-                  <div
-                    className="flex-1 p-2 overflow-auto"
-                    style={{
-                      fontSize: `${fontSize}px`,
-                      fontFamily: 'Consolas, Monaco, Fira Code, Source Code Pro, monospace',
-                      lineHeight: 1.4,
-                    }}
-                  >
-                    {diffLines.map((line, index) => (
-                      <div
-                        key={index}
-                        style={{
-                          ...getLineStyle(line.status),
-                          padding: '2px 4px',
-                          margin: '0',
-                        }}
-                      >
-                        {line.right}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* 底部工具栏 */}
-      <div
-        className="flex items-center justify-between border-t px-4 py-2 flex-shrink-0"
-        style={{ borderColor: 'var(--border-color)' }}
-      >
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAutoSaveEnabled(!autoSaveEnabled)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-              autoSaveEnabled ? 'active' : ''
-            }`}
-            style={{
-              backgroundColor: autoSaveEnabled ? 'var(--success-color)' : 'var(--bg-tertiary)',
-              color: autoSaveEnabled ? 'var(--text-inverse)' : 'var(--text-secondary)',
-            }}
-          >
-            <Save size={12} />
-            {autoSaveEnabled ? '自动保存(开启)' : '自动保存'}
-          </button>
-          <button
-            onClick={handleClearContent}
-            className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            清空内容
-          </button>
-          <button
-            onClick={handleClearStyle}
-            className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            清空样式
-          </button>
-          <button
-            onClick={() => handleSaveContent('left')}
-            className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            保存左侧对比
-          </button>
-          <button
-            onClick={() => handleSaveContent('right')}
-            className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            保存右侧对比
-          </button>
+      {/* ======= Status bar ======= */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '4px 12px',
+        background: 'var(--bg-secondary)',
+        borderTop: '1px solid var(--border-primary)',
+        fontSize: 11,
+        color: 'var(--text-tertiary)',
+      }}>
+        <div style={{ display: 'flex', gap: 16 }}>
+          <span>左侧: {leftText.split('\n').length} 行, {leftText.length} 字符</span>
+          <span>右侧: {rightText.split('\n').length} 行, {rightText.length} 字符</span>
         </div>
-
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>
-            字体大小：
-          </span>
-          <button
-            onClick={() => adjustFontSize(-2)}
-            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
+        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+          {/* Auto save toggle */}
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 4, fontSize: 11,
+            color: 'var(--text-secondary)', cursor: 'pointer',
+          }}>
+            <input
+              type="checkbox"
+              checked={autoSaveEnabled}
+              onChange={e => setAutoSaveEnabled(e.target.checked)}
+            />
+            自动保存
+          </label>
+          {/* Toolbar toggle */}
+          <ToolButton
+            onClick={() => setToolbarVisible(!toolbarVisible)}
+            small
           >
-            <Minus size={12} />
-            -2px
-          </button>
-          <button
-            onClick={() => adjustFontSize(2)}
-            className="flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <Plus size={12} />
-            +2px
-          </button>
-          <button
-            onClick={resetFontSize}
-            className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            重置字体
-          </button>
-          <button
-            onClick={() => setSyncScroll(!syncScroll)}
-            className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-              syncScroll ? 'active' : ''
-            }`}
-            style={{
-              backgroundColor: syncScroll ? 'var(--primary-color)' : 'var(--bg-tertiary)',
-              color: syncScroll ? 'var(--text-inverse)' : 'var(--text-secondary)',
-            }}
-          >
-            {syncScroll ? <Link2 size={12} /> : <Link2Off size={12} />}
-            {syncScroll ? '同步滚动(开启)' : '同步滚动'}
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleSaveResult}
-            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <Download size={12} />
-            保存结果
-          </button>
-          <button
-            onClick={handleCompare}
-            className="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium transition-colors hover:opacity-90"
-            style={{
-              backgroundColor: 'var(--primary-color)',
-              color: 'var(--text-inverse)',
-            }}
-          >
-            一键对比
-          </button>
-          <button
-            onClick={() => {
-              if (showEditorHighlight) {
-                setShowEditorHighlight(false);
-                setShowDiff(false);
-              } else if (showDiff) {
-                setShowDiff(false);
-              } else {
-                setShowDiff(true);
-              }
-            }}
-            className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            {showEditorHighlight ? '显示原始内容' : showDiff ? '显示编辑器高亮' : '显示对比结果'}
-            <ChevronRight size={12} />
-          </button>
+            {toolbarVisible ? '🔽 隐藏工具栏' : '🔼 显示工具栏'}
+          </ToolButton>
         </div>
       </div>
-
-      {/* 保存弹窗 */}
-      <AnimatePresence>
-        {showSaveModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 flex items-center justify-center z-50"
-            style={{ backgroundColor: 'rgba(0, 0, 0, 0.3)' }}
-            onClick={() => setShowSaveModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="rounded-lg p-5 w-80"
-              style={{
-                backgroundColor: 'var(--bg-primary)',
-                border: `1px solid var(--primary-color)`,
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="mb-4 text-sm font-semibold" style={{ color: 'var(--primary-color)' }}>
-                保存内容
-              </h3>
-              <input
-                type="text"
-                value={saveName}
-                onChange={(e) => setSaveName(e.target.value)}
-                placeholder="请输入保存名称"
-                className="w-full rounded-lg px-3 py-2 text-sm outline-none mb-4"
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: `1px solid var(--border-color)`,
-                  color: 'var(--text-primary)',
-                }}
-                autoFocus
-              />
-              <div className="flex justify-end gap-2">
-                <button
-                  onClick={() => setShowSaveModal(false)}
-                  className="rounded-full px-4 py-1.5 text-xs font-medium transition-colors hover:opacity-80"
-                  style={{
-                    backgroundColor: 'var(--bg-tertiary)',
-                    color: 'var(--text-secondary)',
-                  }}
-                >
-                  取消
-                </button>
-                <button
-                  onClick={confirmSave}
-                  className="rounded-full px-4 py-1.5 text-xs font-medium transition-colors hover:opacity-90"
-                  style={{
-                    backgroundColor: 'var(--primary-color)',
-                    color: 'var(--text-inverse)',
-                  }}
-                >
-                  保存
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Toast提示 */}
-      <AnimatePresence>
-        {toast && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-5 left-1/2 -translate-x-1/2 px-5 py-2.5 rounded-lg text-xs font-medium z-50"
-            style={{
-              backgroundColor:
-                toast.type === 'success'
-                  ? 'var(--success-color)'
-                  : toast.type === 'error'
-                  ? 'var(--error-color)'
-                  : 'var(--primary-color)',
-              color: 'var(--text-inverse)',
-            }}
-          >
-            {toast.message}
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
