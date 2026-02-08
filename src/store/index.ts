@@ -73,8 +73,8 @@ interface AppState {
   setTheme: (theme: ThemeType) => void;
 
   // Navigation
-  activePage: 'chat' | 'models' | 'settings' | 'logs';
-  setActivePage: (page: 'chat' | 'models' | 'settings' | 'logs') => void;
+  activePage: 'chat' | 'models' | 'settings' | 'logs' | 'compare';
+  setActivePage: (page: 'chat' | 'models' | 'settings' | 'logs' | 'compare') => void;
 
   // Sidebar
   sidebarCollapsed: boolean;
@@ -101,8 +101,10 @@ interface AppState {
 
   // Logs
   logs: LogEntry[];
+  logsPanelOpen: boolean;
   addLog: (log: LogEntry) => void;
   clearLogs: () => void;
+  setLogsPanelOpen: (open: boolean) => void;
 
   // Settings
   fontSize: number;
@@ -487,8 +489,10 @@ export const useStore = create<AppState>((set) => ({
     { id: 'l5', level: 'info', message: '主题加载: 浅色主题', timestamp: Date.now() - 40000, module: 'Theme' },
     { id: 'l6', level: 'debug', message: '对话历史加载完成: 3条记录', timestamp: Date.now() - 35000, module: 'Storage' },
   ],
+  logsPanelOpen: false,
   addLog: (log) => set((state) => ({ logs: [...state.logs, log] })),
   clearLogs: () => set({ logs: [] }),
+  setLogsPanelOpen: (open) => set({ logsPanelOpen: open }),
 
   // Settings
   fontSize: 14,

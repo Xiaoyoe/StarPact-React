@@ -4,6 +4,8 @@ import { ChatPage } from '@/components/ChatPage';
 import { ModelsPage } from '@/components/ModelsPage';
 import { SettingsPage } from '@/components/SettingsPage';
 import { LogsPage } from '@/components/LogsPage';
+import { ComparePage } from '@/components/ComparePage';
+import { LogsPanel } from '@/components/LogsPanel';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function PageContent() {
@@ -23,6 +25,7 @@ function PageContent() {
         {activePage === 'models' && <ModelsPage />}
         {activePage === 'settings' && <SettingsPage />}
         {activePage === 'logs' && <LogsPage />}
+        {activePage === 'compare' && <ComparePage />}
       </motion.div>
     </AnimatePresence>
   );
@@ -35,6 +38,7 @@ export function App() {
       <main className="min-w-0 flex-1">
         <PageContent />
       </main>
+      <LogsPanel />
     </div>
   );
 }
