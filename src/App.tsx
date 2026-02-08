@@ -1,10 +1,10 @@
 import { useStore } from '@/store';
-import { Sidebar } from '@/components/Sidebar';
-import { ChatPage } from '@/components/ChatPage';
-import { ModelsPage } from '@/components/ModelsPage';
-import { SettingsPage } from '@/components/SettingsPage';
-import { LogsPage } from '@/components/LogsPage';
-import { ComparePage } from '@/components/ComparePage';
+import { Sidebar } from '@/layouts/Sidebar';
+import { ChatPage } from '@/pages/Chat';
+import { ModelsPage } from '@/pages/Models';
+import { SettingsPage } from '@/pages/Settings';
+import { LogsPage } from '@/pages/Logs';
+import { ComparePage } from '@/pages/Compare';
 import { LogsPanel } from '@/components/LogsPanel';
 import { motion, AnimatePresence } from 'framer-motion';
 

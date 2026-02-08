@@ -1,0 +1,146 @@
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border-right: 1px solid var(--border-color);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  height: 56px;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logoIcon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: var(--primary-color);
+}
+
+.logoText {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.toggleButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  transition: opacity 0.2s;
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.toggleButton:hover {
+  opacity: 0.8;
+}
+
+.newChatButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+  background-color: var(--primary-color);
+  color: white;
+  justify-content: flex-start;
+}
+
+.newChatButton:hover {
+  opacity: 0.9;
+}
+
+.newChatButton:active {
+  transform: scale(0.98);
+}
+
+.nav {
+  padding: 0 12px 8px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  transition: opacity 0.2s;
+  justify-content: flex-start;
+}
+
+.navItem:hover {
+  opacity: 0.8;
+}
+
+.navItem.active {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.conversationList {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 12px;
+}
+
+.conversationItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 2px;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.conversationItem:hover {
+  opacity: 0.9;
+}
+
+.conversationItem.active {
+  background-color: var(--primary-light);
+}
+
+.logsButton {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 4px 12px 8px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-light);
+}
+
+.modelIndicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 0 12px 12px;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-light);
+}

@@ -1,0 +1,96 @@
+.settingsPage {
+  display: flex;
+  height: 100%;
+  background-color: var(--bg-primary);
+}
+
+.sidebar {
+  width: 224px;
+  padding: 16px;
+  border-right: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32px;
+}
+
+.contentContainer {
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.section {
+  margin-bottom: 32px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.sectionDescription {
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.themeCard {
+  border-radius: 12px;
+  padding: 16px;
+  text-align: left;
+  transition: all 0.2s;
+  border: 2px solid var(--border-color);
+  background-color: var(--bg-secondary);
+}
+
+.themeCard:hover {
+  transform: scale(0.98);
+}
+
+.themeCard.active {
+  border-color: var(--primary-color);
+}
+
+.settingCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-radius: 12px;
+  padding: 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+}
+
+.toggle {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 9999px;
+  transition: background-color 0.2s;
+}
+
+.toggleKnob {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: white;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s;
+}

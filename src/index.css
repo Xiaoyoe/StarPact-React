@@ -1,360 +1,9 @@
 @import "tailwindcss";
+@import "./styles/themes/light.css";
+@import "./styles/themes/dark.css";
+@import "./styles/themes/tech-blue.css";
+@import "./styles/themes/eye-care.css";
 
-/* ========== Theme Variables System ========== */
-:root {
-  --primary-color: #165DFF;
-  --primary-light: #E8F3FF;
-  --primary-dark: #0E42C1;
-  --success-color: #00B42A;
-  --warning-color: #FF7D00;
-  --error-color: #F53F3F;
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #F7F8FA;
-  --bg-tertiary: #E5E6EB;
-  --bg-chat-user: #E8F3FF;
-  --bg-chat-ai: #F2F3F5;
-  --text-primary: #1D2129;
-  --text-secondary: #4E5969;
-  --text-tertiary: #86909C;
-  --text-inverse: #FFFFFF;
-  --border-color: #E5E6EB;
-  --border-light: #F2F3F5;
-  --radius-base: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 16px;
-  --shadow-base: 0 2px 8px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
-  --sidebar-width: 280px;
-  --header-height: 56px;
-  --input-height: 140px;
-  --transition-base: 200ms ease;
-  --transition-slow: 300ms ease;
-  --scrollbar-thumb: #C9CDD4;
-  --scrollbar-track: transparent;
-  --code-bg: #1e1e1e;
-  
-  /* Diff Colors - Git Style */
-  --diff-same-text: #1D2129;
-  --diff-different-text: #F53F3F;
-  --diff-header-text: #165DFF;
-  --diff-separator: #86909C;
-  --diff-context-text: #4E5969;
-  --diff-added-bg: #E8FFEA;
-  --diff-added-text: #00B42A;
-  --diff-deleted-bg: #FFECE8;
-  --diff-deleted-text: #F53F3F;
-  
-  /* Compare Page Styles */
-  --bg-editor: #FFFFFF;
-  --bg-line-number: #F7F8FA;
-  --text-line-number: #86909C;
-  --bg-current-line: #E8F3FF;
-  --bg-splitter: #E5E6EB;
-  --bg-splitter-hover: #C9CDD4;
-  --bg-saved-item: #F7F8FA;
-  --bg-saved-item-hover: #E5E6EB;
-  --bg-modal-overlay: rgba(0, 0, 0, 0.5);
-  --bg-modal: #FFFFFF;
-  --border-primary: #E5E6EB;
-  --border-radius: 8px;
-  --border-radius-sm: 4px;
-  --header-height: 56px;
-  --toolbar-height: 40px;
-  --saved-list-height: 36px;
-  --transition-speed: 200ms;
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
-  
-  /* Button Colors */
-  --btn-primary-bg: #165DFF;
-  --btn-primary-hover: #0E42C1;
-  --btn-primary-text: #FFFFFF;
-  --btn-secondary-bg: #F7F8FA;
-  --btn-secondary-hover: #E5E6EB;
-  --btn-secondary-text: #1D2129;
-  --btn-danger-bg: #F53F3F;
-  --btn-danger-hover: #D91D1D;
-  --btn-danger-text: #FFFFFF;
-  --btn-success-bg: #00B42A;
-  --btn-success-hover: #009A29;
-  --btn-success-text: #FFFFFF;
-  --btn-warning-bg: #FF7D00;
-  --btn-warning-hover: #D66A00;
-  --btn-warning-text: #FFFFFF;
-  --btn-disabled-bg: #F2F3F5;
-  --btn-disabled-text: #C9CDD4;
-  
-  /* Toast Colors */
-  --toast-success-bg: #E8FFEA;
-  --toast-success-text: #00B42A;
-  --toast-success-border: #00B42A;
-  --toast-error-bg: #FFECE8;
-  --toast-error-text: #F53F3F;
-  --toast-error-border: #F53F3F;
-  --toast-info-bg: #E8F3FF;
-  --toast-info-text: #165DFF;
-  --toast-info-border: #165DFF;
-}
-
-.theme-dark {
-  --primary-color: #3C7EFF;
-  --primary-light: #1A2744;
-  --primary-dark: #1565C0;
-  --success-color: #27C346;
-  --warning-color: #FF9A2E;
-  --error-color: #F76560;
-  --bg-primary: #17171A;
-  --bg-secondary: #232324;
-  --bg-tertiary: #2E2E30;
-  --bg-chat-user: #1A2744;
-  --bg-chat-ai: #232324;
-  --text-primary: #F6F6F6;
-  --text-secondary: #C9CDD4;
-  --text-tertiary: #86909C;
-  --text-inverse: #1D2129;
-  --border-color: #3A3A3C;
-  --border-light: #2E2E30;
-  --shadow-base: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
-  --scrollbar-thumb: #4A4A4C;
-  --code-bg: #0d0d0d;
-  
-  /* Diff Colors - Git Style */
-  --diff-same-text: #F6F6F6;
-  --diff-different-text: #F76560;
-  --diff-header-text: #3C7EFF;
-  --diff-separator: #86909C;
-  --diff-context-text: #C9CDD4;
-  --diff-added-bg: rgba(39, 195, 70, 0.15);
-  --diff-added-text: #27C346;
-  --diff-deleted-bg: rgba(247, 101, 96, 0.15);
-  --diff-deleted-text: #F76560;
-  
-  /* Compare Page Styles */
-  --bg-editor: #17171A;
-  --bg-line-number: #232324;
-  --text-line-number: #86909C;
-  --bg-current-line: #1A2744;
-  --bg-splitter: #3A3A3C;
-  --bg-splitter-hover: #4A4A4C;
-  --bg-saved-item: #232324;
-  --bg-saved-item-hover: #2E2E30;
-  --bg-modal-overlay: rgba(0, 0, 0, 0.7);
-  --bg-modal: #232324;
-  --border-primary: #3A3A3C;
-  --border-radius: 8px;
-  --border-radius-sm: 4px;
-  --header-height: 56px;
-  --toolbar-height: 40px;
-  --saved-list-height: 36px;
-  --transition-speed: 200ms;
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
-  
-  /* Button Colors */
-  --btn-primary-bg: #3C7EFF;
-  --btn-primary-hover: #1565C0;
-  --btn-primary-text: #FFFFFF;
-  --btn-secondary-bg: #232324;
-  --btn-secondary-hover: #2E2E30;
-  --btn-secondary-text: #F6F6F6;
-  --btn-danger-bg: #F76560;
-  --btn-danger-hover: #D9362E;
-  --btn-danger-text: #FFFFFF;
-  --btn-success-bg: #27C346;
-  --btn-success-hover: #00B42A;
-  --btn-success-text: #FFFFFF;
-  --btn-warning-bg: #FF9A2E;
-  --btn-warning-hover: #FF7D00;
-  --btn-warning-text: #FFFFFF;
-  --btn-disabled-bg: #2E2E30;
-  --btn-disabled-text: #86909C;
-  
-  /* Toast Colors */
-  --toast-success-bg: rgba(39, 195, 70, 0.15);
-  --toast-success-text: #27C346;
-  --toast-success-border: #27C346;
-  --toast-error-bg: rgba(247, 101, 96, 0.15);
-  --toast-error-text: #F76560;
-  --toast-error-border: #F76560;
-  --toast-info-bg: rgba(60, 126, 255, 0.15);
-  --toast-info-text: #3C7EFF;
-  --toast-info-border: #3C7EFF;
-}
-
-.theme-tech-blue {
-  --primary-color: #0A49C1;
-  --primary-light: #E0EDFF;
-  --primary-dark: #073892;
-  --success-color: #00B42A;
-  --warning-color: #FF7D00;
-  --error-color: #F53F3F;
-  --bg-primary: #FFFFFF;
-  --bg-secondary: #F8FBFF;
-  --bg-tertiary: #E8F1FF;
-  --bg-chat-user: #E0EDFF;
-  --bg-chat-ai: #F8FBFF;
-  --text-primary: #0A1A2F;
-  --text-secondary: #2B4368;
-  --text-tertiary: #5A7399;
-  --text-inverse: #FFFFFF;
-  --border-color: #B9D1F2;
-  --border-light: #E0EDFF;
-  --shadow-base: 0 2px 12px rgba(10, 73, 193, 0.1);
-  --shadow-lg: 0 4px 20px rgba(10, 73, 193, 0.15);
-  --scrollbar-thumb: #B9D1F2;
-  --code-bg: #0A1A2F;
-  
-  /* Diff Colors - Git Style */
-  --diff-same-text: #0A1A2F;
-  --diff-different-text: #F53F3F;
-  --diff-header-text: #0A49C1;
-  --diff-separator: #5A7399;
-  --diff-context-text: #2B4368;
-  --diff-added-bg: #E0F7FF;
-  --diff-added-text: #00B42A;
-  --diff-deleted-bg: #FFE8E8;
-  --diff-deleted-text: #F53F3F;
-  
-  /* Compare Page Styles */
-  --bg-editor: #FFFFFF;
-  --bg-line-number: #F8FBFF;
-  --text-line-number: #5A7399;
-  --bg-current-line: #E0EDFF;
-  --bg-splitter: #B9D1F2;
-  --bg-splitter-hover: #9BB8E8;
-  --bg-saved-item: #F8FBFF;
-  --bg-saved-item-hover: #E0EDFF;
-  --bg-modal-overlay: rgba(10, 73, 193, 0.3);
-  --bg-modal: #FFFFFF;
-  --border-primary: #B9D1F2;
-  --border-radius: 8px;
-  --border-radius-sm: 4px;
-  --header-height: 56px;
-  --toolbar-height: 40px;
-  --saved-list-height: 36px;
-  --transition-speed: 200ms;
-  --shadow-md: 0 2px 12px rgba(10, 73, 193, 0.1);
-  --shadow-lg: 0 4px 20px rgba(10, 73, 193, 0.15);
-  
-  /* Button Colors */
-  --btn-primary-bg: #0A49C1;
-  --btn-primary-hover: #073892;
-  --btn-primary-text: #FFFFFF;
-  --btn-secondary-bg: #F8FBFF;
-  --btn-secondary-hover: #E0EDFF;
-  --btn-secondary-text: #0A1A2F;
-  --btn-danger-bg: #F53F3F;
-  --btn-danger-hover: #D91D1D;
-  --btn-danger-text: #FFFFFF;
-  --btn-success-bg: #00B42A;
-  --btn-success-hover: #009A29;
-  --btn-success-text: #FFFFFF;
-  --btn-warning-bg: #FF7D00;
-  --btn-warning-hover: #D66A00;
-  --btn-warning-text: #FFFFFF;
-  --btn-disabled-bg: #E0EDFF;
-  --btn-disabled-text: #B9D1F2;
-  
-  /* Toast Colors */
-  --toast-success-bg: #E0F7FF;
-  --toast-success-text: #00B42A;
-  --toast-success-border: #00B42A;
-  --toast-error-bg: #FFE8E8;
-  --toast-error-text: #F53F3F;
-  --toast-error-border: #F53F3F;
-  --toast-info-bg: #E0EDFF;
-  --toast-info-text: #0A49C1;
-  --toast-info-border: #0A49C1;
-}
-
-.theme-eye-care {
-  --primary-color: #2A9D8F;
-  --primary-light: #E8F8F5;
-  --primary-dark: #1F7D70;
-  --success-color: #2A9D8F;
-  --warning-color: #E9C46A;
-  --error-color: #E76F51;
-  --bg-primary: #FCFFFE;
-  --bg-secondary: #F2FAF8;
-  --bg-tertiary: #E6F5F2;
-  --bg-chat-user: #E8F8F5;
-  --bg-chat-ai: #F2FAF8;
-  --text-primary: #1A3B36;
-  --text-secondary: #3A6B64;
-  --text-tertiary: #6A8F89;
-  --text-inverse: #FFFFFF;
-  --border-color: #B8D9D3;
-  --border-light: #E6F5F2;
-  --shadow-base: 0 2px 12px rgba(42, 157, 143, 0.1);
-  --shadow-lg: 0 4px 20px rgba(42, 157, 143, 0.15);
-  --scrollbar-thumb: #B8D9D3;
-  --code-bg: #1A3B36;
-  
-  /* Diff Colors - Git Style */
-  --diff-same-text: #1A3B36;
-  --diff-different-text: #E76F51;
-  --diff-header-text: #2A9D8F;
-  --diff-separator: #6A8F89;
-  --diff-context-text: #3A6B64;
-  --diff-added-bg: #E8F8F5;
-  --diff-added-text: #2A9D8F;
-  --diff-deleted-bg: #F5E8E5;
-  --diff-deleted-text: #E76F51;
-  
-  /* Compare Page Styles */
-  --bg-editor: #FCFFFE;
-  --bg-line-number: #F2FAF8;
-  --text-line-number: #6A8F89;
-  --bg-current-line: #E8F8F5;
-  --bg-splitter: #B8D9D3;
-  --bg-splitter-hover: #9BC4B9;
-  --bg-saved-item: #F2FAF8;
-  --bg-saved-item-hover: #E8F8F5;
-  --bg-modal-overlay: rgba(42, 157, 143, 0.3);
-  --bg-modal: #FCFFFE;
-  --border-primary: #B8D9D3;
-  --border-radius: 8px;
-  --border-radius-sm: 4px;
-  --header-height: 56px;
-  --toolbar-height: 40px;
-  --saved-list-height: 36px;
-  --transition-speed: 200ms;
-  --shadow-md: 0 2px 12px rgba(42, 157, 143, 0.1);
-  --shadow-lg: 0 4px 20px rgba(42, 157, 143, 0.15);
-  
-  /* Button Colors */
-  --btn-primary-bg: #2A9D8F;
-  --btn-primary-hover: #1F7D70;
-  --btn-primary-text: #FFFFFF;
-  --btn-secondary-bg: #F2FAF8;
-  --btn-secondary-hover: #E8F8F5;
-  --btn-secondary-text: #1A3B36;
-  --btn-danger-bg: #E76F51;
-  --btn-danger-hover: #D95E40;
-  --btn-danger-text: #FFFFFF;
-  --btn-success-bg: #2A9D8F;
-  --btn-success-hover: #1F7D70;
-  --btn-success-text: #FFFFFF;
-  --btn-warning-bg: #E9C46A;
-  --btn-warning-hover: #D4A658;
-  --btn-warning-text: #FFFFFF;
-  --btn-disabled-bg: #E8F8F5;
-  --btn-disabled-text: #B8D9D3;
-  
-  /* Toast Colors */
-  --toast-success-bg: #E8F8F5;
-  --toast-success-text: #2A9D8F;
-  --toast-success-border: #2A9D8F;
-  --toast-error-bg: #F5E8E5;
-  --toast-error-text: #E76F51;
-  --toast-error-border: #E76F51;
-  --toast-info-bg: #E8F8F5;
-  --toast-info-text: #2A9D8F;
-  --toast-info-border: #2A9D8F;
-}
-
-/* ========== Base Styles ========== */
 * {
   box-sizing: border-box;
 }
@@ -376,7 +25,6 @@ body {
   font-size: 14px;
 }
 
-/* ========== Scrollbar ========== */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -392,18 +40,15 @@ body {
   background: var(--text-tertiary);
 }
 
-/* ========== Selection ========== */
 ::selection {
   background-color: var(--primary-color);
   color: var(--text-inverse);
 }
 
-/* ========== Typography ========== */
 code, pre, .font-mono {
   font-family: 'Consolas', 'Monaco', 'Fira Code', 'Source Code Pro', monospace !important;
 }
 
-/* ========== Markdown Styles ========== */
 .markdown-body {
   font-size: 14px;
   line-height: 1.6;
@@ -473,7 +118,6 @@ code, pre, .font-mono {
   border-radius: var(--radius-base);
 }
 
-/* ========== Animations ========== */
 @keyframes typing-cursor {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }

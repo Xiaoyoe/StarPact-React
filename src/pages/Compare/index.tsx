@@ -7,8 +7,8 @@ import {
   isValidSaveName,
   type CharDiff,
   type UnifiedDiffLine,
-} from '../utils/diffEngine';
-import { NovelEditor } from './NovelEditor';
+} from '@/utils/diffEngine';
+import { NovelEditor } from '@/components/NovelEditor';
 
 // ---- Storage helpers (localStorage-based persistence) ----
 const STORAGE_PREFIX = 'text_compare_';

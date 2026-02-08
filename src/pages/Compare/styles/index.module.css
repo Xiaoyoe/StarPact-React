@@ -1,0 +1,58 @@
+.comparePage {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  height: 40px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.editorContainer {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+.diffResultContainer {
+  height: 100%;
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--bg-editor);
+}
+
+.savedFilesList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: var(--bg-modal-overlay);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modalContent {
+  background: var(--bg-modal);
+  border-radius: var(--border-radius);
+  padding: 24px;
+  min-width: 360px;
+  box-shadow: var(--shadow-lg);
+}
