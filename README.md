@@ -1,6 +1,6 @@
 # React + Electron + Node.js 多功能项目
 
-一个基于 React、Electron 和 Node.js 的多功能桌面应用程序，支持本地 AI 模型管理和对话功能。
+一个基于 React、Electron 和 Node.js 的多功能桌面应用程序，支持本地 AI 模型管理、对话功能和高级代码编辑功能。
 
 ## 技术栈
 
@@ -22,6 +22,7 @@
 - **React Syntax Highlighter 16.1.0** - 代码高亮
 - **clsx 2.1.1** - 类名工具
 - **tailwind-merge 3.4.0** - Tailwind 类名合并
+- **CodeEditor** - 高级代码编辑器组件（支持语法高亮、撤回功能等）
 
 ## 项目结构
 
@@ -29,6 +30,7 @@
 React_UI_Web/
 ├── src/
 │   ├── components/          # 可复用组件
+│   │   ├── CodeEditor.tsx   # 高级代码编辑器组件
 │   │   ├── NovelEditor.tsx  # 小说编辑器组件
 │   │   ├── OllamaModal.tsx # Ollama 管理弹窗组件
 │   │   └── LogsPanel.tsx   # 日志面板组件
@@ -103,9 +105,19 @@ React_UI_Web/
 - 模块化日志管理
 
 ### 5. 主题系统
-- 多主题支持（亮色、暗色、科技蓝、护眼）
+- 多主题支持（亮色、暗色、科技蓝、护眼、午夜蓝、森林绿、珊瑚橙、薰衣草紫、薄荷青、焦糖棕、樱花粉、深海蓝、琥珀金）
 - CSS 变量管理
 - 组件级样式隔离
+
+### 6. 高级代码编辑器
+- **语法高亮**：支持 INI 文件和普通文本的语法高亮
+- **行号显示**：清晰的行号标识
+- **撤回功能**：支持 Ctrl+Z（撤回）和 Ctrl+Y（重做）
+- **Tab 缩进**：智能缩进和取消缩进
+- **行操作**：支持 Ctrl+D 复制当前行
+- **自动完成**：智能自动完成功能
+- **选中功能**：优化的文本选中效果
+- **实时光标位置**：显示当前光标位置（行、列）
 
 ## 安装和运行
 
@@ -200,6 +212,37 @@ npm run electron:build
 1. 在 `src/styles/themes/` 下创建新的主题文件
 2. 定义 CSS 变量
 3. 在 `src/styles/index.css` 中导入新主题
+
+### 使用 CodeEditor 组件
+
+```tsx
+import { CodeEditor } from '@/components/CodeEditor';
+
+// 基本用法
+<CodeEditor
+  value={iniContent}
+  onChange={handleIniChange}
+  language="ini"
+  fontSize={13}
+  showLineNumbers={true}
+  highlightActiveLine={true}
+  tabSize={2}
+  wordWrap={false}
+  onCursorChange={(line, col) => {
+    console.log(`光标位置: 行 ${line}, 列 ${col}`);
+  }}
+/>
+
+// 高级用法（带高亮行）
+<CodeEditor
+  value={modelContent}
+  onChange={handleModelChange}
+  language="ini"
+  highlightLine={5} // 高亮第5行
+  showLineNumbers={true}
+  readOnly={false}
+/>
+```
 
 ### 扩展 Ollama 功能
 

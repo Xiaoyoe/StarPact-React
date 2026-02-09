@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { OllamaServiceStatus, OllamaModel } from '@/shared/types/ollama';
 
 // ========== Types ==========
-export type ThemeType = 'light' | 'dark' | 'tech-blue' | 'eye-care';
+export type ThemeType = 'light' | 'dark' | 'tech-blue' | 'eye-care' | 'midnight-blue' | 'forest-green' | 'coral-orange' | 'lavender-purple' | 'mint-cyan' | 'caramel-brown' | 'sakura-pink' | 'deep-sea-blue' | 'amber-gold';
 
 export interface ModelConfig {
   id: string;

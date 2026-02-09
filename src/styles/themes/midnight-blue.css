@@ -1,0 +1,92 @@
+.theme-midnight-blue {
+  /* 1. 调整主色，提升亮度和活力 */
+  --primary-color: #589EFF;
+  --primary-light: #1E293B;
+  --primary-dark: #2563EB;
+
+  /* 2. 调整背景层次，营造深邃感 */
+  --bg-primary: #121212;
+  --bg-secondary: #1E1E20;
+  --bg-tertiary: #2A2A2D;
+  --bg-chat-user: #1E293B;
+  --bg-chat-ai: #1E1E20;
+
+  /* 3. 调整边框，弱化分割感 */
+  --border-color: transparent;
+  --border-light: transparent;
+  --bg-splitter: #1E1E20;
+  --bg-splitter-hover: #2A2A2D;
+
+  /* 4. 调整按钮样式，与图一风格统一 */
+  --btn-primary-bg: var(--primary-color);
+  --btn-primary-hover: var(--primary-dark);
+  --btn-primary-text: #FFFFFF;
+  --btn-secondary-bg: var(--bg-tertiary);
+  --btn-secondary-hover: #363639;
+  --btn-secondary-text: var(--text-primary);
+
+  /* 5. 调整滑块和高亮 */
+  --bg-current-line: var(--primary-light);
+  --scrollbar-thumb: #363639;
+
+  /* 其余变量保持不变，或根据需要微调 */
+  --success-color: #27C346;
+  --warning-color: #FF9A2E;
+  --error-color: #F76560;
+  --text-primary: #F6F6F6;
+  --text-secondary: #C9CDD4;
+  --text-tertiary: #86909C;
+  --text-inverse: #1D2129;
+  --shadow-base: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --code-bg: #0d0d0d;
+  --diff-same-text: #F6F6F6;
+  --diff-different-text: #F76560;
+  --diff-header-text: var(--primary-color);
+  --diff-separator: #86909C;
+  --diff-context-text: #C9CDD4;
+  --diff-added-bg: rgba(39, 195, 70, 0.15);
+  --diff-added-text: #27C346;
+  --diff-deleted-bg: rgba(247, 101, 96, 0.15);
+  --diff-deleted-text: #F76560;
+  --bg-editor: var(--bg-primary);
+  --bg-line-number: var(--bg-secondary);
+  --text-line-number: var(--text-tertiary);
+  --bg-saved-item: var(--bg-secondary);
+  --bg-saved-item-hover: var(--bg-tertiary);
+  --bg-modal-overlay: rgba(0, 0, 0, 0.7);
+  --bg-modal: var(--bg-secondary);
+  --border-primary: transparent;
+  --border-radius: 8px;
+  --border-radius-sm: 4px;
+  --toolbar-height: 40px;
+  --saved-list-height: 36px;
+  --transition-speed: 200ms;
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --btn-danger-bg: #F76560;
+  --btn-danger-hover: #D9362E;
+  --btn-danger-text: #FFFFFF;
+  --btn-success-bg: #27C346;
+  --btn-success-hover: #00B42A;
+  --btn-success-text: #FFFFFF;
+  --btn-warning-bg: #FF9A2E;
+  --btn-warning-hover: #FF7D00;
+  --btn-warning-text: #FFFFFF;
+  --btn-disabled-bg: var(--bg-tertiary);
+  --btn-disabled-text: var(--text-tertiary);
+  --toast-success-bg: rgba(39, 195, 70, 0.15);
+  --toast-success-text: #27C346;
+  --toast-success-border: #27C346;
+  --toast-error-bg: rgba(247, 101, 96, 0.15);
+  --toast-error-text: #F76560;
+  --toast-error-border: #F76560;
+  --toast-info-bg: rgba(88, 158, 255, 0.15);
+  --toast-info-text: var(--primary-color);
+  --toast-info-border: var(--primary-color);
+  --hover-bg-secondary: var(--bg-tertiary);
+  --hover-bg-tertiary: #363639;
+  --hover-text-secondary: var(--text-primary);
+  --hover-text-tertiary: var(--text-secondary);
+  --hover-border-color: transparent;
+  --hover-danger-color: #D9362E;
+}

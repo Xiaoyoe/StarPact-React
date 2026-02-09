@@ -3,6 +3,15 @@
 @import "./styles/themes/dark.css";
 @import "./styles/themes/tech-blue.css";
 @import "./styles/themes/eye-care.css";
+@import "./styles/themes/midnight-blue.css";
+@import "./styles/themes/forest-green.css";
+@import "./styles/themes/coral-orange.css";
+@import "./styles/themes/lavender-purple.css";
+@import "./styles/themes/mint-cyan.css";
+@import "./styles/themes/caramel-brown.css";
+@import "./styles/themes/sakura-pink.css";
+@import "./styles/themes/deep-sea-blue.css";
+@import "./styles/themes/amber-gold.css";
 
 * {
   box-sizing: border-box;

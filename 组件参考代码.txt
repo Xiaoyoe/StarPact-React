@@ -1,0 +1,152 @@
+1. 图片上传组件 ImageUploader.tsx
+tsx
+import React from 'react';
+import { Upload, Button, message } from 'antd';
+import { UploadOutlined } from '@ant-design/icons';
+import type { UploadProps, UploadFile } from 'antd/es/upload/interface';
+
+interface ImageUploaderProps {
+  onUploadSuccess: (file: UploadFile) => void;
+  fileInputRef: React.RefObject<HTMLInputElement>;
+}
+
+const ImageUploader: React.FC<ImageUploaderProps> = ({ onUploadSuccess, fileInputRef }) => {
+  // 上传配置（替换为真实接口）
+  const uploadProps: UploadProps = {
+    name: 'file',
+    action: '/api/upload/image', // 真实上传接口地址
+    headers: {
+      // 按需添加token等请求头
+      // Authorization: `Bearer ${localStorage.getItem('token')}`,
+    },
+    beforeUpload: (file) => {
+      // 格式校验
+      const isImage = file.type.startsWith('image/');
+      if (!isImage) {
+        message.error('只能上传图片格式文件！');
+        return false;
+      }
+      // 大小校验（5MB）
+      const isLt5M = file.size / 1024 / 1024 < 5;
+      if (!isLt5M) {
+        message.error('图片大小不能超过5MB！');
+        return false;
+      }
+      return true;
+    },
+    onChange: (info) => {
+      if (info.file.status === 'done') {
+        onUploadSuccess(info.file);
+      } else if (info.file.status === 'error') {
+        message.error('上传失败，请重试');
+      }
+    },
+  };
+
+  return (
+    <Upload {...uploadProps} ref={fileInputRef} showUploadList={false}>
+      <Button type="primary" icon={<UploadOutlined />}>
+        上传图片
+      </Button>
+    </Upload>
+  );
+};
+
+export default ImageUploader;
+2. 图片卡片组件 ImageCard.tsx
+tsx
+import React from 'react';
+import { List, Card, Button, Space, Typography } from 'antd';
+import { EyeOutlined, DeleteOutlined } from '@ant-design/icons';
+import type { ImageItem } from './ImageManager';
+
+interface ImageCardProps {
+  image: ImageItem;
+  onPreview: () => void;
+  onDelete: () => void;
+}
+
+const { Text } = Typography;
+
+const ImageCard: React.FC<ImageCardProps> = ({ image, onPreview, onDelete }) => {
+  // 格式化文件大小
+  const formatSize = (size: number) => {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(2)} KB`;
+    return `${(size / 1024 / 1024).toFixed(2)} MB`;
+  };
+
+  return (
+    <List.Item>
+      <Card
+        hoverable
+        cover={<img alt={image.name} src={image.url} style={{ height: '160px', objectFit: 'cover' }} />}
+        actions={[
+          <Button 
+            type="text" 
+            icon={<EyeOutlined />} 
+            onClick={onPreview} 
+            size="small"
+          >
+            预览
+          </Button>,
+          <Button 
+            type="text" 
+            icon={<DeleteOutlined />} 
+            onClick={onDelete} 
+            size="small" 
+            danger
+          >
+            删除
+          </Button>,
+        ]}
+      >
+        <Card.Meta
+          title={<Text ellipsis style={{ maxWidth: '100%' }}>{image.name}</Text>}
+          description={
+            <div>
+              <Text size="small">{formatSize(image.size)}</Text>
+              <br />
+              <Text size="small" type="secondary">{image.uploadTime}</Text>
+            </div>
+          }
+        />
+      </Card>
+    </List.Item>
+  );
+};
+
+export default ImageCard;
+3. 图片预览弹窗组件 ImagePreviewModal.tsx
+tsx
+import React from 'react';
+import { Modal } from 'antd';
+
+interface ImagePreviewModalProps {
+  visible: boolean;
+  imageUrl: string;
+  onClose: () => void;
+}
+
+const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({ visible, imageUrl, onClose }) => {
+  return (
+    <Modal
+      open={visible}
+      title="图片预览"
+      footer={null}
+      onCancel={onClose}
+      width="80%"
+      destroyOnClose
+    >
+      <div style={{ textAlign: 'center' }}>
+        <img
+          alt="预览图"
+          src={imageUrl}
+          style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain' }}
+        />
+      </div>
+    </Modal>
+  );
+};
+
+export default ImagePreviewModal;

@@ -16,12 +16,33 @@ export function SettingsPage() {
 
   const [activeTab, setActiveTab] = useState<'appearance' | 'general' | 'about'>('appearance');
 
-  const themes: { id: ThemeType; name: string; desc: string; colors: string[] }[] = [
-    { id: 'light', name: '浅色主题', desc: '经典明亮风格', colors: ['#FFFFFF', '#165DFF', '#F2F3F5'] },
-    { id: 'dark', name: '深色主题', desc: '护眼暗色风格', colors: ['#17171A', '#3C7EFF', '#232324'] },
-    { id: 'tech-blue', name: '科技蓝', desc: '专业科技风格', colors: ['#FFFFFF', '#0A49C1', '#F8FBFF'] },
-    { id: 'eye-care', name: '护眼绿', desc: '自然舒适风格', colors: ['#FCFFFE', '#2A9D8F', '#F2FAF8'] },
-  ];
+  const themeCategories = {
+    light: {
+      name: 'Light 主题',
+      desc: '明亮清爽风格',
+      themes: [
+        { id: 'light', name: '浅色主题', desc: '经典明亮风格', colors: ['#FFFFFF', '#165DFF', '#F2F3F5'] },
+        { id: 'tech-blue', name: '科技蓝', desc: '专业科技风格', colors: ['#FFFFFF', '#0A49C1', '#F8FBFF'] },
+        { id: 'eye-care', name: '护眼绿', desc: '自然舒适风格', colors: ['#FCFFFE', '#2A9D8F', '#F2FAF8'] },
+      ]
+    },
+    night: {
+      name: 'Night 主题',
+      desc: '深色护眼风格',
+      themes: [
+        { id: 'dark', name: '深色主题', desc: '护眼暗色风格', colors: ['#17171A', '#3C7EFF', '#232324'] },
+        { id: 'midnight-blue', name: '午夜蓝', desc: '深邃科技风格', colors: ['#121212', '#589EFF', '#1E1E20'] },
+        { id: 'forest-green', name: '森林绿', desc: '自然清新风格', colors: ['#0F172A', '#22C55E', '#064E3B'] },
+        { id: 'coral-orange', name: '珊瑚橙', desc: '温暖活力风格', colors: ['#0F172A', '#F97316', '#7C2D12'] },
+        { id: 'lavender-purple', name: '薰衣草紫', desc: '优雅浪漫风格', colors: ['#0F172A', '#8B5CF6', '#312E81'] },
+        { id: 'mint-cyan', name: '薄荷青', desc: '凉爽清新风格', colors: ['#0F172A', '#06B6D4', '#0E7490'] },
+        { id: 'caramel-brown', name: '焦糖棕', desc: '温暖复古风格', colors: ['#0F172A', '#D97706', '#78350F'] },
+        { id: 'sakura-pink', name: '樱花粉', desc: '柔和甜美风格', colors: ['#0F172A', '#EC4899', '#7E1D40'] },
+        { id: 'deep-sea-blue', name: '深海蓝', desc: '深邃专业风格', colors: ['#0F172A', '#1E40AF', '#1E3A8A'] },
+        { id: 'amber-gold', name: '琥珀金', desc: '奢华温暖风格', colors: ['#0F172A', '#F59E0B', '#78350F'] },
+      ]
+    }
+  };
 
   const tabs = [
     { id: 'appearance' as const, label: '外观', icon: Palette },
@@ -71,42 +92,51 @@ export function SettingsPage() {
                   主题
                 </h2>
                 <p className="mb-4 text-sm" style={{ color: 'var(--text-tertiary)' }}>
-                  选择界面主题风格，支持四种预设主题
+                  选择界面主题风格，支持十三种预设主题
                 </p>
-                <div className="grid grid-cols-2 gap-3">
-                  {themes.map(t => (
-                    <button
-                      key={t.id}
-                      onClick={() => setTheme(t.id)}
-                      className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
-                      style={{
-                        border: `2px solid ${theme === t.id ? 'var(--primary-color)' : 'var(--border-color)'}`,
-                        backgroundColor: 'var(--bg-secondary)',
-                      }}
-                    >
-                      <div className="mb-3 flex gap-1.5">
-                        {t.colors.map((c, i) => (
-                          <div
-                            key={i}
-                            className="h-6 w-6 rounded-md border border-black/5"
-                            style={{ backgroundColor: c }}
-                          />
-                        ))}
-                      </div>
-                      <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                        {t.name}
-                      </div>
-                      <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                        {t.desc}
-                      </div>
-                      {theme === t.id && (
-                        <div className="mt-2 text-xs font-medium" style={{ color: 'var(--primary-color)' }}>
-                          ✓ 当前使用
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
+                {Object.values(themeCategories).map((category, categoryIndex) => (
+                  <div key={categoryIndex} className="mb-6">
+                    <div className="mb-3 flex items-center gap-2">
+                      <div className="h-1 w-8 rounded-full" style={{ backgroundColor: 'var(--primary-color)' }} />
+                      <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{category.name}</h3>
+                      <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{category.desc}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-3">
+                      {category.themes.map(t => (
+                        <button
+                          key={t.id}
+                          onClick={() => setTheme(t.id)}
+                          className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
+                          style={{
+                            border: `2px solid ${theme === t.id ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                            backgroundColor: 'var(--bg-secondary)',
+                          }}
+                        >
+                          <div className="mb-3 flex gap-1.5">
+                            {t.colors.map((c, i) => (
+                              <div
+                                key={i}
+                                className="h-6 w-6 rounded-md border border-black/5"
+                                style={{ backgroundColor: c }}
+                              />
+                            ))}
+                          </div>
+                          <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                            {t.name}
+                          </div>
+                          <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                            {t.desc}
+                          </div>
+                          {theme === t.id && (
+                            <div className="mt-2 text-xs font-medium" style={{ color: 'var(--primary-color)' }}>
+                              ✓ 当前使用
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
               </section>
 
               {/* Font Size */}
@@ -308,7 +338,7 @@ export function SettingsPage() {
               >
                 <h3 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>核心特性</h3>
                 <ul className="space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  <li>✦ 多主题支持（浅色/深色/科技蓝/护眼绿）</li>
+                  <li>✦ 多主题支持（浅色/深色/科技蓝/护眼绿/午夜蓝/森林绿/珊瑚橙/薰衣草紫/薄荷青/焦糖棕/樱花粉/深海蓝/琥珀金）</li>
                   <li>✦ 多模型管理与快速切换</li>
                   <li>✦ 流式输出打字机效果</li>
                   <li>✦ Markdown 全格式渲染 + 代码高亮</li>
