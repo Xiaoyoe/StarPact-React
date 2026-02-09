@@ -5,6 +5,7 @@ import { ModelsPage } from '@/pages/Models';
 import { SettingsPage } from '@/pages/Settings';
 import { LogsPage } from '@/pages/Logs';
 import { ComparePage } from '@/pages/Compare';
+import { IniConfigPage } from '@/pages/IniConfig';
 import { LogsPanel } from '@/components/LogsPanel';
 import { OllamaModal } from '@/components/OllamaModal';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -27,6 +28,7 @@ function PageContent() {
         {activePage === 'settings' && <SettingsPage />}
         {activePage === 'logs' && <LogsPage />}
         {activePage === 'compare' && <ComparePage />}
+        {activePage === 'ini-config' && <IniConfigPage />}
       </motion.div>
     </AnimatePresence>
   );

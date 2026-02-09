@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   MessageSquare, Bot, Settings, ScrollText, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -45,6 +45,7 @@ export function Sidebar() {
     { id: 'chat' as const, icon: MessageSquare, label: '聊天' },
     { id: 'models' as const, icon: Bot, label: '模型管理' },
     { id: 'compare' as const, icon: FileText, label: '文本对比' },
+    { id: 'ini-config' as const, icon: Settings2, label: 'INI配置' },
     { id: 'logs' as const, icon: ScrollText, label: '日志' },
     { id: 'settings' as const, icon: Settings, label: '设置' },
   ];

@@ -77,4 +77,12 @@
   --toast-info-bg: #E8F8F5;
   --toast-info-text: #2A9D8F;
   --toast-info-border: #2A9D8F;
+  
+  /* Hover Effects */
+  --hover-bg-secondary: #E8F8F5;
+  --hover-bg-tertiary: #B8D9D3;
+  --hover-text-secondary: #1A3B36;
+  --hover-text-tertiary: #3A6B64;
+  --hover-border-color: #B8D9D3;
+  --hover-danger-color: #D95E40;
 }

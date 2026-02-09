@@ -74,8 +74,8 @@ interface AppState {
   setTheme: (theme: ThemeType) => void;
 
   // Navigation
-  activePage: 'chat' | 'models' | 'settings' | 'logs' | 'compare';
-  setActivePage: (page: 'chat' | 'models' | 'settings' | 'logs' | 'compare') => void;
+  activePage: 'chat' | 'models' | 'settings' | 'logs' | 'compare' | 'ini-config';
+  setActivePage: (page: 'chat' | 'models' | 'settings' | 'logs' | 'compare' | 'ini-config') => void;
 
   // Sidebar
   sidebarCollapsed: boolean;
@@ -518,4 +518,5 @@ export const useStore = create<AppState>((set) => ({
   addOllamaLog: (log) => set((state) => ({
     ollamaLogs: [...state.ollamaLogs, { ...log, timestamp: Date.now() }],
   })),
+  setOllamaLogs: (logs) => set({ ollamaLogs: logs }),
 }));

@@ -45,6 +45,41 @@ body {
   color: var(--text-inverse);
 }
 
+/* Button Hover Effects */
+.btn-secondary {
+  background-color: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  transition: all var(--transition-base);
+}
+
+.btn-secondary:hover {
+  background-color: var(--hover-bg-secondary);
+  border-color: var(--hover-border-color);
+  color: var(--hover-text-secondary);
+}
+
+.btn-tertiary {
+  background-color: var(--bg-secondary);
+  color: var(--text-tertiary);
+  transition: all var(--transition-base);
+}
+
+.btn-tertiary:hover {
+  background-color: var(--hover-bg-secondary);
+  color: var(--hover-text-secondary);
+}
+
+.btn-danger {
+  color: var(--text-tertiary);
+  transition: all var(--transition-base);
+}
+
+.btn-danger:hover {
+  background-color: var(--hover-bg-secondary);
+  color: var(--hover-danger-color);
+}
+
 code, pre, .font-mono {
   font-family: 'Consolas', 'Monaco', 'Fira Code', 'Source Code Pro', monospace !important;
 }
