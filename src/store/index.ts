@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { OllamaServiceStatus, OllamaModel } from '@/shared/types/ollama';
 
 // ========== Types ==========
 export type ThemeType = 'light' | 'dark' | 'tech-blue' | 'eye-care';
@@ -505,4 +506,16 @@ export const useStore = create<AppState>((set) => ({
   // Search
   searchQuery: '',
   setSearchQuery: (query) => set({ searchQuery: query }),
+
+  // Ollama
+  ollamaModalOpen: false,
+  setOllamaModalOpen: (open) => set({ ollamaModalOpen: open }),
+  ollamaStatus: null,
+  setOllamaStatus: (status) => set({ ollamaStatus: status }),
+  ollamaModels: [],
+  setOllamaModels: (models) => set({ ollamaModels: models }),
+  ollamaLogs: [],
+  addOllamaLog: (log) => set((state) => ({
+    ollamaLogs: [...state.ollamaLogs, { ...log, timestamp: Date.now() }],
+  })),
 }));

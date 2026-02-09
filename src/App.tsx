@@ -6,6 +6,7 @@ import { SettingsPage } from '@/pages/Settings';
 import { LogsPage } from '@/pages/Logs';
 import { ComparePage } from '@/pages/Compare';
 import { LogsPanel } from '@/components/LogsPanel';
+import { OllamaModal } from '@/components/OllamaModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function PageContent() {
@@ -39,6 +40,7 @@ export function App() {
         <PageContent />
       </main>
       <LogsPanel />
+      <OllamaModal />
     </div>
   );
 }

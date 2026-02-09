@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   MessageSquare, Bot, Settings, ScrollText, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -16,6 +16,7 @@ export function Sidebar() {
     models, activeModelId,
     logs, setLogsPanelOpen,
     searchQuery, setSearchQuery,
+    ollamaModalOpen, setOllamaModalOpen,
   } = useStore();
 
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
@@ -233,6 +234,31 @@ export function Sidebar() {
             })}
           </AnimatePresence>
         </div>
+      )}
+
+      {/* Ollama panel button */}
+      {!sidebarCollapsed && (
+        <button
+          onClick={() => setOllamaModalOpen(true)}
+          className="mx-3 mb-1 flex items-center gap-2 rounded-lg p-2.5 transition-colors"
+          style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)', '&:hover': { backgroundColor: 'var(--bg-secondary)' } }}
+        >
+          <div
+            className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+            style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+          >
+            <Cpu size={13} />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+              Ollama 管理
+            </div>
+            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+              本地 AI 模型
+            </div>
+          </div>
+          <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
+        </button>
       )}
 
       {/* Logs panel button */}

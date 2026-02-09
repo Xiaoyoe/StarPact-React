@@ -6,7 +6,6 @@ import {
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import type { ModelConfig } from '@/store';
-// cn utility available if needed
 import { motion, AnimatePresence } from 'framer-motion';
 
 function ModelForm({
@@ -759,22 +758,22 @@ export function ModelsPage() {
             {/* Presets */}
             {selectedModel.presets.length > 0 && (
               <div className="mt-4 rounded-xl p-5" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}>
-                <h3 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>参数预设</h3>
-                <div className="flex flex-wrap gap-2">
+                <h3 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>参数预设</h3>
+                <div className="grid grid-cols-2 gap-2">
                   {selectedModel.presets.map(preset => (
-                    <div
+                    <button
                       key={preset.id}
-                      className="rounded-lg p-3"
-                      style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}
+                      className="rounded-lg p-3 text-left text-sm transition-colors"
+                      style={{
+                        backgroundColor: 'var(--bg-primary)',
+                        border: '1px solid var(--border-color)',
+                      }}
                     >
-                      <div className="mb-1 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                        <Zap size={12} className="mr-1 inline" style={{ color: 'var(--warning-color)' }} />
-                        {preset.name}
+                      <div className="font-medium" style={{ color: 'var(--text-primary)' }}>{preset.name}</div>
+                      <div className="mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                        T:{preset.temperature} · P:{preset.topP} · Max:{preset.maxTokens}
                       </div>
-                      <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                        T={preset.temperature} · P={preset.topP} · Max={preset.maxTokens}
-                      </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
