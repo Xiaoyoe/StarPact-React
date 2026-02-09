@@ -6,6 +6,8 @@ import { SettingsPage } from '@/pages/Settings';
 import { LogsPage } from '@/pages/Logs';
 import { ComparePage } from '@/pages/Compare';
 import { IniConfigPage } from '@/pages/IniConfig';
+import { GalleryPage } from '@/pages/Gallery';
+import VideoPlayerPage from '@/pages/VideoPlayer';
 import { LogsPanel } from '@/components/LogsPanel';
 import { OllamaModal } from '@/components/OllamaModal';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -29,6 +31,8 @@ function PageContent() {
         {activePage === 'logs' && <LogsPage />}
         {activePage === 'compare' && <ComparePage />}
         {activePage === 'ini-config' && <IniConfigPage />}
+        {activePage === 'gallery' && <GalleryPage />}
+        {activePage === 'video-player' && <VideoPlayerPage />}
       </motion.div>
     </AnimatePresence>
   );

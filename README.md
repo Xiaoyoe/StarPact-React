@@ -31,42 +31,92 @@ React_UI_Web/
 ├── src/
 │   ├── components/          # 可复用组件
 │   │   ├── CodeEditor.tsx   # 高级代码编辑器组件
+│   │   ├── GalleryComponents.tsx # 图片管理组件
+│   │   ├── LogsPanel.tsx    # 日志面板组件
 │   │   ├── NovelEditor.tsx  # 小说编辑器组件
-│   │   ├── OllamaModal.tsx # Ollama 管理弹窗组件
-│   │   └── LogsPanel.tsx   # 日志面板组件
+│   │   ├── OllamaModal.tsx  # Ollama 管理弹窗组件
+│   ├── constants/           # 常量定义
+│   │   ├── config.ts        # 配置常量
+│   │   └── themes.ts        # 主题常量
+│   ├── docs/                # 文档
+│   │   └── development-guide.md # 开发指南
+│   ├── hooks/               # 自定义 hooks
+│   │   ├── index.ts         # hooks 导出
+│   │   ├── useDebounce.ts   # 防抖 hook
+│   │   └── useTheme.ts      # 主题 hook
 │   ├── layouts/             # 布局组件
+│   │   ├── styles/          # 布局样式
+│   │   │   └── index.module.css # 布局样式文件
 │   │   └── Sidebar.tsx      # 侧边栏布局
-│   ├── pages/               # 页面组件
-│   │   ├── Chat/            # 聊天页面
-│   │   ├── Compare/         # 对比页面
-│   │   ├── Logs/            # 日志页面
-│   │   ├── Models/          # 模型管理页面
-│   │   │   └── index.tsx    # 模型配置页面
-│   │   └── Settings/        # 设置页面
 │   ├── main/                # Electron 主进程
 │   │   ├── index.ts         # 主进程入口
 │   │   ├── ipc/             # IPC 通信
 │   │   │   ├── channels.ts  # IPC 通道定义
-│   │   │   ├── handlers.ts  # IPC 处理器
 │   │   │   └── ollamaHandlers.ts  # Ollama IPC 处理器
 │   │   ├── preload/         # 预加载脚本
 │   │   │   └── index.ts     # 预加载入口
 │   │   └── services/       # 后端服务
 │   │       └── ollama/      # Ollama 服务
-│   │           ├── OllamaServiceManager.ts  # 服务管理
-│   │           └── OllamaAPIClient.ts       # API 客户端
+│   │           ├── OllamaAPIClient.ts       # API 客户端
+│   │           └── OllamaServiceManager.ts  # 服务管理
+│   ├── pages/               # 页面组件
+│   │   ├── Chat/            # 聊天页面
+│   │   │   ├── styles/      # 聊天页面样式
+│   │   │   │   └── index.module.css # 聊天页面样式文件
+│   │   │   └── index.tsx    # 聊天页面组件
+│   │   ├── Compare/         # 对比页面
+│   │   │   ├── styles/      # 对比页面样式
+│   │   │   │   └── index.module.css # 对比页面样式文件
+│   │   │   └── index.tsx    # 对比页面组件
+│   │   ├── Gallery/         # 图片管理页面
+│   │   │   └── index.tsx    # 图片管理页面组件
+│   │   ├── IniConfig/       # INI 配置页面
+│   │   │   ├── styles/      # INI 配置页面样式
+│   │   │   │   └── index.module.css # INI 配置页面样式文件
+│   │   │   └── index.tsx    # INI 配置页面组件
+│   │   ├── Logs/            # 日志页面
+│   │   │   ├── styles/      # 日志页面样式
+│   │   │   │   └── index.module.css # 日志页面样式文件
+│   │   │   └── index.tsx    # 日志页面组件
+│   │   ├── Models/          # 模型管理页面
+│   │   │   ├── styles/      # 模型管理页面样式
+│   │   │   │   └── index.module.css # 模型管理页面样式文件
+│   │   │   ├── OllamaManager.tsx # Ollama 管理组件
+│   │   │   └── index.tsx    # 模型配置页面组件
+│   │   └── Settings/        # 设置页面
+│   │       ├── styles/      # 设置页面样式
+│   │       │   └── index.module.css # 设置页面样式文件
+│   │       └── index.tsx    # 设置页面组件
 │   ├── shared/              # 共享代码
 │   │   └── types/           # 类型定义
 │   │       └── ollama.ts    # Ollama 类型
 │   ├── store/               # 状态管理
 │   │   └── index.ts         # Zustand store
-│   └── styles/              # 样式文件
-│       ├── themes/          # 主题样式
-│       │   ├── light.css    # 亮色主题
-│       │   ├── dark.css     # 暗色主题
-│       │   ├── tech-blue.css # 科技蓝主题
-│       │   └── eye-care.css # 护眼主题
-│       └── index.css        # 全局样式
+│   ├── styles/              # 样式文件
+│   │   ├── themes/          # 主题样式
+│   │   │   ├── amber-gold.css # 琥珀金主题
+│   │   │   ├── caramel-brown.css # 焦糖棕主题
+│   │   │   ├── coral-orange.css # 珊瑚橙主题
+│   │   │   ├── dark.css     # 暗色主题
+│   │   │   ├── deep-sea-blue.css # 深海蓝主题
+│   │   │   ├── eye-care.css # 护眼主题
+│   │   │   ├── forest-green.css # 森林绿主题
+│   │   │   ├── lavender-purple.css # 薰衣草紫主题
+│   │   │   ├── light.css    # 亮色主题
+│   │   │   ├── midnight-blue.css # 午夜蓝主题
+│   │   │   ├── mint-cyan.css # 薄荷青主题
+│   │   │   ├── sakura-pink.css # 樱花粉主题
+│   │   │   └── tech-blue.css # 科技蓝主题
+│   │   └── index.css        # 全局样式
+│   ├── types/               # 类型定义
+│   │   ├── gallery.ts       # 图片管理类型
+│   │   └── index.ts         # 类型导出
+│   ├── utils/               # 工具函数
+│   │   ├── cn.ts            # 类名工具
+│   │   └── diffEngine.ts    # 差异比较引擎
+│   ├── App.tsx              # 应用根组件
+│   ├── index.css            # 全局样式
+│   └── main.tsx             # 应用入口
 ├── dist/                    # 构建输出
 ├── package.json
 └── vite.config.ts
@@ -118,6 +168,15 @@ React_UI_Web/
 - **自动完成**：智能自动完成功能
 - **选中功能**：优化的文本选中效果
 - **实时光标位置**：显示当前光标位置（行、列）
+
+### 7. 图片管理
+- **图片浏览**：支持本地图片预览和管理
+- **图片查看器**：支持缩放、旋转、拖拽等操作
+- **缩略图导航**：独立的缩略图区域，支持滚轮切换
+- **图片编辑器**：基础的图片编辑功能
+- **文件操作**：支持图片重命名、删除等操作
+- **主题适配**：自动适配应用主题色彩
+- **响应式设计**：适配不同屏幕尺寸
 
 ## 安装和运行
 
