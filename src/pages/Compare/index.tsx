@@ -9,6 +9,7 @@ import {
   type UnifiedDiffLine,
 } from '@/utils/diffEngine';
 import { NovelEditor } from '@/components/NovelEditor';
+import { useToast } from '@/components/Toast';
 
 // ---- Storage helpers (localStorage-based persistence) ----
 const STORAGE_PREFIX = 'text_compare_';
@@ -51,41 +52,7 @@ function persistSavesIndex(saves: SavedFile[]) {
   } catch { /* ignore */ }
 }
 
-// ---- Toast component ----
-interface ToastMessage {
-  id: number;
-  text: string;
-  type: 'success' | 'error' | 'info';
-}
 
-let toastId = 0;
-
-function ToastContainer({ toasts, onRemove }: { toasts: ToastMessage[]; onRemove: (id: number) => void }) {
-  return (
-    <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 9999, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {toasts.map(t => (
-        <div
-          key={t.id}
-          onClick={() => onRemove(t.id)}
-          style={{
-            padding: '10px 20px',
-            borderRadius: 'var(--border-radius)',
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: 'pointer',
-            boxShadow: 'var(--shadow-md)',
-            transition: 'opacity var(--transition-speed)',
-            background: t.type === 'success' ? 'var(--toast-success-bg)' : t.type === 'error' ? 'var(--toast-error-bg)' : 'var(--toast-info-bg)',
-            color: t.type === 'success' ? 'var(--toast-success-text)' : t.type === 'error' ? 'var(--toast-error-text)' : 'var(--toast-info-text)',
-            borderLeft: `4px solid ${t.type === 'success' ? 'var(--toast-success-border)' : t.type === 'error' ? 'var(--toast-error-border)' : 'var(--toast-info-border)'}`,
-          }}
-        >
-          {t.text}
-        </div>
-      ))}
-    </div>
-  );
-}
 
 // ---- Modal component ----
 function SaveModal({
@@ -451,6 +418,7 @@ function ToolButton({
 // ===================== MAIN COMPONENT =====================
 export function ComparePage() {
   // ---- State ----
+  const toast = useToast();
   const [leftText, setLeftText] = useState('');
   const [rightText, setRightText] = useState('');
   const [leftDiffs, setLeftDiffs] = useState<CharDiff[] | null>(null);
@@ -461,22 +429,10 @@ export function ComparePage() {
   const [fontSize, setFontSize] = useState(13);
   const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
   const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
-  const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalSide, setModalSide] = useState<'left' | 'right'>('left');
   const [leftWidth, setLeftWidth] = useState(50); // percentage
   const [toolbarVisible, setToolbarVisible] = useState(true);
-
-  // ---- Toast helpers ----
-  const addToast = useCallback((text: string, type: ToastMessage['type'] = 'info', duration = 3000) => {
-    const id = ++toastId;
-    setToasts(prev => [...prev, { id, text, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
-  }, []);
-
-  const removeToast = useCallback((id: number) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
 
   // ---- Auto load on mount ----
   useEffect(() => {
@@ -485,7 +441,7 @@ export function ComparePage() {
     if (saved) {
       setLeftText(saved.left);
       setRightText(saved.right);
-      addToast('已自动加载上次保存的内容', 'info');
+      toast.info('已自动加载上次保存的内容');
     }
     // Load saved files list
     const files = loadSavesIndex();
@@ -497,15 +453,15 @@ export function ComparePage() {
     if (!autoSaveEnabled) return;
     const interval = setInterval(() => {
       saveAutoSave(leftText, rightText);
-      addToast('自动保存成功', 'success', 2000);
+      toast.success('自动保存成功', { duration: 2000 });
     }, 60000);
     return () => clearInterval(interval);
-  }, [autoSaveEnabled, leftText, rightText, addToast]);
+  }, [autoSaveEnabled, leftText, rightText]);
 
   // ---- Compare ----
   const handleCompare = useCallback(() => {
     if (!leftText.trim() && !rightText.trim()) {
-      addToast('请输入文本后再进行对比', 'error');
+      toast.error('请输入文本后再进行对比');
       return;
     }
 
@@ -520,8 +476,8 @@ export function ComparePage() {
 
     setDiffReady(true);
     setViewMode('diff');
-    addToast('对比完成', 'success');
-  }, [leftText, rightText, addToast]);
+    toast.success('对比完成');
+  }, [leftText, rightText]);
 
   // ---- Clear ----
   const handleClear = useCallback(() => {
@@ -533,21 +489,21 @@ export function ComparePage() {
     setDiffReady(false);
     setViewMode('editor');
     setLeftWidth(50);
-    addToast('已清空所有内容', 'info');
-  }, [addToast]);
+    toast.info('已清空所有内容');
+  }, []);
 
   // ---- Clear styles only ----
   const handleClearStyles = useCallback(() => {
     setLeftDiffs(null);
     setRightDiffs(null);
-    addToast('样式已清空', 'info');
-  }, [addToast]);
+    toast.info('样式已清空');
+  }, []);
 
   // ---- Save helpers ----
   const doSave = useCallback((side: 'left' | 'right', customName?: string) => {
     const content = side === 'left' ? leftText : rightText;
     if (!content.trim()) {
-      addToast(`${side === 'left' ? '左侧' : '右侧'}内容为空，无法保存`, 'error');
+      toast.error(`${side === 'left' ? '左侧' : '右侧'}内容为空，无法保存`);
       return;
     }
 
@@ -566,8 +522,8 @@ export function ComparePage() {
     const newSaves = [...savedFiles, file];
     setSavedFiles(newSaves);
     persistSavesIndex(newSaves);
-    addToast(`保存成功：${name}`, 'success');
-  }, [leftText, rightText, savedFiles, addToast]);
+    toast.success(`保存成功：${name}`);
+  }, [leftText, rightText, savedFiles]);
 
   const handleSaveLeft = useCallback(() => doSave('left'), [doSave]);
   const handleSaveRight = useCallback(() => doSave('right'), [doSave]);
@@ -585,21 +541,21 @@ export function ComparePage() {
   // ---- Load saved file ----
   const handleLoadFile = useCallback((file: SavedFile) => {
     setRightText(file.content);
-    addToast(`已加载：${file.name}`, 'success');
-  }, [addToast]);
+    toast.success(`已加载：${file.name}`);
+  }, []);
 
   // ---- Delete saved file ----
   const handleDeleteFile = useCallback((id: string) => {
     const newSaves = savedFiles.filter(f => f.id !== id);
     setSavedFiles(newSaves);
     persistSavesIndex(newSaves);
-    addToast('删除成功', 'success');
-  }, [savedFiles, addToast]);
+    toast.success('删除成功');
+  }, [savedFiles]);
 
   // ---- Export result ----
   const handleExportResult = useCallback(() => {
     if (diffLines.length === 0) {
-      addToast('没有对比结果可导出', 'error');
+      toast.error('没有对比结果可导出');
       return;
     }
 
@@ -621,8 +577,8 @@ export function ComparePage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    addToast('导出成功', 'success');
-  }, [diffLines, addToast]);
+    toast.success('导出成功');
+  }, [diffLines]);
 
   // ---- Font size ----
   const handleFontIncrease = useCallback(() => {
@@ -652,8 +608,8 @@ export function ComparePage() {
   // ---- Manual save to auto save ----
   const handleManualAutoSave = useCallback(() => {
     saveAutoSave(leftText, rightText);
-    addToast('手动保存成功', 'success');
-  }, [leftText, rightText, addToast]);
+    toast.success('手动保存成功');
+  }, [leftText, rightText]);
 
   return (
     <div style={{
@@ -664,9 +620,6 @@ export function ComparePage() {
       background: 'var(--bg-primary)',
       overflow: 'hidden',
     }}>
-      {/* Toasts */}
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
-
       {/* Save Modal */}
       <SaveModal
         visible={modalVisible}

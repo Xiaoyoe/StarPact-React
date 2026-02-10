@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { CodeEditor } from '@/components/CodeEditor';
+import { useToast } from '@/components/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
 // ===================== TYPES =====================
@@ -214,47 +215,7 @@ export function getSampleIni(): string {
   ].join('\n');
 }
 
-// ===================== TOAST =====================
-interface ToastMsg { id: number; text: string; type: 'success' | 'error' | 'info'; }
-let _toastId = 0;
 
-function ToastContainer({ toasts, onRemove }: { toasts: ToastMsg[]; onRemove: (id: number) => void }) {
-  return (
-    <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 99999, display: 'flex', flexDirection: 'column', gap: 8, pointerEvents: 'none' }}>
-      <AnimatePresence>
-        {toasts.map(t => {
-          const bgKey = t.type === 'success' ? '--toast-success-bg' : t.type === 'error' ? '--toast-error-bg' : '--toast-info-bg';
-          const textKey = t.type === 'success' ? '--toast-success-text' : t.type === 'error' ? '--toast-error-text' : '--toast-info-text';
-          const borderKey = t.type === 'success' ? '--toast-success-border' : t.type === 'error' ? '--toast-error-border' : '--toast-info-border';
-          const IconComp = t.type === 'success' ? CheckCircle : t.type === 'error' ? AlertCircle : Info;
-          return (
-            <motion.div
-              key={t.id}
-              initial={{ opacity: 0, x: 60, scale: 0.95 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 60, scale: 0.95 }}
-              transition={{ duration: 0.25 }}
-              onClick={() => onRemove(t.id)}
-              style={{
-                pointerEvents: 'auto', padding: '10px 16px', borderRadius: 10,
-                fontSize: 13, fontWeight: 500, cursor: 'pointer',
-                boxShadow: 'var(--shadow-lg)',
-                background: 'var(' + bgKey + ')',
-                color: 'var(' + textKey + ')',
-                borderLeft: '3px solid var(' + borderKey + ')',
-                display: 'flex', alignItems: 'center', gap: 8,
-                backdropFilter: 'blur(8px)', maxWidth: 340,
-              }}
-            >
-              <IconComp size={15} />
-              <span>{t.text}</span>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 // ===================== HELP MODAL =====================
 function HelpModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -578,13 +539,13 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
 // ===================== MAIN COMPONENT =====================
 export function IniConfigPage() {
   const { addLog } = useStore();
+  const toast = useToast();
 
   const [iniData, setIniData] = useState<IniData | null>(null);
   const [originalRaw, setOriginalRaw] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [fontSize, setFontSize] = useState(13);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  const [toasts, setToasts] = useState<ToastMsg[]>([]);
   const [helpVisible, setHelpVisible] = useState(false);
   const [highlightLine, setHighlightLine] = useState<number | null>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState(55);
@@ -597,14 +558,6 @@ export function IniConfigPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const syncFromEditor = useRef(true);
   const syncFromPanel = useRef(false);
-
-  // ---- Toast ----
-  const addToast = useCallback((text: string, type: ToastMsg['type'] = 'info', duration = 3000) => {
-    const id = ++_toastId;
-    setToasts(prev => [...prev, { id, text, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), duration);
-  }, []);
-  const removeToast = useCallback((id: number) => setToasts(prev => prev.filter(t => t.id !== id)), []);
 
   // ---- Theme ----
   useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
@@ -649,7 +602,7 @@ export function IniConfigPage() {
           setOriginalRaw(parsed.originalRaw || parsed.raw);
           setEditorContent(parsed.raw);
           setEnabled(true);
-          addToast('已自动加载上次的内容', 'info');
+          toast.info('已自动加载上次的内容');
           addLog({ id: generateId(), level: 'info', message: '自动加载INI配置', timestamp: Date.now(), module: 'IniConfig' });
         }
       }
@@ -686,16 +639,16 @@ export function IniConfigPage() {
         setHighlightLine(null);
         setCurrentFileName(file.name);
         setIsModified(false);
-        addToast('文件上传成功：' + file.name, 'success');
+        toast.success('文件上传成功：' + file.name);
         addLog({ id: generateId(), level: 'info', message: '上传INI文件: ' + file.name, timestamp: Date.now(), module: 'IniConfig' });
       } catch (err) {
-        addToast('文件解析失败', 'error');
+        toast.error('文件解析失败');
         addLog({ id: generateId(), level: 'error', message: '文件解析失败: ' + err, timestamp: Date.now(), module: 'IniConfig' });
       }
     };
     reader.readAsText(file);
     e.target.value = '';
-  }, [addToast, addLog]);
+  }, [addLog]);
 
   // ---- Load sample ----
   const handleLoadSample = useCallback(() => {
@@ -709,13 +662,13 @@ export function IniConfigPage() {
     setHighlightLine(null);
     setCurrentFileName('sample.modelfile');
     setIsModified(false);
-    addToast('示例文件已加载', 'success');
+    toast.success('示例文件已加载');
     addLog({ id: generateId(), level: 'info', message: '加载示例INI文件', timestamp: Date.now(), module: 'IniConfig' });
-  }, [addToast, addLog]);
+  }, [addLog]);
 
   // ---- Export ----
   const handleExport = useCallback(() => {
-    if (!iniData) { addToast('没有可导出的内容', 'error'); return; }
+    if (!iniData) { toast.error('没有可导出的内容'); return; }
     const content = editorContent || buildIniContent(iniData);
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -727,13 +680,13 @@ export function IniConfigPage() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    addToast('文件导出成功', 'success');
+    toast.success('文件导出成功');
     addLog({ id: generateId(), level: 'info', message: '导出INI文件', timestamp: Date.now(), module: 'IniConfig' });
-  }, [iniData, editorContent, addToast, addLog]);
+  }, [iniData, editorContent, addLog]);
 
   // ---- Reset ----
   const handleReset = useCallback(() => {
-    if (!originalRaw) { addToast('没有原始内容可重置', 'error'); return; }
+    if (!originalRaw) { toast.error('没有原始内容可重置'); return; }
     if (!confirm('确定要重置所有修改吗？')) return;
     const data = parseIniContent(originalRaw);
     syncFromPanel.current = false;
@@ -741,9 +694,9 @@ export function IniConfigPage() {
     setEditorContent(originalRaw);
     setHighlightLine(null);
     setIsModified(false);
-    addToast('已重置为原始内容', 'success');
+    toast.success('已重置为原始内容');
     addLog({ id: generateId(), level: 'info', message: '重置INI配置', timestamp: Date.now(), module: 'IniConfig' });
-  }, [originalRaw, addToast, addLog]);
+  }, [originalRaw, addLog]);
 
   // ---- Parameter change (from panel) ----
   const handleParamChange = useCallback((key: string, value: string) => {
@@ -775,12 +728,12 @@ export function IniConfigPage() {
   // ---- Copy ----
   const handleCopy = useCallback(() => {
     const content = editorContent || (iniData ? buildIniContent(iniData) : '');
-    if (!content) { addToast('没有内容可复制', 'error'); return; }
+    if (!content) { toast.error('没有内容可复制'); return; }
     navigator.clipboard.writeText(content).then(
-      () => addToast('已复制到剪贴板', 'success'),
-      () => addToast('复制失败', 'error'),
+      () => toast.success('已复制到剪贴板'),
+      () => toast.error('复制失败'),
     );
-  }, [editorContent, iniData, addToast]);
+  }, [editorContent, iniData]);
 
   // ---- Manual save ----
   const handleSave = useCallback(() => {
@@ -788,12 +741,12 @@ export function IniConfigPage() {
     try {
       const content = editorContent || buildIniContent(iniData);
       localStorage.setItem('ini_config_autosave', JSON.stringify({ raw: content, originalRaw, time: new Date().toISOString() }));
-      addToast('手动保存成功', 'success');
+      toast.success('手动保存成功');
       addLog({ id: generateId(), level: 'info', message: '手动保存INI配置', timestamp: Date.now(), module: 'IniConfig' });
     } catch {
-      addToast('保存失败', 'error');
+      toast.error('保存失败');
     }
-  }, [iniData, editorContent, originalRaw, addToast, addLog]);
+  }, [iniData, editorContent, originalRaw, addLog]);
 
   // ---- Splitter ----
   const handleSplitterDrag = useCallback((dx: number) => {
@@ -815,7 +768,6 @@ export function IniConfigPage() {
   return (
     <div style={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column', background: 'var(--bg-primary)', overflow: 'hidden', color: 'var(--text-primary)' }}>
       <input ref={fileInputRef} type="file" accept=".ini,.txt,.modelfile,.conf" style={{ display: 'none' }} onChange={handleFileChange} />
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <AnimatePresence>
         {helpVisible && <HelpModal visible={helpVisible} onClose={() => setHelpVisible(false)} />}
       </AnimatePresence>
