@@ -46,7 +46,7 @@
   --border-radius-sm: 4px;
   --toolbar-height: 40px;
   --saved-list-height: 36px;
-  --transition-speed: 200ms;
+  --transition-speed: 1000ms;
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
   

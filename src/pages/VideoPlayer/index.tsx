@@ -3,6 +3,7 @@ import { VideoPlayer } from '@/components/VideoPlayer';
 import { VideoFile, VideoFilters, VideoInfo, RepeatMode, DEFAULT_FILTERS } from '@/types/video';
 import { cn } from '@/utils/cn';
 import { useStore } from '@/store';
+import { VideoPlaylistStorage, VideoPlaylist } from '@/services/storage/VideoPlaylistStorage';
 
 function formatFileSize(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -36,7 +37,7 @@ function getVideoDuration(file: File): Promise<number> {
 const ACCEPTED_EXTENSIONS = /\.(mp4|webm|mkv|avi|mov|flv|wmv|m4v|ogg|ogv|3gp|ts|mpeg|mpg)$/i;
 
 function VideoPlayerPage() {
-  const { theme } = useStore();
+  const { theme, storagePath } = useStore();
   const [playlist, setPlaylist] = useState<VideoFile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [isDragging, setIsDragging] = useState(false);
@@ -53,6 +54,32 @@ function VideoPlayerPage() {
   const dragCountRef = useRef(0);
 
   const currentVideo = currentIndex >= 0 && currentIndex < playlist.length ? playlist[currentIndex] : null;
+
+  // 从存储加载播放列表
+  useEffect(() => {
+    if (storagePath) {
+      const playlists = VideoPlaylistStorage.getAllPlaylists(storagePath);
+      if (playlists.length > 0) {
+        const latestPlaylist = playlists[0];
+        setPlaylist(latestPlaylist.videos);
+        setCurrentIndex(0);
+      }
+    }
+  }, [storagePath]);
+
+  // 保存播放列表到存储
+  useEffect(() => {
+    if (storagePath && playlist.length > 0) {
+      const currentPlaylist: VideoPlaylist = {
+        id: 'default-playlist',
+        name: '默认播放列表',
+        videos: playlist,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      };
+      VideoPlaylistStorage.savePlaylist(storagePath, currentPlaylist);
+    }
+  }, [playlist, storagePath]);
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
     const files = Array.from(fileList).filter(f =>

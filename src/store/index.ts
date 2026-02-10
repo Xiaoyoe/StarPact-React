@@ -74,8 +74,8 @@ interface AppState {
   setTheme: (theme: ThemeType) => void;
 
   // Navigation
-  activePage: 'chat' | 'models' | 'settings' | 'logs' | 'compare' | 'ini-config' | 'gallery' | 'video-player';
-  setActivePage: (page: 'chat' | 'models' | 'settings' | 'logs' | 'compare' | 'ini-config' | 'gallery' | 'video-player') => void;
+  activePage: 'chat' | 'models' | 'settings' | 'logs' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates';
+  setActivePage: (page: 'chat' | 'models' | 'settings' | 'logs' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates') => void;
 
   // Sidebar
   sidebarCollapsed: boolean;

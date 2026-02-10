@@ -24,8 +24,8 @@
   --sidebar-width: 280px;
   --header-height: 56px;
   --input-height: 140px;
-  --transition-base: 200ms ease;
-  --transition-slow: 300ms ease;
+  --transition-base: 1000ms ease;
+  --transition-slow: 1200ms ease;
   --scrollbar-thumb: #C9CDD4;
   --scrollbar-track: transparent;
   --code-bg: #1e1e1e;
@@ -55,7 +55,7 @@
   --border-radius-sm: 4px;
   --toolbar-height: 40px;
   --saved-list-height: 36px;
-  --transition-speed: 200ms;
+  --transition-speed: 1000ms;
   --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
   
   --btn-primary-bg: #165DFF;

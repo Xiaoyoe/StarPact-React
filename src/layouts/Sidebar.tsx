@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   MessageSquare, Bot, Settings, ScrollText, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, Lock, Unlock, BookOpen
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -17,11 +17,23 @@ export function Sidebar() {
     logs, setLogsPanelOpen,
     searchQuery, setSearchQuery,
     ollamaModalOpen, setOllamaModalOpen,
+    theme, setTheme,
   } = useStore();
 
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
+  const [bottomPanelsVisible, setBottomPanelsVisible] = useState(true);
 
   const activeModel = models.find(m => m.id === activeModelId);
+  const isLightTheme = theme === 'light';
+  const isDarkTheme = theme === 'dark';
+
+  const handleThemeToggle = () => {
+    if (isLightTheme) {
+      setTheme('dark');
+    } else {
+      setTheme('light');
+    }
+  };
 
   const filteredConversations = conversations.filter(c =>
     c.title.toLowerCase().includes(searchQuery.toLowerCase())
@@ -46,6 +58,7 @@ export function Sidebar() {
     { id: 'models' as const, icon: Bot, label: '模型管理' },
     { id: 'gallery' as const, icon: Images, label: '图片管理' },
     { id: 'video-player' as const, icon: Play, label: '视频播放器' },
+    { id: 'prompt-templates' as const, icon: BookOpen, label: '提示词模板' },
     { id: 'compare' as const, icon: FileText, label: '文本对比' },
     { id: 'ini-config' as const, icon: Settings2, label: 'INI配置' },
     { id: 'logs' as const, icon: ScrollText, label: '日志' },
@@ -239,77 +252,138 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Ollama panel button */}
+      {/* Bottom panels (with animation) */}
       {!sidebarCollapsed && (
-        <button
-          onClick={() => setOllamaModalOpen(true)}
-          className="mx-3 mb-1 flex items-center gap-2 rounded-lg p-2.5 transition-colors"
-          style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)', '&:hover': { backgroundColor: 'var(--bg-secondary)' } }}
-        >
-          <div
-            className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
-            style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
-          >
-            <Cpu size={13} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-              Ollama 管理
-            </div>
-            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              本地 AI 模型
-            </div>
-          </div>
-          <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
-        </button>
+        <AnimatePresence>
+          {bottomPanelsVisible && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+              style={{ overflow: 'hidden' }}
+            >
+              {/* Ollama panel */}
+              <div
+                onClick={() => setOllamaModalOpen(true)}
+                className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
+                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
+              >
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                  style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                >
+                  <Cpu size={13} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                    Ollama 管理
+                  </div>
+                  <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    本地 AI 模型
+                  </div>
+                </div>
+                <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
+              </div>
+
+              {/* Logs panel */}
+              <div
+                onClick={() => setLogsPanelOpen(true)}
+                className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
+                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
+              >
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                  style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                >
+                  <FileText size={13} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                    系统日志
+                  </div>
+                  <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {logs.length} 条记录
+                  </div>
+                </div>
+                <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
+              </div>
+
+              {/* Model indicator at bottom */}
+              <div
+                className="mx-3 mb-1 flex items-center gap-2 rounded-lg p-2.5"
+                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
+              >
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                  style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                >
+                  {activeModel?.name.charAt(0) || 'A'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {activeModel?.name || '未选择模型'}
+                  </div>
+                  <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {activeModel?.provider || '--'}
+                  </div>
+                </div>
+                <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
+              </div>
+
+              {/* Theme toggle */}
+              <div
+                onClick={handleThemeToggle}
+                className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
+                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
+              >
+                <div
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                  style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                >
+                  {isLightTheme ? '☀️' : '🌙'}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                    {isLightTheme ? '浅色主题' : '深色主题'}
+                  </div>
+                  <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {isLightTheme ? '经典明亮风格' : '护眼暗色风格'}
+                  </div>
+                </div>
+                <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       )}
 
-      {/* Logs panel button */}
-      {!sidebarCollapsed && (
-        <button
-          onClick={() => setLogsPanelOpen(true)}
-          className="mx-3 mb-1 flex items-center gap-2 rounded-lg p-2.5 transition-colors"
-          style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)', '&:hover': { backgroundColor: 'var(--bg-secondary)' } }}
-        >
-          <div
-            className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
-            style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
-          >
-            <FileText size={13} />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-              系统日志
-            </div>
-            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              {logs.length} 条记录
-            </div>
-          </div>
-          <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
-        </button>
-      )}
-
-      {/* Model indicator at bottom */}
+      {/* Toggle button for bottom panels */}
       {!sidebarCollapsed && (
         <div
-          className="mx-3 mb-3 flex items-center gap-2 rounded-lg p-2.5"
+          onClick={() => setBottomPanelsVisible(!bottomPanelsVisible)}
+          className="mx-3 mb-3 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
           style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
         >
           <div
             className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
             style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
           >
-            {activeModel?.name.charAt(0) || 'A'}
+            {bottomPanelsVisible ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
           </div>
           <div className="min-w-0 flex-1">
             <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-              {activeModel?.name || '未选择模型'}
+              {bottomPanelsVisible ? '收起面板' : '展开面板'}
             </div>
             <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              {activeModel?.provider || '--'}
+              {bottomPanelsVisible ? '隐藏Ollama、日志和模型信息' : '显示Ollama、日志和模型信息'}
             </div>
           </div>
-          <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
+          {bottomPanelsVisible ? (
+            <Lock size={14} style={{ color: '#10b981' }} />
+          ) : (
+            <Unlock size={14} style={{ color: '#ef4444' }} />
+          )}
         </div>
       )}
     </motion.aside>

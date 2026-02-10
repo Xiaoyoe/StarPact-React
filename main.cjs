@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const isDev = require('electron-is-dev');
 
@@ -9,6 +9,7 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
+      enableRemoteModule: true,
     },
   });
 
@@ -22,6 +23,20 @@ function createWindow() {
     mainWindow.webContents.openDevTools();
   }
 }
+
+// 监听渲染进程的文件选择请求
+ipcMain.handle('showOpenDialog', async (event, options) => {
+  const mainWindow = BrowserWindow.getFocusedWindow();
+  if (!mainWindow) return { canceled: true, filePaths: [] };
+  
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, options);
+    return result;
+  } catch (error) {
+    console.error('打开文件选择对话框失败:', error);
+    return { canceled: true, filePaths: [] };
+  }
+});
 
 app.whenReady().then(createWindow);
 

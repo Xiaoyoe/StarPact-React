@@ -8,6 +8,8 @@ import {
 } from '@/components/GalleryComponents';
 import { ImageItem, ImageFolder, ViewMode, SortBy, SortOrder } from '@/types/gallery';
 import sharp from 'sharp';
+import { useStore } from '@/store';
+import { GalleryStorage, ImageMetadata, ImageAlbum } from '@/services/storage/GalleryStorage';
 
 // 模拟path模块的basename和extname函数
 const path = {
@@ -176,6 +178,8 @@ const mockFolders: ImageFolder[] = [
 ];
 
 export function GalleryPage() {
+  const { storagePath } = useStore();
+  
   // 状态管理
   const [folders, setFolders] = useState<ImageFolder[]>(mockFolders);
   const [activeFolderId, setActiveFolderId] = useState<string>('all');
@@ -191,6 +195,82 @@ export function GalleryPage() {
   const [editingImage, setEditingImage] = useState<ImageItem | null>(null);
   const [importing, setImporting] = useState<boolean>(false);
   const [importProgress, setImportProgress] = useState<number>(0);
+
+  // 从存储加载图片数据
+  useEffect(() => {
+    if (storagePath) {
+      const albums = GalleryStorage.getAllAlbums(storagePath);
+      if (albums.length > 0) {
+        // 将相册转换为文件夹格式
+        const loadedFolders: ImageFolder[] = albums.map(album => ({
+          id: album.id,
+          name: album.name,
+          images: album.images.map(img => ({
+            id: img.id,
+            name: img.name,
+            url: img.url,
+            width: img.width,
+            height: img.height,
+            size: img.size,
+            type: img.type,
+            tags: img.tags || [],
+            favorite: false, // 可以根据需要从元数据中获取
+            isLongImage: img.height > img.width * 1.5,
+            aspectRatio: img.width / img.height,
+            dateAdded: new Date(img.addedAt)
+          }))
+        }));
+        
+        // 添加默认文件夹
+        const allImages = loadedFolders.flatMap(folder => folder.images);
+        const defaultFolders: ImageFolder[] = [
+          {
+            id: 'all',
+            name: '全部图片',
+            images: allImages
+          },
+          {
+            id: 'favorites',
+            name: '收藏',
+            images: allImages.filter(img => img.favorite)
+          }
+        ];
+        
+        setFolders([...defaultFolders, ...loadedFolders]);
+      }
+    }
+  }, [storagePath]);
+
+  // 保存图片数据到存储
+  useEffect(() => {
+    if (storagePath) {
+      // 将文件夹转换为相册格式
+      const foldersToSave = folders.filter(folder => !['all', 'favorites'].includes(folder.id));
+      
+      foldersToSave.forEach(folder => {
+        const album: ImageAlbum = {
+          id: folder.id,
+          name: folder.name,
+          images: folder.images.map(img => ({
+            id: img.id,
+            name: img.name,
+            size: img.size,
+            type: img.type,
+            url: img.url,
+            width: img.width,
+            height: img.height,
+            addedAt: img.dateAdded.getTime(),
+            filePath: img.url.replace('file://', ''),
+            tags: img.tags
+          })),
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+        
+        GalleryStorage.saveAlbum(storagePath, album);
+      });
+    }
+  }, [folders, storagePath]);
 
   // 当前文件夹
   const activeFolder = useMemo(() => {

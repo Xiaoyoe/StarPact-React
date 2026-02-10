@@ -9,6 +9,7 @@ import { ComparePage } from '@/pages/Compare';
 import { IniConfigPage } from '@/pages/IniConfig';
 import { GalleryPage } from '@/pages/Gallery';
 import VideoPlayerPage from '@/pages/VideoPlayer';
+import PromptTemplatesPage from '@/pages/PromptTemplates';
 import { LogsPanel } from '@/components/LogsPanel';
 import { OllamaModal } from '@/components/OllamaModal';
 import { ToastProvider } from '@/components/Toast';
@@ -35,6 +36,7 @@ function PageContent() {
         {activePage === 'ini-config' && <IniConfigPage />}
         {activePage === 'gallery' && <GalleryPage />}
         {activePage === 'video-player' && <VideoPlayerPage />}
+        {activePage === 'prompt-templates' && <PromptTemplatesPage />}
       </motion.div>
     </AnimatePresence>
   );

@@ -32,6 +32,18 @@ body {
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.5;
   font-size: 14px;
+  transition: all var(--transition-base);
+}
+
+/* Global transition for theme changes */
+* {
+  transition: 
+    background-color var(--transition-base),
+    color var(--transition-base),
+    border-color var(--transition-base),
+    box-shadow var(--transition-base),
+    fill var(--transition-base),
+    stroke var(--transition-base);
 }
 
 ::-webkit-scrollbar {
