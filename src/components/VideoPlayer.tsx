@@ -283,10 +283,15 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
     <div
       ref={containerRef}
       className={cn(
-        'relative w-full bg-black overflow-hidden group/player',
-        isFullscreen ? 'rounded-none' : 'rounded-2xl ring-1 ring-white/[0.06] shadow-2xl shadow-black/70'
+        'relative w-full overflow-hidden group/player',
+        isFullscreen ? 'rounded-none' : 'rounded-2xl ring-1 shadow-2xl'
       )}
-      style={{ aspectRatio: isFullscreen ? undefined : '16/9' }}
+      style={{
+        backgroundColor: 'var(--bg-primary)',
+        boxShadow: isFullscreen ? 'none' : `0 25px 50px -12px ${getComputedStyle(document.documentElement).getPropertyValue('--bg-primary')}/70`,
+        borderColor: 'var(--border-color)',
+        aspectRatio: isFullscreen ? undefined : '16/9'
+      }}
       onMouseMove={resetHideTimer}
       onMouseLeave={() => { if (isPlaying) setShowControls(false); setHoverTime(null); }}
     >
@@ -333,15 +338,15 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
       {/* Loading spinner */}
       {isLoading && isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-          <div className="w-12 h-12 border-3 border-white/20 border-t-violet-400 rounded-full animate-spin" />
+          <div className="w-12 h-12 border-3 rounded-full animate-spin" style={{ borderColor: 'var(--text-secondary)/20', borderTopColor: 'var(--primary-color)' }} />
         </div>
       )}
 
       {/* Big play button overlay */}
       {!isPlaying && !isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30 cursor-pointer z-10" onClick={togglePlay}>
-          <div className="w-20 h-20 rounded-full bg-white/[0.12] backdrop-blur-xl flex items-center justify-center border border-white/20 shadow-2xl transition-transform duration-300 hover:scale-110 active:scale-95 group/play">
-            <svg className="w-9 h-9 text-white ml-1 drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24">
+        <div className="absolute inset-0 flex items-center justify-center cursor-pointer z-10" style={{ backgroundColor: 'var(--bg-primary)/30' }} onClick={togglePlay}>
+          <div className="w-20 h-20 rounded-full backdrop-blur-xl flex items-center justify-center border shadow-2xl transition-transform duration-300 hover:scale-110 active:scale-95 group/play" style={{ backgroundColor: 'var(--bg-secondary)/12', borderColor: 'var(--text-secondary)/20' }}>
+            <svg className="w-9 h-9 ml-1 drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--text-primary)' }}>
               <path d="M8 5v14l11-7z" />
             </svg>
           </div>
@@ -353,7 +358,7 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
         'absolute bottom-0 left-0 right-0 h-[3px] z-10 transition-opacity duration-300',
         showControls ? 'opacity-0' : 'opacity-100'
       )}>
-        <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-500" style={{ width: `${progress}%` }} />
+        <div className="h-full" style={{ backgroundColor: 'var(--primary-color)', width: `${progress}%` }} />
       </div>
 
       {/* Controls overlay */}
@@ -362,30 +367,36 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
         showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
       )}>
         {/* Gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/60 to-transparent pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t pointer-events-none" style={{ backgroundImage: `linear-gradient(to top, var(--bg-primary)/95, var(--bg-primary)/60, transparent)` }} />
 
         <div className="relative px-4 pb-3.5 pt-16">
           {/* Progress bar */}
           <div
             ref={progressRef}
-            className="group/prog relative h-[5px] w-full cursor-pointer rounded-full bg-white/[0.12] mb-3.5 hover:h-[7px] transition-all duration-200"
+            className="group/prog relative h-[5px] w-full cursor-pointer rounded-full mb-3.5 hover:h-[7px] transition-all duration-200"
+            style={{ backgroundColor: 'var(--text-secondary)/12' }}
             onClick={handleProgressClick}
             onMouseDown={() => setIsDraggingProgress(true)}
             onMouseMove={handleProgressHover}
             onMouseLeave={() => setHoverTime(null)}
           >
             {/* Buffered */}
-            <div className="absolute h-full rounded-full bg-white/[0.08]" style={{ width: `${bufferedPercent}%` }} />
+            <div className="absolute h-full rounded-full" style={{ backgroundColor: 'var(--text-secondary)/08', width: `${bufferedPercent}%` }} />
             {/* Progress */}
-            <div className="relative h-full rounded-full bg-gradient-to-r from-violet-500 to-indigo-400 shadow-[0_0_8px_rgba(139,92,246,0.4)]" style={{ width: `${progress}%` }}>
+            <div className="relative h-full rounded-full" style={{ backgroundColor: 'var(--primary-color)', boxShadow: `0 0 8px var(--primary-color)/40`, width: `${progress}%` }}>
               {/* Thumb */}
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full bg-white shadow-lg shadow-violet-500/40 opacity-0 group-hover/prog:opacity-100 scale-75 group-hover/prog:scale-100 transition-all duration-200 ring-2 ring-violet-400/50" />
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full shadow-lg opacity-0 group-hover/prog:opacity-100 scale-75 group-hover/prog:scale-100 transition-all duration-200 ring-2" style={{ backgroundColor: 'var(--text-primary)', boxShadow: `0 0 8px var(--primary-color)/40`, ringColor: 'var(--primary-color)/50' }} />
             </div>
             {/* Hover time tooltip */}
             {hoverTime !== null && (
               <div
-                className="absolute -top-10 -translate-x-1/2 px-2.5 py-1 rounded-lg bg-black/90 border border-white/10 text-[11px] text-white tabular-nums pointer-events-none shadow-lg backdrop-blur-sm"
-                style={{ left: Math.max(20, Math.min(hoverX, (progressRef.current?.clientWidth ?? 0) - 20)) }}
+                className="absolute -top-10 -translate-x-1/2 px-2.5 py-1 rounded-lg border text-[11px] tabular-nums pointer-events-none shadow-lg backdrop-blur-sm"
+                style={{ 
+                  left: Math.max(20, Math.min(hoverX, (progressRef.current?.clientWidth ?? 0) - 20)),
+                  backgroundColor: 'var(--bg-secondary)/90',
+                  borderColor: 'var(--text-secondary)/10',
+                  color: 'var(--text-primary)'
+                }}
               >
                 {formatTime(hoverTime)}
               </div>
@@ -398,23 +409,29 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               {/* Play/Pause */}
               <button
                 onClick={togglePlay}
-                className="p-2 rounded-full hover:bg-white/[0.1] transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 title={isPlaying ? '暂停 (K)' : '播放 (K)'}
               >
                 {isPlaying ? (
-                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
                 ) : (
-                  <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
                 )}
               </button>
 
               {/* Skip back */}
               <button
                 onClick={() => skip(-10)}
-                className="p-2 rounded-full hover:bg-white/[0.1] transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 title="后退10秒 (J)"
               >
-                <svg className="w-[18px] h-[18px] text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
                 </svg>
               </button>
@@ -422,10 +439,13 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               {/* Skip forward */}
               <button
                 onClick={() => skip(10)}
-                className="p-2 rounded-full hover:bg-white/[0.1] transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 title="前进10秒 (L)"
               >
-                <svg className="w-[18px] h-[18px] text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
                 </svg>
               </button>
@@ -434,31 +454,35 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               <div className="flex items-center gap-1 ml-1 group/vol">
                 <button
                   onClick={toggleMute}
-                  className="p-2 rounded-full hover:bg-white/[0.1] transition-colors"
+                  className="p-2 rounded-full transition-colors"
+                  style={{ color: 'var(--text-primary)' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                   title={isMuted ? '取消静音 (M)' : '静音 (M)'}
                 >
                   {isMuted || volume === 0 ? (
-                    <svg className="w-[18px] h-[18px] text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" /></svg>
+                    <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" /></svg>
                   ) : volume < 0.5 ? (
-                    <svg className="w-[18px] h-[18px] text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" /></svg>
+                    <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d="M18.5 12c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM5 9v6h4l5 5V4L9 9H5z" /></svg>
                   ) : (
-                    <svg className="w-[18px] h-[18px] text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
+                    <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d="M3 9v6h4l5 5V4L9 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" /></svg>
                   )}
                 </button>
                 <div
                   ref={volumeRef}
-                  className="w-0 overflow-hidden group-hover/vol:w-20 transition-all duration-300 h-[5px] rounded-full bg-white/[0.12] cursor-pointer"
+                  className="w-0 overflow-hidden group-hover/vol:w-20 transition-all duration-300 h-[5px] rounded-full cursor-pointer"
+                  style={{ backgroundColor: 'var(--text-secondary)/12' }}
                   onClick={handleVolumeClick}
                 >
-                  <div className="h-full rounded-full bg-white relative transition-all" style={{ width: `${volumePercent}%` }}>
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-white shadow-md" />
+                  <div className="h-full rounded-full relative transition-all" style={{ backgroundColor: 'var(--text-primary)', width: `${volumePercent}%` }}>
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full shadow-md" style={{ backgroundColor: 'var(--text-primary)' }} />
                   </div>
                 </div>
               </div>
 
               {/* Time */}
-              <span className="text-[12px] text-white/40 ml-2 tabular-nums whitespace-nowrap font-mono">
-                <span className="text-white/70">{formatTime(currentTime)}</span>
+              <span className="text-[12px] ml-2 tabular-nums whitespace-nowrap font-mono" style={{ color: 'var(--text-secondary)/40' }}>
+                <span style={{ color: 'var(--text-secondary)/70' }}>{formatTime(currentTime)}</span>
                 <span className="mx-1">/</span>
                 {formatTime(duration)}
               </span>
@@ -469,10 +493,13 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               {/* Screenshot */}
               <button
                 onClick={takeScreenshot}
-                className="p-2 rounded-full hover:bg-white/[0.1] transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 title="截图 (Ctrl+S)"
               >
-                <svg className="w-[18px] h-[18px] text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
                 </svg>

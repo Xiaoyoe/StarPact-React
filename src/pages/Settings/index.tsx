@@ -12,6 +12,7 @@ export function SettingsPage() {
     fontSize, setFontSize,
     layoutMode, setLayoutMode,
     sendOnEnter, setSendOnEnter,
+    storagePath, setStoragePath,
   } = useStore();
 
   const [activeTab, setActiveTab] = useState<'appearance' | 'general' | 'about'>('appearance');
@@ -51,31 +52,7 @@ export function SettingsPage() {
   ];
 
   return (
-    <div className="flex h-full" style={{ backgroundColor: 'var(--bg-primary)' }}>
-      {/* Left Tabs */}
-      <div className="w-56 border-r p-4" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
-        <h1 className="mb-4 px-3 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-          设置
-        </h1>
-        <nav className="space-y-1">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm transition-colors"
-              style={{
-                backgroundColor: activeTab === tab.id ? 'var(--primary-light)' : 'transparent',
-                color: activeTab === tab.id ? 'var(--primary-color)' : 'var(--text-secondary)',
-                fontWeight: activeTab === tab.id ? 600 : 400,
-              }}
-            >
-              <tab.icon size={16} />
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </div>
-
+    <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--bg-primary)' }}>
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-8">
         <div className="mx-auto max-w-2xl">
@@ -274,6 +251,35 @@ export function SettingsPage() {
                 </div>
               </div>
 
+              {/* Storage Path */}
+              <div
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+              >
+                <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                  路径自定义存储
+                </h3>
+                <p className="mb-3 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  自定义数据存储路径，用于保存对话记录、模型配置等数据
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={storagePath}
+                    onChange={(e) => setStoragePath(e.target.value)}
+                    placeholder="请输入存储路径"
+                    className="flex-1 rounded-lg px-3 py-2 text-sm"
+                    style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                  />
+                  <button
+                    className="rounded-lg px-4 py-2 text-sm transition-colors whitespace-nowrap"
+                    style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+                  >
+                    选择路径
+                  </button>
+                </div>
+              </div>
+
               {/* Security */}
               <div
                 className="rounded-xl p-4"
@@ -317,18 +323,20 @@ export function SettingsPage() {
               >
                 <h3 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>技术栈</h3>
                 <div className="grid grid-cols-2 gap-2">
-                  {[
-                    'React 18 + TypeScript',
-                    'Tailwind CSS 4.x',
-                    'Zustand 状态管理',
-                    'Framer Motion 动效',
-                    'React Markdown',
-                    'Lucide Icons',
-                  ].map((tech) => (
-                    <div key={tech} className="rounded-lg p-2 text-sm" style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-primary)' }}>
-                      {tech}
-                    </div>
-                  ))}
+                  {
+                    [
+                      'React 18 + TypeScript',
+                      'Tailwind CSS 4.x',
+                      'Zustand 状态管理',
+                      'Framer Motion 动效',
+                      'React Markdown',
+                      'Lucide Icons',
+                    ].map((tech) => (
+                      <div key={tech} className="rounded-lg p-2 text-sm" style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--bg-primary)' }}>
+                        {tech}
+                      </div>
+                    ))
+                  }
                 </div>
               </div>
 
@@ -349,6 +357,27 @@ export function SettingsPage() {
             </motion.div>
           )}
         </div>
+      </div>
+
+      {/* Bottom Tabs */}
+      <div className="border-t p-2" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
+        <nav className="flex justify-center gap-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className="flex items-center gap-2.5 rounded-lg px-6 py-2 text-sm transition-colors whitespace-nowrap"
+              style={{
+                backgroundColor: activeTab === tab.id ? 'var(--primary-light)' : 'transparent',
+                color: activeTab === tab.id ? 'var(--primary-color)' : 'var(--text-secondary)',
+                fontWeight: activeTab === tab.id ? 600 : 400,
+              }}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
+        </nav>
       </div>
     </div>
   );

@@ -114,6 +114,8 @@ interface AppState {
   setLayoutMode: (mode: 'compact' | 'comfortable' | 'wide') => void;
   sendOnEnter: boolean;
   setSendOnEnter: (val: boolean) => void;
+  storagePath: string;
+  setStoragePath: (path: string) => void;
 
   // Search
   searchQuery: string;
@@ -502,6 +504,8 @@ export const useStore = create<AppState>((set) => ({
   setLayoutMode: (mode) => set({ layoutMode: mode }),
   sendOnEnter: true,
   setSendOnEnter: (val) => set({ sendOnEnter: val }),
+  storagePath: '',
+  setStoragePath: (path) => set({ storagePath: path }),
 
   // Search
   searchQuery: '',
