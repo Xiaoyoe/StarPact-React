@@ -1,7 +1,7 @@
 import { StorageManager } from './StorageManager';
 
-// 检查是否为浏览器环境
-const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
+// 检查是否为浏览器环境（非 Electron）
+const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined' && !(typeof process !== 'undefined' && process.versions && process.versions.electron);
 
 // 浏览器兼容的 path 模块实现
 const path = isBrowser ? {
@@ -66,20 +66,31 @@ export class GalleryStorage {
    */
   static saveAlbum(storagePath: string, album: ImageAlbum): boolean {
     try {
+      console.log('开始保存相册，存储路径:', storagePath);
+      
       const galleryPath = StorageManager.getGalleryPath(storagePath);
+      console.log('相册存储路径:', galleryPath);
+      
       const albumPath = path.join(galleryPath, `${album.id}.json`);
+      console.log('相册文件路径:', albumPath);
 
       // 确保目录存在
       if (!fs.existsSync(galleryPath)) {
+        console.log('目录不存在，开始创建:', galleryPath);
         fs.mkdirSync(galleryPath, { recursive: true });
+        console.log('目录创建成功');
+      } else {
+        console.log('目录已存在:', galleryPath);
       }
 
       // 保存相册数据
+      console.log('准备写入相册数据，图片数量:', album.images.length);
       fs.writeFileSync(
         albumPath,
         JSON.stringify(album, null, 2),
         'utf8'
       );
+      console.log('相册数据保存成功');
 
       return true;
     } catch (error) {
@@ -120,25 +131,41 @@ export class GalleryStorage {
    */
   static getAllAlbums(storagePath: string): ImageAlbum[] {
     try {
+      console.log('开始获取所有相册，存储路径:', storagePath);
+      
       const galleryPath = StorageManager.getGalleryPath(storagePath);
+      console.log('相册存储路径:', galleryPath);
 
       if (!fs.existsSync(galleryPath)) {
+        console.log('相册存储路径不存在');
         return [];
       }
 
+      console.log('相册存储路径存在');
       const files = fs.readdirSync(galleryPath);
+      console.log('目录中的文件数量:', files.length);
+      console.log('目录中的文件:', files);
+      
       const albums: ImageAlbum[] = [];
 
       for (const file of files) {
         if (path.extname(file) === '.json') {
+          console.log('找到相册文件:', file);
           const albumId = path.basename(file, '.json');
+          console.log('相册ID:', albumId);
           const album = this.loadAlbum(storagePath, albumId);
           if (album) {
+            console.log('加载相册成功:', album.name, '图片数量:', album.images.length);
             albums.push(album);
+          } else {
+            console.log('加载相册失败:', albumId);
           }
+        } else {
+          console.log('跳过非相册文件:', file);
         }
       }
 
+      console.log('最终加载的相册数量:', albums.length);
       return albums;
     } catch (error) {
       console.error('获取所有图片相册失败:', error);
@@ -174,29 +201,139 @@ export class GalleryStorage {
    * @param imageFile 图片文件
    * @returns 保存的图片元数据或null
    */
-  static saveImageFile(storagePath: string, imageFile: File): ImageMetadata | null {
+  static async saveImageFile(storagePath: string, imageFile: File): Promise<ImageMetadata | null> {
     try {
+      console.log('开始保存图片文件，存储路径:', storagePath);
+      console.log('图片文件名:', imageFile.name);
+      console.log('图片文件大小:', imageFile.size);
+      console.log('图片文件类型:', imageFile.type);
+      console.log('是否为浏览器环境:', isBrowser);
+      
+      // 浏览器环境：使用Data URL
+      if (isBrowser) {
+        console.log('浏览器环境，使用Data URL');
+        return new Promise<ImageMetadata>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            console.log('Data URL 生成成功');
+            const metadata: ImageMetadata = {
+              id: `image_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              name: imageFile.name,
+              size: imageFile.size,
+              type: imageFile.type,
+              url: e.target?.result as string || '',
+              width: 0,
+              height: 0,
+              addedAt: Date.now(),
+              filePath: ''
+            };
+            resolve(metadata);
+          };
+          reader.onerror = (error) => {
+            console.error('FileReader 错误:', error);
+            resolve(null);
+          };
+          reader.readAsDataURL(imageFile);
+        });
+      }
+
+      // Node.js 环境：保存到本地文件系统
+      console.log('Node.js 环境，保存到本地文件系统');
       const galleryPath = StorageManager.getGalleryPath(storagePath);
+      console.log('相册路径:', galleryPath);
+      
       const imagesPath = path.join(galleryPath, 'images');
+      console.log('图片存储路径:', imagesPath);
+      
       const thumbnailsPath = path.join(galleryPath, 'thumbnails');
+      console.log('缩略图存储路径:', thumbnailsPath);
 
       // 确保目录存在
       if (!fs.existsSync(imagesPath)) {
+        console.log('图片存储路径不存在，开始创建:', imagesPath);
         fs.mkdirSync(imagesPath, { recursive: true });
+        console.log('图片存储路径创建成功');
+      } else {
+        console.log('图片存储路径已存在:', imagesPath);
       }
 
       if (!fs.existsSync(thumbnailsPath)) {
+        console.log('缩略图存储路径不存在，开始创建:', thumbnailsPath);
         fs.mkdirSync(thumbnailsPath, { recursive: true });
+        console.log('缩略图存储路径创建成功');
+      } else {
+        console.log('缩略图存储路径已存在:', thumbnailsPath);
       }
 
       // 生成本地文件路径
       const safeFileName = this.getSafeFileName(imageFile.name);
+      console.log('安全文件名:', safeFileName);
+      
       const localFilePath = path.join(imagesPath, safeFileName);
+      console.log('本地文件路径:', localFilePath);
 
       // 保存图片文件
-      fs.writeFileSync(localFilePath, fs.readFileSync(imageFile.path || (imageFile as any).path));
+      try {
+        // 尝试读取文件内容
+        let fileContent;
+        if (imageFile.path) {
+          // Electron 环境，文件有路径
+          console.log('Electron 环境，文件路径:', imageFile.path);
+          fileContent = fs.readFileSync(imageFile.path);
+          console.log('文件读取成功，大小:', fileContent.length);
+        } else {
+          // 浏览器环境或其他环境，使用 FileReader
+          console.log('非 Electron 环境，使用 FileReader');
+          fileContent = await new Promise<Buffer>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+              const arrayBuffer = e.target?.result as ArrayBuffer;
+              console.log('FileReader 读取成功，大小:', arrayBuffer.byteLength);
+              resolve(Buffer.from(arrayBuffer));
+            };
+            reader.onerror = (error) => {
+              console.error('FileReader 错误:', error);
+              reject(error);
+            };
+            reader.readAsArrayBuffer(imageFile);
+          });
+        }
+        
+        // 写入文件
+        console.log('准备写入文件:', localFilePath);
+        fs.writeFileSync(localFilePath, fileContent);
+        console.log('文件写入成功');
+      } catch (readError) {
+        console.error('读取图片文件失败:', readError);
+        // 回退到使用Data URL
+        console.log('回退到使用Data URL');
+        return new Promise<ImageMetadata>((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            console.log('回退 Data URL 生成成功');
+            const metadata: ImageMetadata = {
+              id: `image_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+              name: imageFile.name,
+              size: imageFile.size,
+              type: imageFile.type,
+              url: e.target?.result as string || '',
+              width: 0,
+              height: 0,
+              addedAt: Date.now(),
+              filePath: ''
+            };
+            resolve(metadata);
+          };
+          reader.onerror = (error) => {
+            console.error('回退 FileReader 错误:', error);
+            resolve(null);
+          };
+          reader.readAsDataURL(imageFile);
+        });
+      }
 
       // 创建图片元数据
+      console.log('创建图片元数据');
       const metadata: ImageMetadata = {
         id: `image_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: imageFile.name,
@@ -209,6 +346,7 @@ export class GalleryStorage {
         filePath: localFilePath
       };
 
+      console.log('图片元数据创建成功');
       return metadata;
     } catch (error) {
       console.error('保存图片文件失败:', error);

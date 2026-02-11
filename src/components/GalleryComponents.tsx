@@ -392,12 +392,23 @@ export function ImageGrid({
 
   if (images.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-            <Eye size={32} style={{ color: 'var(--text-tertiary)' }} />
+      <div className="flex-1 flex flex-col items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-6">
+          {/* 主标题 */}
+          <h3 className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>相册为空</h3>
+          
+          {/* 副标题 */}
+          <p className="text-sm max-w-xs" style={{ color: 'var(--text-tertiary)' }}>请使用上方的导入按钮添加图片到您的相册</p>
+          
+          {/* 操作提示 */}
+          <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" y1="16" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            <span>支持 JPG、PNG、GIF、WebP 等常见图片格式</span>
           </div>
-          <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>该相册暂无图片</p>
         </div>
       </div>
     );
@@ -442,7 +453,24 @@ export function ImageGrid({
                 {isSelected && <Check size={12} className="text-white" />}
               </div>
               <div className="flex items-center gap-3 min-w-0">
-                <img src={image.url} alt={image.name} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                <div className="relative w-10 h-10 rounded-lg overflow-hidden flex-shrink-0">
+                  {/* 图片加载占位符 */}
+                  {!image.isLoaded && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
+                      <Eye size={12} className="text-slate-600" />
+                    </div>
+                  )}
+                  {/* 图片元素 */}
+                  <img 
+                    src={image.isLoaded ? image.url : ''} 
+                    alt={image.name} 
+                    className={cn(
+                      "w-full h-full object-cover",
+                      !image.isLoaded && "opacity-0"
+                    )}
+                    data-image-id={image.id}
+                  />
+                </div>
                 <div className="min-w-0">
                   <p className="text-sm text-slate-200 truncate">{image.name}</p>
                   <div className="flex items-center gap-1.5 mt-0.5">
@@ -530,16 +558,28 @@ export function ImageGrid({
               onMouseLeave={() => setHoveredId(null)}
               onContextMenu={(e) => handleContextMenu(e, image.id)}
             >
-            <img
-              src={image.url}
-              alt={image.name}
-              className={cn(
-                "w-full object-cover transition-transform duration-300",
-                viewMode === 'waterfall' ? 'h-auto' : 'h-full',
-                isHovered && "scale-105"
+            <div className="relative w-full h-full">
+              {/* 图片加载占位符 */}
+              {!image.isLoaded && (
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-slate-800 to-slate-900">
+                  <Eye size={24} className="text-slate-600" />
+                </div>
               )}
-              loading="lazy"
-            />
+              
+              {/* 图片元素 */}
+              <img
+                src={image.isLoaded ? image.url : ''}
+                alt={image.name}
+                className={cn(
+                  "w-full object-cover transition-transform duration-300",
+                  viewMode === 'waterfall' ? 'h-auto' : 'h-full',
+                  isHovered && "scale-105",
+                  !image.isLoaded && "opacity-0"
+                )}
+                loading="lazy"
+                data-image-id={image.id}
+              />
+            </div>
 
             <div className={cn(
               "absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent transition-opacity duration-200",

@@ -1,5 +1,5 @@
-// 检查是否为浏览器环境
-const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
+// 检查是否为浏览器环境（非 Electron）
+const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined' && !(typeof process !== 'undefined' && process.versions && process.versions.electron);
 
 // 浏览器兼容的 path 模块实现
 const path = isBrowser ? {

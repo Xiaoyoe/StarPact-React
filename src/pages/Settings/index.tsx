@@ -99,59 +99,15 @@ export function SettingsPage() {
       const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
       
       if (isElectron && storagePath) {
-        // 计算完整路径
-        let targetPath;
-        try {
-          // 直接使用storagePath，不添加starpact-local
-          targetPath = storagePath;
-          // 在Windows系统中，确保使用正确的反斜杠分隔符
-          if (process.platform === 'win32') {
-            const path = require('path');
-            targetPath = path.normalize(targetPath);
-          }
-        } catch (e) {
-          console.error('计算完整路径失败:', e);
-          targetPath = storagePath;
-        }
+        // 使用 StorageManager 创建完整的目录结构
+        const success = StorageManager.createDirectoryStructure(storagePath);
         
-        // 确保路径存在
-        try {
-          const fs = require('fs');
-          const path = require('path');
-          
-          // 创建主目录
-          if (!fs.existsSync(targetPath)) {
-            fs.mkdirSync(targetPath, { recursive: true });
-            console.log('创建了主目录:', targetPath);
-          }
-          
-          // 创建子目录
-          const subDirectories = ['video-playlists', 'gallery', 'config'];
-          let allCreated = true;
-          
-          for (const subDir of subDirectories) {
-            const subDirPath = path.join(targetPath, subDir);
-            try {
-              if (!fs.existsSync(subDirPath)) {
-                fs.mkdirSync(subDirPath, { recursive: true });
-                console.log('创建了子目录:', subDirPath);
-              } else {
-                console.log('子目录已存在:', subDirPath);
-              }
-            } catch (subError) {
-              console.error('创建子目录失败:', subDir, '错误:', subError);
-              allCreated = false;
-            }
-          }
-          
-          if (allCreated) {
-            toast.success('成功创建存储目录结构:\n' + targetPath + '\n\n包含子目录:\n- video-playlists\n- gallery\n- config');
-          } else {
-            toast.warning('存储目录结构创建成功，但部分子目录可能已存在或创建失败:\n' + targetPath);
-          }
-        } catch (e) {
-          console.error('创建目录失败:', e);
-          toast.error('创建目录失败: ' + (e as Error).message);
+        if (success) {
+          // 构建完整的存储路径，包含 starpact-local
+          const fullStoragePath = StorageManager.getFullStoragePath(storagePath);
+          toast.success('成功创建存储目录结构:\n' + fullStoragePath + '\n\n包含子目录:\n- video-playlists\n- gallery\n- config');
+        } else {
+          toast.error('创建存储目录结构失败，请检查权限和路径是否正确');
         }
       } else if (!isElectron) {
         // 浏览器环境：显示提示信息

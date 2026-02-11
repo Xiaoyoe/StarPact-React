@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ImageGrid,
   ImageViewer,
@@ -10,6 +10,13 @@ import { ImageItem, ImageFolder, ViewMode, SortBy, SortOrder } from '@/types/gal
 import sharp from 'sharp';
 import { useStore } from '@/store';
 import { GalleryStorage, ImageMetadata, ImageAlbum } from '@/services/storage/GalleryStorage';
+import { useToast } from '@/components/Toast';
+
+// 检查是否为Electron环境
+const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+
+// 导入fs模块（仅在Electron环境）
+const fs = isElectron ? require('fs') : null;
 
 // 模拟path模块的basename和extname函数
 const path = {
@@ -55,133 +62,133 @@ const dialog = {
   }
 };
 
-// 模拟图片数据
-const mockImages: ImageItem[] = [
-  {
-    id: '1',
-    name: '风景照片1.jpg',
-    url: 'https://picsum.photos/id/10/800/600',
-    width: 800,
-    height: 600,
-    size: 1024 * 1024 * 2, // 2MB
-    type: 'jpg',
-    tags: ['风景', '自然'],
-    favorite: true,
-    isLongImage: false,
-    aspectRatio: 4/3,
-    dateAdded: new Date('2024-01-01')
-  },
-  {
-    id: '2',
-    name: '城市建筑.jpg',
-    url: 'https://picsum.photos/id/20/800/600',
-    width: 800,
-    height: 600,
-    size: 1024 * 1024 * 1.5, // 1.5MB
-    type: 'jpg',
-    tags: ['城市', '建筑'],
-    favorite: false,
-    isLongImage: false,
-    aspectRatio: 4/3,
-    dateAdded: new Date('2024-01-02')
-  },
-  {
-    id: '3',
-    name: '长图测试.png',
-    url: 'https://picsum.photos/id/30/600/1200',
-    width: 600,
-    height: 1200,
-    size: 1024 * 1024 * 3, // 3MB
-    type: 'png',
-    tags: ['长图', '测试'],
-    favorite: false,
-    isLongImage: true,
-    aspectRatio: 1/2,
-    dateAdded: new Date('2024-01-03')
-  },
-  {
-    id: '4',
-    name: '海滩日落.jpg',
-    url: 'https://picsum.photos/id/40/800/600',
-    width: 800,
-    height: 600,
-    size: 1024 * 1024 * 2.5, // 2.5MB
-    type: 'jpg',
-    tags: ['海滩', '日落'],
-    favorite: true,
-    isLongImage: false,
-    aspectRatio: 4/3,
-    dateAdded: new Date('2024-01-04')
-  },
-  {
-    id: '5',
-    name: '山脉风景.jpg',
-    url: 'https://picsum.photos/id/50/800/600',
-    width: 800,
-    height: 600,
-    size: 1024 * 1024 * 2, // 2MB
-    type: 'jpg',
-    tags: ['山脉', '自然'],
-    favorite: false,
-    isLongImage: false,
-    aspectRatio: 4/3,
-    dateAdded: new Date('2024-01-05')
-  },
-  {
-    id: '6',
-    name: '城市夜景.jpg',
-    url: 'https://picsum.photos/id/60/800/600',
-    width: 800,
-    height: 600,
-    size: 1024 * 1024 * 3, // 3MB
-    type: 'jpg',
-    tags: ['城市', '夜景'],
-    favorite: true,
-    isLongImage: false,
-    aspectRatio: 4/3,
-    dateAdded: new Date('2024-01-06')
+// 从本地文件路径读取图片并转换为Data URL
+const loadImageFromPath = async (filePath: string): Promise<string> => {
+  if (!isElectron || !fs || !fs.existsSync(filePath)) {
+    return '';
   }
-];
+  
+  try {
+    const fileContent = fs.readFileSync(filePath);
+    const base64 = fileContent.toString('base64');
+    const mimeType = getMimeTypeFromPath(filePath);
+    return `data:${mimeType};base64,${base64}`;
+  } catch (error) {
+    console.error('读取本地图片失败:', error);
+    return '';
+  }
+};
 
-// 模拟文件夹数据
-const mockFolders: ImageFolder[] = [
+// 根据文件路径获取MIME类型
+const getMimeTypeFromPath = (filePath: string): string => {
+  const ext = filePath.split('.').pop()?.toLowerCase();
+  switch (ext) {
+    case 'jpg':
+    case 'jpeg':
+      return 'image/jpeg';
+    case 'png':
+      return 'image/png';
+    case 'gif':
+      return 'image/gif';
+    case 'webp':
+      return 'image/webp';
+    case 'bmp':
+      return 'image/bmp';
+    default:
+      return 'image/jpeg';
+  }
+};
+
+// 图片项接口，添加isLoaded状态
+interface LazyImageItem extends ImageItem {
+  isLoaded: boolean;
+  originalUrl: string; // 原始URL（可能为空）
+}
+
+// 懒加载图片钩子
+const useLazyLoadImages = (images: ImageItem[]): { lazyImages: LazyImageItem[]; setLazyImages: React.Dispatch<React.SetStateAction<LazyImageItem[]>> } => {
+  const [lazyImages, setLazyImages] = useState<LazyImageItem[]>(
+    images.map(img => ({
+      ...img,
+      isLoaded: !!img.url, // 如果已有URL则标记为已加载
+      originalUrl: img.url
+    }))
+  );
+  
+  // 监听图片元素进入视口
+  useEffect(() => {
+    const imageElements = document.querySelectorAll('[data-image-id]');
+    
+    const observer = new IntersectionObserver(
+      async (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const imageId = entry.target.getAttribute('data-image-id');
+            if (imageId) {
+              const imageIndex = lazyImages.findIndex(img => img.id === imageId);
+              if (imageIndex !== -1 && !lazyImages[imageIndex].isLoaded && lazyImages[imageIndex].path) {
+                console.log('图片进入视口，开始加载:', lazyImages[imageIndex].path);
+                
+                // 从本地路径加载图片
+                const imageUrl = await loadImageFromPath(lazyImages[imageIndex].path);
+                
+                // 更新图片状态
+                setLazyImages(prev => {
+                  const newImages = [...prev];
+                  newImages[imageIndex] = {
+                    ...newImages[imageIndex],
+                    isLoaded: true,
+                    url: imageUrl
+                  };
+                  return newImages;
+                });
+              }
+            }
+          }
+        }
+      },
+      {
+        root: null,
+        rootMargin: '200px 0px', // 提前200px开始加载
+        threshold: 0.1
+      }
+    );
+    
+    // 观察所有图片元素
+    imageElements.forEach(element => observer.observe(element));
+    
+    // 清理
+    return () => {
+      imageElements.forEach(element => observer.unobserve(element));
+      observer.disconnect();
+    };
+  }, [lazyImages]);
+  
+  return { lazyImages, setLazyImages };
+};
+
+// 初始空文件夹数据
+const initialFolders: ImageFolder[] = [
   {
     id: 'all',
     name: '全部图片',
-    images: mockImages
-  },
-  {
-    id: 'nature',
-    name: '自然风景',
-    images: mockImages.filter(img => img.tags.includes('自然'))
-  },
-  {
-    id: 'city',
-    name: '城市建筑',
-    images: mockImages.filter(img => img.tags.includes('城市'))
-  },
-  {
-    id: 'travel',
-    name: '旅行',
-    images: mockImages.filter(img => img.tags.includes('海滩') || img.tags.includes('山脉'))
-  },
-  {
-    id: 'long',
-    name: '长图',
-    images: mockImages.filter(img => img.isLongImage)
+    images: []
   },
   {
     id: 'favorites',
     name: '收藏',
-    images: mockImages.filter(img => img.favorite)
+    images: []
   }
 ];
 
 export function GalleryPage() {
   const { storagePath } = useStore();
+  const toast = useToast();
+  
+  console.log('GalleryPage 组件加载，存储路径:', storagePath);
   
   // 状态管理
-  const [folders, setFolders] = useState<ImageFolder[]>(mockFolders);
+  const [folders, setFolders] = useState<ImageFolder[]>(initialFolders);
   const [activeFolderId, setActiveFolderId] = useState<string>('all');
   const [showSidebar, setShowSidebar] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -195,59 +202,149 @@ export function GalleryPage() {
   const [editingImage, setEditingImage] = useState<ImageItem | null>(null);
   const [importing, setImporting] = useState<boolean>(false);
   const [importProgress, setImportProgress] = useState<number>(0);
+  const [isLoading, setIsLoading] = useState<boolean>(true); // 加载状态
+  
+  // 当前文件夹
+  const activeFolder = useMemo(() => {
+    return folders.find(folder => folder.id === activeFolderId) || folders[0];
+  }, [folders, activeFolderId]);
+  
+  // 使用懒加载钩子
+  const { lazyImages, setLazyImages } = useLazyLoadImages(activeFolder.images);
+  
+  // 当激活文件夹变化时，更新懒加载的图片数据
+  useEffect(() => {
+    setLazyImages(activeFolder.images.map(img => ({
+      ...img,
+      isLoaded: !!img.url,
+      originalUrl: img.url
+    })));
+  }, [activeFolder.images, setLazyImages]);
 
   // 从存储加载图片数据
   useEffect(() => {
-    if (storagePath) {
-      const albums = GalleryStorage.getAllAlbums(storagePath);
-      if (albums.length > 0) {
-        // 将相册转换为文件夹格式
-        const loadedFolders: ImageFolder[] = albums.map(album => ({
-          id: album.id,
-          name: album.name,
-          images: album.images.map(img => ({
-            id: img.id,
-            name: img.name,
-            url: img.url,
-            width: img.width,
-            height: img.height,
-            size: img.size,
-            type: img.type,
-            tags: img.tags || [],
-            favorite: false, // 可以根据需要从元数据中获取
-            isLongImage: img.height > img.width * 1.5,
-            aspectRatio: img.width / img.height,
-            dateAdded: new Date(img.addedAt)
-          }))
-        }));
-        
-        // 添加默认文件夹
-        const allImages = loadedFolders.flatMap(folder => folder.images);
-        const defaultFolders: ImageFolder[] = [
-          {
-            id: 'all',
-            name: '全部图片',
-            images: allImages
-          },
-          {
-            id: 'favorites',
-            name: '收藏',
-            images: allImages.filter(img => img.favorite)
+    const loadImagesFromStorage = async () => {
+      console.log('开始从存储加载图片数据，存储路径:', storagePath);
+      
+      // 设置加载状态为true
+      setIsLoading(true);
+      
+      try {
+        if (storagePath) {
+          // 修复路径重复问题
+          let baseStoragePath = storagePath;
+          // 检查存储路径是否已经包含 starpact-local
+          if (storagePath.endsWith('starpact-local')) {
+            // 如果包含，去掉末尾的 starpact-local
+            baseStoragePath = storagePath.substring(0, storagePath.lastIndexOf('starpact-local')).trim();
+            console.log('调整后的基础存储路径:', baseStoragePath);
           }
-        ];
-        
-        setFolders([...defaultFolders, ...loadedFolders]);
+          
+          console.log('存储路径已设置，开始获取相册');
+          const albums = GalleryStorage.getAllAlbums(baseStoragePath);
+          console.log('获取到的相册数量:', albums.length);
+          
+          if (albums.length > 0) {
+            console.log('相册数量大于0，开始转换为文件夹格式');
+            
+            // 将相册转换为文件夹格式，并从本地路径加载图片
+            const loadedFolders: ImageFolder[] = await Promise.all(albums.map(async (album) => {
+              // 从本地文件路径加载图片并转换为Data URL
+              const loadedImages = await Promise.all(album.images.map(async (img) => {
+                let imageUrl = img.url;
+                
+                // 如果URL为空但有filePath，则从本地路径加载
+                if (!imageUrl && img.filePath) {
+                  console.log('从本地路径加载图片:', img.filePath);
+                  imageUrl = await loadImageFromPath(img.filePath);
+                }
+                
+                return {
+                  id: img.id,
+                  name: img.name,
+                  url: imageUrl,
+                  path: img.filePath || '',
+                  width: img.width,
+                  height: img.height,
+                  size: img.size,
+                  type: img.type,
+                  tags: img.tags || [],
+                  favorite: false, // 可以根据需要从元数据中获取
+                  isLongImage: img.height > img.width * 1.5,
+                  aspectRatio: img.width / img.height,
+                  dateAdded: new Date(img.addedAt)
+                };
+              }));
+              
+              return {
+                id: album.id,
+                name: album.name,
+                images: loadedImages
+              };
+            }));
+            
+            console.log('转换完成，加载的文件夹数量:', loadedFolders.length);
+            
+            // 添加默认文件夹
+            const allImages = loadedFolders.flatMap(folder => folder.images);
+            console.log('所有图片数量:', allImages.length);
+            
+            const defaultFolders: ImageFolder[] = [
+              {
+                id: 'all',
+                name: '全部图片',
+                images: allImages
+              },
+              {
+                id: 'favorites',
+                name: '收藏',
+                images: allImages.filter(img => img.favorite)
+              }
+            ];
+            
+            console.log('准备设置文件夹状态，总文件夹数量:', defaultFolders.length + loadedFolders.length);
+            setFolders([...defaultFolders, ...loadedFolders]);
+            console.log('文件夹状态设置完成');
+          } else {
+            console.log('没有获取到相册，使用默认文件夹');
+          }
+        } else {
+          console.log('存储路径未设置，跳过加载');
+        }
+      } catch (error) {
+        console.error('加载图片数据失败:', error);
+      } finally {
+        // 无论成功失败，都设置加载状态为false
+        setIsLoading(false);
+        console.log('图片数据加载完成');
       }
-    }
+    };
+    
+    loadImagesFromStorage();
   }, [storagePath]);
 
   // 保存图片数据到存储
   useEffect(() => {
     if (storagePath) {
+      console.log('开始保存图片数据，存储路径:', storagePath);
+      
+      // 修复路径重复问题，与加载时使用相同的逻辑
+      let baseStoragePath = storagePath;
+      // 检查存储路径是否已经包含 starpact-local
+      if (storagePath.endsWith('starpact-local')) {
+        // 如果包含，去掉末尾的 starpact-local
+        baseStoragePath = storagePath.substring(0, storagePath.lastIndexOf('starpact-local')).trim();
+        console.log('调整后的基础存储路径:', baseStoragePath);
+      }
+      
       // 将文件夹转换为相册格式
       const foldersToSave = folders.filter(folder => !['all', 'favorites'].includes(folder.id));
       
+      console.log('需要保存的文件夹数量:', foldersToSave.length);
+      
       foldersToSave.forEach(folder => {
+        console.log('保存文件夹:', folder.name, '包含图片数量:', folder.images.length);
+        
         const album: ImageAlbum = {
           id: folder.id,
           name: folder.name,
@@ -256,26 +353,28 @@ export function GalleryPage() {
             name: img.name,
             size: img.size,
             type: img.type,
-            url: img.url,
+            url: '', // 不存储Data URL，只存储本地文件路径
             width: img.width,
             height: img.height,
             addedAt: img.dateAdded.getTime(),
-            filePath: img.url.replace('file://', ''),
+            filePath: img.path || '',
             tags: img.tags
           })),
           createdAt: Date.now(),
           updatedAt: Date.now()
         };
         
-        GalleryStorage.saveAlbum(storagePath, album);
+        console.log('准备保存相册:', album.name, '图片数量:', album.images.length);
+        const success = GalleryStorage.saveAlbum(baseStoragePath, album);
+        console.log('保存结果:', success);
       });
+    } else {
+      console.log('存储路径未设置，跳过保存');
     }
   }, [folders, storagePath]);
 
   // 当前文件夹
-  const activeFolder = useMemo(() => {
-    return folders.find(folder => folder.id === activeFolderId) || folders[0];
-  }, [folders, activeFolderId]);
+
 
   // 过滤和排序后的图片
   const filteredImages = useMemo(() => {
@@ -343,9 +442,12 @@ export function GalleryPage() {
   // 处理删除选中
   const handleDeleteSelected = () => {
     const idsToDelete = Array.from(selectedIds);
-    // 这里应该实现实际的删除逻辑
-    console.log('删除选中的图片:', idsToDelete);
-    setSelectedIds(new Set());
+    if (idsToDelete.length > 0) {
+      // 调用删除图片函数
+      handleDelete(idsToDelete);
+      // 清空选中状态
+      setSelectedIds(new Set());
+    }
   };
 
   // 处理图片查看
@@ -362,14 +464,55 @@ export function GalleryPage() {
 
   // 处理切换收藏
   const handleToggleFavorite = (id: string) => {
-    // 这里应该实现实际的收藏逻辑
-    console.log('切换收藏状态:', id);
+    // 更新图片的收藏状态
+    setFolders(prevFolders => {
+      return prevFolders.map(folder => {
+        return {
+          ...folder,
+          images: folder.images.map(img => {
+            if (img.id === id) {
+              return {
+                ...img,
+                favorite: !img.favorite
+              };
+            }
+            return img;
+          })
+        };
+      });
+    });
   };
 
   // 处理删除图片
   const handleDelete = (ids: string[]) => {
-    // 这里应该实现实际的删除逻辑
-    console.log('删除图片:', ids);
+    // 更新文件夹数据，移除删除的图片
+    setFolders(prevFolders => {
+      return prevFolders.map(folder => {
+        // 过滤出未删除的图片
+        const remainingImages = folder.images.filter(img => !ids.includes(img.id));
+        
+        // 如果有存储路径，删除本地文件系统中的图片文件
+        if (storagePath) {
+          ids.forEach(imgId => {
+            const imgToDelete = folder.images.find(img => img.id === imgId);
+            if (imgToDelete && imgToDelete.path) {
+              try {
+                // 使用GalleryStorage删除图片文件
+                // 这里需要知道图片所属的相册ID，我们简化处理，使用默认相册
+                GalleryStorage.deleteImageFile(storagePath, imgId, 'default');
+              } catch (error) {
+                console.error('删除图片文件失败:', error);
+              }
+            }
+          });
+        }
+        
+        return {
+          ...folder,
+          images: remainingImages
+        };
+      });
+    });
   };
 
   // 生成唯一ID
@@ -467,26 +610,64 @@ export function GalleryPage() {
       const newImages: ImageItem[] = [];
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
+        
+        // 首先创建图片项
         const imageItem = await createImageItem(file);
+        
+        // 如果有存储路径，保存图片到本地文件系统
+        if (storagePath) {
+          try {
+            // 使用GalleryStorage保存图片文件
+            const metadata = await GalleryStorage.saveImageFile(storagePath, file);
+            if (metadata) {
+              // 只更新图片项的本地文件路径，保持url为Data URL以避免Electron安全限制
+              imageItem.path = metadata.filePath || '';
+            }
+          } catch (error) {
+            console.error('保存图片文件失败:', error);
+            // 即使保存失败，也继续添加图片项，只是使用Data URL
+          }
+        }
+        
         newImages.push(imageItem);
         setImportProgress(Math.round((i + 1) / files.length * 100));
       }
 
       // 更新文件夹数据
       setFolders(prevFolders => {
+        // 检查是否存在默认相册
+        let hasDefaultAlbum = false;
         const updatedFolders = prevFolders.map(folder => {
           if (folder.id === 'all') {
             return { ...folder, images: [...folder.images, ...newImages] };
           }
+          // 检查是否存在默认相册
+          if (folder.id === 'default') {
+            hasDefaultAlbum = true;
+            return { ...folder, images: [...folder.images, ...newImages] };
+          }
           return folder;
         });
+        
+        // 如果不存在默认相册，创建一个
+        if (!hasDefaultAlbum) {
+          const defaultAlbum: ImageFolder = {
+            id: 'default',
+            name: '默认相册',
+            images: [...newImages]
+          };
+          return [...updatedFolders, defaultAlbum];
+        }
+        
         return updatedFolders;
       });
 
       setImporting(false);
+      toast.success(`成功导入 ${newImages.length} 张图片。`);
     } catch (error) {
       console.error('导入图片失败:', error);
       setImporting(false);
+      toast.error('导入图片失败，请重试。');
     }
   };
 
@@ -514,7 +695,7 @@ export function GalleryPage() {
 
       if (imageFiles.length === 0) {
         setImporting(false);
-        alert('所选文件夹中没有找到图片文件。');
+        toast.info('所选文件夹中没有找到图片文件。');
         return;
       }
 
@@ -522,28 +703,64 @@ export function GalleryPage() {
       const newImages: ImageItem[] = [];
       for (let i = 0; i < imageFiles.length; i++) {
         const file = imageFiles[i];
+        
+        // 首先创建图片项
         const imageItem = await createImageItem(file);
+        
+        // 如果有存储路径，保存图片到本地文件系统
+        if (storagePath) {
+          try {
+            // 使用GalleryStorage保存图片文件
+            const metadata = await GalleryStorage.saveImageFile(storagePath, file);
+            if (metadata) {
+              // 只更新图片项的本地文件路径，保持url为Data URL以避免Electron安全限制
+              imageItem.path = metadata.filePath || '';
+            }
+          } catch (error) {
+            console.error('保存图片文件失败:', error);
+            // 即使保存失败，也继续添加图片项，只是使用Data URL
+          }
+        }
+        
         newImages.push(imageItem);
         setImportProgress(Math.round((i + 1) / imageFiles.length * 100));
       }
 
       // 更新文件夹数据
       setFolders(prevFolders => {
+        // 检查是否存在默认相册
+        let hasDefaultAlbum = false;
         const updatedFolders = prevFolders.map(folder => {
           if (folder.id === 'all') {
             return { ...folder, images: [...folder.images, ...newImages] };
           }
+          // 检查是否存在默认相册
+          if (folder.id === 'default') {
+            hasDefaultAlbum = true;
+            return { ...folder, images: [...folder.images, ...newImages] };
+          }
           return folder;
         });
+        
+        // 如果不存在默认相册，创建一个
+        if (!hasDefaultAlbum) {
+          const defaultAlbum: ImageFolder = {
+            id: 'default',
+            name: '默认相册',
+            images: [...newImages]
+          };
+          return [...updatedFolders, defaultAlbum];
+        }
+        
         return updatedFolders;
       });
 
       setImporting(false);
-      alert(`成功导入 ${newImages.length} 张图片。`);
+      toast.success(`成功导入 ${newImages.length} 张图片。`);
     } catch (error) {
       console.error('导入文件夹失败:', error);
       setImporting(false);
-      alert('导入文件夹失败，请重试。');
+      toast.error('导入文件夹失败，请重试。');
     }
   };
 
@@ -571,31 +788,42 @@ export function GalleryPage() {
         showSidebar={showSidebar}
       />
 
-      {/* 主要内容区 */}
-      <div className="flex-1 overflow-hidden relative">
-        {/* 图片网格 */}
-        <div className="h-full overflow-auto">
-          <ImageGrid
-            images={filteredImages}
-            viewMode={viewMode}
-            selectedIds={selectedIds}
-            onSelect={handleSelect}
-            onView={handleView}
-            onEdit={handleEdit}
-            onToggleFavorite={handleToggleFavorite}
-            onDelete={handleDelete}
-          />
+      {/* 加载状态 */}
+      {isLoading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center space-y-4">
+            <div className="w-16 h-16 border-4 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>正在载入图片数据...</p>
+            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>请稍候，正在处理图片信息</p>
+          </div>
         </div>
+      ) : (
+        /* 主要内容区 */
+        <div className="flex-1 overflow-hidden relative">
+          {/* 图片网格 */}
+          <div className="h-full overflow-auto">
+            <ImageGrid
+              images={lazyImages}
+              viewMode={viewMode}
+              selectedIds={selectedIds}
+              onSelect={handleSelect}
+              onView={handleView}
+              onEdit={handleEdit}
+              onToggleFavorite={handleToggleFavorite}
+              onDelete={handleDelete}
+            />
+          </div>
 
-        {/* 侧边栏 */}
-        <div className={`fixed right-0 top-1/4 bottom-1/4 w-60 transition-all duration-300 ease-in-out transform ${showSidebar ? 'translate-x-0' : 'translate-x-full'} z-40 rounded-l-lg shadow-xl`}>
-          <GallerySidebar
-            folders={folders}
-            activeFolderId={activeFolderId}
-            onSelectFolder={setActiveFolderId}
-          />
+          {/* 侧边栏 */}
+          <div className={`fixed right-0 top-1/4 bottom-1/4 w-60 transition-all duration-300 ease-in-out transform ${showSidebar ? 'translate-x-0' : 'translate-x-full'} z-40 rounded-l-lg shadow-xl`}>
+            <GallerySidebar
+              folders={folders}
+              activeFolderId={activeFolderId}
+              onSelectFolder={setActiveFolderId}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 图片查看器 */}
       {showViewer && (
