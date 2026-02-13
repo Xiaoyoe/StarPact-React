@@ -194,7 +194,7 @@ export function ImageEditor({ image, onClose }: ImageEditorProps) {
         <div className="flex-1 flex items-center justify-center p-8 overflow-hidden">
           <div className="relative max-w-full max-h-full">
             <img
-              src={image.url}
+              src={image.url || null}
               alt={image.name}
               className="max-w-full max-h-[calc(100vh-8rem)] object-contain rounded-lg shadow-2xl transition-all duration-200"
               style={filterStyle}
@@ -286,7 +286,7 @@ export function ImageEditor({ image, onClose }: ImageEditorProps) {
                           className="group relative rounded-lg overflow-hidden border border-slate-700 hover:border-violet-500 transition-colors"
                         >
                           <img
-                            src={image.url}
+                            src={image.url || null}
                             alt={preset.name}
                             className="w-full h-16 object-cover"
                             style={{ filter: previewFilter }}
@@ -462,7 +462,7 @@ export function ImageGrid({
                   )}
                   {/* 图片元素 */}
                   <img 
-                    src={image.isLoaded ? image.url : ''} 
+                    src={image.isLoaded ? image.url : null} 
                     alt={image.name} 
                     className={cn(
                       "w-full h-full object-cover",
@@ -568,7 +568,7 @@ export function ImageGrid({
               
               {/* 图片元素 */}
               <img
-                src={image.isLoaded ? image.url : ''}
+                src={image.isLoaded ? image.url : null}
                 alt={image.name}
                 className={cn(
                   "w-full object-cover transition-transform duration-300",
@@ -914,7 +914,7 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
             </div>
           ) : (
             <img
-              src={image.url}
+              src={image.url || null}
               alt={image.name}
               className="max-w-full max-h-full object-contain select-none transition-transform duration-100"
               style={{
@@ -957,7 +957,7 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
                   i === index ? "border-violet-500 scale-110 shadow-lg shadow-violet-500/30" : "border-transparent opacity-50 hover:opacity-80"
                 )}
               >
-                <img src={img.url} alt={img.name} className="w-full h-full object-cover" />
+                <img src={img.url || null} alt={img.name} className="w-full h-full object-cover" />
               </button>
             ))}
           </div>

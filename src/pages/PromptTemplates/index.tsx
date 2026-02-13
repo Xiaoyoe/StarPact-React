@@ -6,70 +6,13 @@ import {
   Tag, Filter, Clock, Layers, BookOpen, SlidersHorizontal
 } from 'lucide-react';
 import { cn } from '@/utils/cn';
+import { PromptTemplateStorage, Template, TemplateResult } from '@/services/storage/PromptTemplateStorage';
 
 // ==================== 类型定义 ====================
-interface TemplateResult {
-  id: string;
-  type: 'text' | 'image';
-  versionNote: string;
-  createdAt: string;
-  content: string;
-}
-
-interface Template {
-  id: string;
-  title: string;
-  category: string;
-  tags: string[];
-  versionNote: string;
-  content: string;
-  results: TemplateResult[];
-  createdAt: string;
-}
+// 从 PromptTemplateStorage 导入类型定义
 
 // ==================== 常量 ====================
 const CATEGORIES = ['通用', 'AI绘画', '文案创作', '代码生成', '数据分析', '翻译润色', '角色扮演', '学术研究'];
-
-const INITIAL_TEMPLATES: Template[] = [
-  {
-    id: uuidv4(),
-    title: 'Midjourney 风景生成',
-    category: 'AI绘画',
-    tags: ['风景', 'Midjourney', '高质量'],
-    versionNote: 'v1.0 初始版本',
-    content: 'A breathtaking landscape photograph of [场景], golden hour lighting, dramatic clouds, ultra-wide angle lens, 8K resolution, cinematic composition, vibrant colors, professional photography --ar 16:9 --v 6 --quality 2',
-    results: [
-      {
-        id: uuidv4(),
-        type: 'text',
-        versionNote: '第一次测试',
-        createdAt: '2024-12-15T10:30:00',
-        content: '生成了一张非常精美的山脉日落风景图，色彩饱和度适中，构图完美。光线效果非常自然，云层层次分明。'
-      }
-    ],
-    createdAt: '2024-12-10T08:00:00'
-  },
-  {
-    id: uuidv4(),
-    title: '产品营销文案生成器',
-    category: '文案创作',
-    tags: ['营销', '文案', '产品描述'],
-    versionNote: 'v2.1 增加情感共鸣',
-    content: '你是一位资深的产品营销文案专家。请根据以下产品信息，生成一段具有强烈吸引力的营销文案：\n\n产品名称：[名称]\n产品特点：[特点]\n目标受众：[受众]\n文案风格：[风格]\n\n要求：\n1. 文案要有吸引力的标题\n2. 突出产品核心卖点\n3. 加入情感共鸣元素\n4. 包含明确的行动号召（CTA）\n5. 字数控制在200-300字',
-    results: [],
-    createdAt: '2024-12-08T14:20:00'
-  },
-  {
-    id: uuidv4(),
-    title: 'React 组件代码生成',
-    category: '代码生成',
-    tags: ['React', 'TypeScript', '前端'],
-    versionNote: 'v1.2 支持 TypeScript',
-    content: '请帮我生成一个 React + TypeScript 组件，要求如下：\n\n组件名称：[组件名]\n功能描述：[描述]\n\n技术要求：\n- 使用函数式组件和 Hooks\n- 完整的 TypeScript 类型定义\n- 使用 Tailwind CSS 进行样式编写\n- 包含必要的错误处理\n- 添加适当的代码注释\n- 遵循 React 最佳实践',
-    results: [],
-    createdAt: '2024-12-05T09:15:00'
-  }
-];
 
 // ==================== 工具函数 ====================
 function formatDate(dateStr: string): string {
@@ -712,7 +655,7 @@ function TemplateCard({ template, onEdit, onDelete, onManageResults, showToast }
 
 // ==================== 主页面组件 ====================
 export default function PromptTemplatesPage() {
-  const [templates, setTemplates] = useState<Template[]>(INITIAL_TEMPLATES);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
   const [filterTag, setFilterTag] = useState('');
@@ -722,7 +665,32 @@ export default function PromptTemplatesPage() {
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 从IndexedDB加载初始模板数据
+  useEffect(() => {
+    const loadTemplates = async () => {
+      setIsLoading(true);
+      try {
+        console.log('从IndexedDB加载提示词模板');
+        const loadedTemplates = await PromptTemplateStorage.getAllTemplates();
+        
+        // PromptTemplateStorage.getAllTemplates() 会自动处理没有模板的情况
+        // 当没有模板时，它会从假数据文件导入初始模板
+        setTemplates(loadedTemplates);
+        console.log('模板加载完成，共:', loadedTemplates.length, '个');
+      } catch (error) {
+        console.error('加载模板失败:', error);
+        // 加载失败时使用空数组
+        setTemplates([]);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadTemplates();
+  }, []);
 
   const showToast = useCallback((msg: string) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -766,31 +734,61 @@ export default function PromptTemplatesPage() {
   }, [templates, searchQuery, filterCategory, filterTag]);
 
   // CRUD
-  const saveTemplate = (template: Template) => {
-    setTemplates(prev => {
-      const idx = prev.findIndex(t => t.id === template.id);
-      if (idx >= 0) {
-        const copy = [...prev];
-        copy[idx] = template;
-        return copy;
+  const saveTemplate = async (template: Template) => {
+    try {
+      const success = await PromptTemplateStorage.saveTemplate(template);
+      if (success) {
+        setTemplates(prev => {
+          const idx = prev.findIndex(t => t.id === template.id);
+          if (idx >= 0) {
+            const copy = [...prev];
+            copy[idx] = template;
+            return copy;
+          }
+          return [template, ...prev];
+        });
+        setShowForm(false);
+        setEditingTemplate(null);
+        showToast(editingTemplate ? '模板已更新' : '模板已创建');
+      } else {
+        showToast('保存模板失败');
       }
-      return [template, ...prev];
-    });
-    setShowForm(false);
-    setEditingTemplate(null);
-    showToast(editingTemplate ? '模板已更新' : '模板已创建');
+    } catch (error) {
+      console.error('保存模板失败:', error);
+      showToast('保存模板失败');
+    }
   };
 
-  const deleteTemplate = (id: string) => {
-    setTemplates(prev => prev.filter(t => t.id !== id));
-    setConfirmDelete(null);
-    showToast('模板已删除');
+  const deleteTemplate = async (id: string) => {
+    try {
+      const success = await PromptTemplateStorage.deleteTemplate(id);
+      if (success) {
+        setTemplates(prev => prev.filter(t => t.id !== id));
+        setConfirmDelete(null);
+        showToast('模板已删除');
+      } else {
+        showToast('删除模板失败');
+      }
+    } catch (error) {
+      console.error('删除模板失败:', error);
+      showToast('删除模板失败');
+    }
   };
 
-  const updateResults = (templateId: string, results: TemplateResult[]) => {
-    setTemplates(prev => prev.map(t => t.id === templateId ? { ...t, results } : t));
-    // Also update the result modal template reference
-    setResultModalTemplate(prev => prev && prev.id === templateId ? { ...prev, results } : prev);
+  const updateResults = async (templateId: string, results: TemplateResult[]) => {
+    try {
+      const success = await PromptTemplateStorage.updateResults(templateId, results);
+      if (success) {
+        setTemplates(prev => prev.map(t => t.id === templateId ? { ...t, results } : t));
+        // Also update the result modal template reference
+        setResultModalTemplate(prev => prev && prev.id === templateId ? { ...prev, results } : prev);
+      } else {
+        showToast('更新结果失败');
+      }
+    } catch (error) {
+      console.error('更新结果失败:', error);
+      showToast('更新结果失败');
+    }
   };
 
   const openEdit = (t: Template) => {
@@ -923,7 +921,19 @@ export default function PromptTemplatesPage() {
 
         {/* 模板列表 */}
         <div className="max-h-[calc(100vh-240px)] overflow-y-auto pr-2">
-          {filteredTemplates.length === 0 ? (
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-24">
+              <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                <div className="w-8 h-8 border-4 border-violet-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+              <p className="text-base font-medium" style={{ color: 'var(--text-secondary)' }}>
+                正在加载模板...
+              </p>
+              <p className="mt-1 text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                请稍候，正在从存储中读取数据
+              </p>
+            </div>
+          ) : filteredTemplates.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24">
               <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-3xl" style={{ backgroundColor: 'var(--bg-secondary)' }}>
                 <FolderOpen className="h-10 w-10" style={{ color: 'var(--text-tertiary)' }} />

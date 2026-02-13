@@ -1,28 +1,5 @@
-// 检查是否为浏览器环境
-const isBrowser = typeof window !== 'undefined' && typeof window.document !== 'undefined';
-
-// 浏览器兼容的 path 模块实现
-const path = isBrowser ? {
-  join: (...parts: string[]) => parts.join('/'),
-  resolve: (part: string) => part,
-  basename: (filePath: string) => filePath.split('/').pop() || '',
-  extname: (filePath: string) => {
-    const parts = filePath.split('.');
-    return parts.length > 1 ? `.${parts.pop()}` : '';
-  }
-} : require('path');
-
-// 浏览器兼容的 fs 模块实现
-const fs = isBrowser ? {
-  existsSync: () => true,
-  mkdirSync: () => {},
-  writeFileSync: () => {},
-  readFileSync: () => '{}',
-  readdirSync: () => [],
-  unlinkSync: () => {}
-} : require('fs');
-
 import { StorageManager } from './StorageManager';
+import { IndexedDBStorage } from './IndexedDBStorage';
 
 /**
  * 视频文件接口
@@ -36,6 +13,7 @@ export interface VideoFile {
   duration: number;
   addedAt: number;
   filePath?: string; // 本地文件路径
+  file?: File; // 原始File对象
 }
 
 /**
@@ -53,29 +31,18 @@ export interface VideoPlaylist {
  * 视频播放列表存储服务
  */
 export class VideoPlaylistStorage {
+  private static dbStorage: IndexedDBStorage = IndexedDBStorage.getInstance();
+
   /**
    * 保存视频播放列表
-   * @param storagePath 存储路径
+   * @param storagePath 存储路径（兼容参数）
    * @param playlist 播放列表数据
    * @returns 是否保存成功
    */
-  static savePlaylist(storagePath: string, playlist: VideoPlaylist): boolean {
+  static async savePlaylist(storagePath: string, playlist: VideoPlaylist): Promise<boolean> {
     try {
-      const playlistsPath = StorageManager.getVideoPlaylistsPath(storagePath);
-      const playlistPath = path.join(playlistsPath, `${playlist.id}.json`);
-
-      // 确保目录存在
-      if (!fs.existsSync(playlistsPath)) {
-        fs.mkdirSync(playlistsPath, { recursive: true });
-      }
-
-      // 保存播放列表数据
-      fs.writeFileSync(
-        playlistPath,
-        JSON.stringify(playlist, null, 2),
-        'utf8'
-      );
-
+      // 使用IndexedDB存储播放列表数据
+      await this.dbStorage.put('video-playlists', playlist);
       return true;
     } catch (error) {
       console.error('保存视频播放列表失败:', error);
@@ -85,22 +52,13 @@ export class VideoPlaylistStorage {
 
   /**
    * 加载视频播放列表
-   * @param storagePath 存储路径
+   * @param storagePath 存储路径（兼容参数）
    * @param playlistId 播放列表ID
    * @returns 播放列表数据或null
    */
-  static loadPlaylist(storagePath: string, playlistId: string): VideoPlaylist | null {
+  static async loadPlaylist(storagePath: string, playlistId: string): Promise<VideoPlaylist | null> {
     try {
-      const playlistsPath = StorageManager.getVideoPlaylistsPath(storagePath);
-      const playlistPath = path.join(playlistsPath, `${playlistId}.json`);
-
-      if (!fs.existsSync(playlistPath)) {
-        return null;
-      }
-
-      const data = fs.readFileSync(playlistPath, 'utf8');
-      const playlist = JSON.parse(data) as VideoPlaylist;
-
+      const playlist = await this.dbStorage.get<VideoPlaylist>('video-playlists', playlistId);
       return playlist;
     } catch (error) {
       console.error('加载视频播放列表失败:', error);
@@ -110,31 +68,47 @@ export class VideoPlaylistStorage {
 
   /**
    * 获取所有视频播放列表
-   * @param storagePath 存储路径
+   * @param storagePath 存储路径（兼容参数）
    * @returns 播放列表数组
    */
-  static getAllPlaylists(storagePath: string): VideoPlaylist[] {
+  static async getAllPlaylists(storagePath: string): Promise<VideoPlaylist[]> {
     try {
-      const playlistsPath = StorageManager.getVideoPlaylistsPath(storagePath);
-
-      if (!fs.existsSync(playlistsPath)) {
-        return [];
-      }
-
-      const files = fs.readdirSync(playlistsPath);
-      const playlists: VideoPlaylist[] = [];
-
-      for (const file of files) {
-        if (path.extname(file) === '.json') {
-          const playlistId = path.basename(file, '.json');
-          const playlist = this.loadPlaylist(storagePath, playlistId);
-          if (playlist) {
-            playlists.push(playlist);
-          }
-        }
-      }
-
-      return playlists;
+      const playlists = await this.dbStorage.getAll<VideoPlaylist>('video-playlists');
+      
+      // 处理每个播放列表中的视频文件，重新生成有效的 Blob URL
+      const processedPlaylists = await Promise.all(
+        playlists.map(async (playlist) => {
+          const processedVideos = await Promise.all(
+            playlist.videos.map(async (video) => {
+              // 检查视频是否有 ID，无论 URL 状态如何，都尝试从 IndexedDB 获取视频文件
+              if (video.id) {
+                try {
+                  // 从 IndexedDB 中获取视频文件
+                  const videoData = await this.dbStorage.getFile('videos', video.id);
+                  if (videoData && videoData.blob) {
+                    // 重新生成 Blob URL
+                    const newBlobUrl = URL.createObjectURL(videoData.blob);
+                    return {
+                      ...video,
+                      url: newBlobUrl
+                    };
+                  }
+                } catch (error) {
+                  console.error('获取视频文件失败:', error);
+                }
+              }
+              return video;
+            })
+          );
+          
+          return {
+            ...playlist,
+            videos: processedVideos
+          };
+        })
+      );
+      
+      return processedPlaylists;
     } catch (error) {
       console.error('获取所有视频播放列表失败:', error);
       return [];
@@ -143,19 +117,13 @@ export class VideoPlaylistStorage {
 
   /**
    * 删除视频播放列表
-   * @param storagePath 存储路径
+   * @param storagePath 存储路径（兼容参数）
    * @param playlistId 播放列表ID
    * @returns 是否删除成功
    */
-  static deletePlaylist(storagePath: string, playlistId: string): boolean {
+  static async deletePlaylist(storagePath: string, playlistId: string): Promise<boolean> {
     try {
-      const playlistsPath = StorageManager.getVideoPlaylistsPath(storagePath);
-      const playlistPath = path.join(playlistsPath, `${playlistId}.json`);
-
-      if (fs.existsSync(playlistPath)) {
-        fs.unlinkSync(playlistPath);
-      }
-
+      await this.dbStorage.delete('video-playlists', playlistId);
       return true;
     } catch (error) {
       console.error('删除视频播放列表失败:', error);
@@ -165,23 +133,30 @@ export class VideoPlaylistStorage {
 
   /**
    * 导出视频播放列表
-   * @param storagePath 存储路径
+   * @param storagePath 存储路径（兼容参数）
    * @param playlistId 播放列表ID
-   * @param exportPath 导出路径
+   * @param exportPath 导出路径（兼容参数）
    * @returns 是否导出成功
    */
-  static exportPlaylist(storagePath: string, playlistId: string, exportPath: string): boolean {
+  static async exportPlaylist(storagePath: string, playlistId: string, exportPath: string): Promise<boolean> {
     try {
-      const playlist = this.loadPlaylist(storagePath, playlistId);
+      const playlist = await this.loadPlaylist(storagePath, playlistId);
       if (!playlist) {
         return false;
       }
 
-      fs.writeFileSync(
-        exportPath,
-        JSON.stringify(playlist, null, 2),
-        'utf8'
-      );
+      const jsonString = JSON.stringify(playlist, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      
+      // 触发文件下载
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${playlist.name}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
 
       return true;
     } catch (error) {
@@ -192,14 +167,31 @@ export class VideoPlaylistStorage {
 
   /**
    * 导入视频播放列表
-   * @param storagePath 存储路径
-   * @param importPath 导入路径
+   * @param storagePath 存储路径（兼容参数）
+   * @param importPath 导入路径（兼容参数）
    * @returns 导入的播放列表或null
    */
-  static importPlaylist(storagePath: string, importPath: string): VideoPlaylist | null {
+  static async importPlaylist(storagePath: string, importPath: string): Promise<VideoPlaylist | null> {
     try {
-      const data = fs.readFileSync(importPath, 'utf8');
-      const playlist = JSON.parse(data) as VideoPlaylist;
+      // 注意：这里的importPath参数在IndexedDB环境中不使用
+      // 实际使用时应该使用importPlaylistFromFile方法
+      return null;
+    } catch (error) {
+      console.error('导入视频播放列表失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 从文件导入视频播放列表
+   * @param storagePath 存储路径（兼容参数）
+   * @param file 播放列表文件
+   * @returns 导入的播放列表或null
+   */
+  static async importPlaylistFromFile(storagePath: string, file: File): Promise<VideoPlaylist | null> {
+    try {
+      const text = await file.text();
+      const playlist = JSON.parse(text) as VideoPlaylist;
 
       // 生成新的ID，避免冲突
       const newPlaylist: VideoPlaylist = {
@@ -208,37 +200,60 @@ export class VideoPlaylistStorage {
         updatedAt: Date.now()
       };
 
-      this.savePlaylist(storagePath, newPlaylist);
+      await this.savePlaylist(storagePath, newPlaylist);
       return newPlaylist;
     } catch (error) {
-      console.error('导入视频播放列表失败:', error);
+      console.error('从文件导入视频播放列表失败:', error);
       return null;
     }
   }
 
   /**
-   * 处理视频文件的本地存储
-   * @param storagePath 存储路径
+   * 处理视频文件的IndexedDB存储
+   * @param storagePath 存储路径（兼容参数）
    * @param videoFile 视频文件
    * @returns 处理后的视频文件
    */
-  static processVideoFile(storagePath: string, videoFile: VideoFile): VideoFile {
+  static async processVideoFile(storagePath: string, videoFile: VideoFile): Promise<VideoFile> {
     try {
-      const videosPath = path.join(StorageManager.getVideoPlaylistsPath(storagePath), 'videos');
-      
-      // 确保视频目录存在
-      if (!fs.existsSync(videosPath)) {
-        fs.mkdirSync(videosPath, { recursive: true });
+      // 如果视频文件是File对象，存储到IndexedDB
+      if (videoFile.file instanceof File) {
+        const file = videoFile.file;
+        const videoId = videoFile.id || `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        // 读取文件为Blob
+        const blob = await new Promise<Blob>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const arrayBuffer = e.target?.result as ArrayBuffer;
+            resolve(new Blob([arrayBuffer], { type: file.type }));
+          };
+          reader.onerror = (error) => {
+            console.error('FileReader 错误:', error);
+            reject(error);
+          };
+          reader.readAsArrayBuffer(file);
+        });
+        
+        // 存储视频文件到IndexedDB
+        await this.dbStorage.storeFile('videos', videoId, blob, {
+          name: file.name,
+          size: file.size,
+          type: file.type
+        });
+        
+        // 生成Blob URL并返回
+        const blobUrl = URL.createObjectURL(blob);
+        return {
+          ...videoFile,
+          id: videoId,
+          url: blobUrl,
+          // 移除file对象，避免存储大型对象
+          file: undefined
+        };
       }
 
-      // 生成本地文件路径
-      const safeFileName = this.getSafeFileName(videoFile.name);
-      const localFilePath = path.join(videosPath, safeFileName);
-
-      return {
-        ...videoFile,
-        filePath: localFilePath
-      };
+      return videoFile;
     } catch (error) {
       console.error('处理视频文件失败:', error);
       return videoFile;
@@ -246,13 +261,184 @@ export class VideoPlaylistStorage {
   }
 
   /**
-   * 获取安全的文件名，处理中文和特殊字符
-   * @param fileName 原始文件名
-   * @returns 安全的文件名
+   * 加载视频文件并生成有效的 Blob URL
+   * @param videoId 视频ID
+   * @returns 视频对象（包含有效 Blob URL）或 null
    */
-  private static getSafeFileName(fileName: string): string {
-    // 保留中文，移除或替换特殊字符
-    const safeName = fileName.replace(/[<>"|:*?]/g, '_');
-    return safeName;
+  static async loadVideoWithBlobUrl(videoId: string): Promise<{ blob: Blob; url: string } | null> {
+    try {
+      const videoData = await this.dbStorage.getFile('videos', videoId);
+      if (videoData && videoData.blob) {
+        const blobUrl = URL.createObjectURL(videoData.blob);
+        return {
+          blob: videoData.blob,
+          url: blobUrl
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error('加载视频失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 获取视频文件
+   * @param videoId 视频ID
+   * @returns 视频Blob或null
+   */
+  static async getVideoFile(videoId: string): Promise<Blob | null> {
+    try {
+      const fileData = await this.dbStorage.getFile('videos', videoId);
+      return fileData?.blob || null;
+    } catch (error) {
+      console.error('获取视频文件失败:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 同步方法（兼容旧代码）
+   */
+  static savePlaylistSync(storagePath: string, playlist: VideoPlaylist): boolean {
+    this.savePlaylist(storagePath, playlist).catch(console.error);
+    return true;
+  }
+
+  /**
+   * 同步获取所有播放列表（兼容旧代码）
+   */
+  static getAllPlaylistsSync(storagePath: string): VideoPlaylist[] {
+    // 注意：这里返回空数组，实际使用时应该使用异步方法
+    return [];
+  }
+}
+
+/**
+ * 同步方法（兼容旧代码）
+ */
+export class VideoPlaylistStorageSync {
+  /**
+   * 同步保存播放列表（内部使用异步实现）
+   */
+  static savePlaylist(storagePath: string, playlist: VideoPlaylist): boolean {
+    VideoPlaylistStorage.savePlaylist(storagePath, playlist).catch(console.error);
+    return true;
+  }
+
+  /**
+   * 同步加载播放列表（内部使用异步实现）
+   */
+  static loadPlaylist(storagePath: string, playlistId: string): VideoPlaylist | null {
+    // 注意：这里返回null，实际使用时应该使用异步方法
+    return null;
+  }
+
+  /**
+   * 同步获取所有播放列表（内部使用异步实现）
+   */
+  static getAllPlaylists(storagePath: string): VideoPlaylist[] {
+    // 注意：这里返回空数组，实际使用时应该使用异步方法
+    return [];
+  }
+
+  /**
+   * 同步删除播放列表（内部使用异步实现）
+   */
+  static deletePlaylist(storagePath: string, playlistId: string): boolean {
+    VideoPlaylistStorage.deletePlaylist(storagePath, playlistId).catch(console.error);
+    return true;
+  }
+
+  /**
+   * 同步导出播放列表（内部使用异步实现）
+   */
+  static exportPlaylist(storagePath: string, playlistId: string, exportPath: string): boolean {
+    VideoPlaylistStorage.exportPlaylist(storagePath, playlistId, exportPath).catch(console.error);
+    return true;
+  }
+
+  /**
+   * 同步导入播放列表（内部使用异步实现）
+   */
+  static importPlaylist(storagePath: string, importPath: string): VideoPlaylist | null {
+    // 注意：这里返回null，实际使用时应该使用异步方法
+    return null;
+  }
+
+  /**
+   * 同步处理视频文件（内部使用异步实现）
+   */
+  static processVideoFile(storagePath: string, videoFile: VideoFile): VideoFile {
+    VideoPlaylistStorage.processVideoFile(storagePath, videoFile).catch(console.error);
+    return videoFile;
+  }
+
+  /**
+   * 导出所有播放列表到本地文件夹
+   * @param folderPath 文件夹路径
+   * @returns 是否导出成功
+   */
+  static async exportToLocalFolder(folderPath: string): Promise<boolean> {
+    try {
+      const playlists = await VideoPlaylistStorage.getAllPlaylists('');
+      const jsonString = JSON.stringify(playlists, null, 2);
+      const fileName = `video-playlists-${new Date().toISOString().split('T')[0]}.json`;
+      
+      // 在Electron环境中使用fs模块写入文件
+      if (typeof window !== 'undefined' && (window as any).require) {
+        const fs = (window as any).require('fs');
+        const path = (window as any).require('path');
+        const filePath = path.join(folderPath, fileName);
+        
+        fs.writeFileSync(filePath, jsonString, 'utf8');
+        console.log('成功导出播放列表到本地文件夹:', filePath);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error('导出播放列表到本地文件夹失败:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 从本地文件导入播放列表
+   * @param filePath 文件路径
+   * @returns 导入的播放列表数量
+   */
+  static async importFromLocalFile(filePath: string): Promise<number> {
+    try {
+      // 在Electron环境中使用fs模块读取文件
+      if (typeof window !== 'undefined' && (window as any).require) {
+        const fs = (window as any).require('fs');
+        const jsonString = fs.readFileSync(filePath, 'utf8');
+        const playlists = JSON.parse(jsonString) as VideoPlaylist[];
+        
+        let importedCount = 0;
+        for (const playlist of playlists) {
+          // 生成新的ID，避免冲突
+          const newPlaylist: VideoPlaylist = {
+            ...playlist,
+            id: `playlist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            updatedAt: Date.now()
+          };
+          
+          const success = await VideoPlaylistStorage.savePlaylist('', newPlaylist);
+          if (success) {
+            importedCount++;
+          }
+        }
+        
+        console.log('成功从本地文件导入播放列表:', importedCount, '个');
+        return importedCount;
+      }
+      
+      return 0;
+    } catch (error) {
+      console.error('从本地文件导入播放列表失败:', error);
+      return 0;
+    }
   }
 }

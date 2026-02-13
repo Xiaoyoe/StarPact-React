@@ -185,7 +185,7 @@ export function GalleryPage() {
   const { storagePath } = useStore();
   const toast = useToast();
   
-  console.log('GalleryPage 组件加载，存储路径:', storagePath);
+
   
   // 状态管理
   const [folders, setFolders] = useState<ImageFolder[]>(initialFolders);
@@ -224,8 +224,6 @@ export function GalleryPage() {
   // 从存储加载图片数据
   useEffect(() => {
     const loadImagesFromStorage = async () => {
-      console.log('开始从存储加载图片数据，存储路径:', storagePath);
-      
       // 设置加载状态为true
       setIsLoading(true);
       
@@ -237,16 +235,11 @@ export function GalleryPage() {
           if (storagePath.endsWith('starpact-local')) {
             // 如果包含，去掉末尾的 starpact-local
             baseStoragePath = storagePath.substring(0, storagePath.lastIndexOf('starpact-local')).trim();
-            console.log('调整后的基础存储路径:', baseStoragePath);
           }
           
-          console.log('存储路径已设置，开始获取相册');
-          const albums = GalleryStorage.getAllAlbums(baseStoragePath);
-          console.log('获取到的相册数量:', albums.length);
+          const albums = await GalleryStorage.getAllAlbums(baseStoragePath);
           
           if (albums.length > 0) {
-            console.log('相册数量大于0，开始转换为文件夹格式');
-            
             // 将相册转换为文件夹格式，并从本地路径加载图片
             const loadedFolders: ImageFolder[] = await Promise.all(albums.map(async (album) => {
               // 从本地文件路径加载图片并转换为Data URL
@@ -255,7 +248,6 @@ export function GalleryPage() {
                 
                 // 如果URL为空但有filePath，则从本地路径加载
                 if (!imageUrl && img.filePath) {
-                  console.log('从本地路径加载图片:', img.filePath);
                   imageUrl = await loadImageFromPath(img.filePath);
                 }
                 
@@ -283,11 +275,8 @@ export function GalleryPage() {
               };
             }));
             
-            console.log('转换完成，加载的文件夹数量:', loadedFolders.length);
-            
             // 添加默认文件夹
             const allImages = loadedFolders.flatMap(folder => folder.images);
-            console.log('所有图片数量:', allImages.length);
             
             const defaultFolders: ImageFolder[] = [
               {
@@ -302,21 +291,14 @@ export function GalleryPage() {
               }
             ];
             
-            console.log('准备设置文件夹状态，总文件夹数量:', defaultFolders.length + loadedFolders.length);
             setFolders([...defaultFolders, ...loadedFolders]);
-            console.log('文件夹状态设置完成');
-          } else {
-            console.log('没有获取到相册，使用默认文件夹');
           }
-        } else {
-          console.log('存储路径未设置，跳过加载');
         }
       } catch (error) {
         console.error('加载图片数据失败:', error);
       } finally {
         // 无论成功失败，都设置加载状态为false
         setIsLoading(false);
-        console.log('图片数据加载完成');
       }
     };
     
@@ -325,52 +307,45 @@ export function GalleryPage() {
 
   // 保存图片数据到存储
   useEffect(() => {
-    if (storagePath) {
-      console.log('开始保存图片数据，存储路径:', storagePath);
-      
-      // 修复路径重复问题，与加载时使用相同的逻辑
-      let baseStoragePath = storagePath;
-      // 检查存储路径是否已经包含 starpact-local
-      if (storagePath.endsWith('starpact-local')) {
-        // 如果包含，去掉末尾的 starpact-local
-        baseStoragePath = storagePath.substring(0, storagePath.lastIndexOf('starpact-local')).trim();
-        console.log('调整后的基础存储路径:', baseStoragePath);
+    const saveImagesToStorage = async () => {
+      if (storagePath) {
+        // 修复路径重复问题，与加载时使用相同的逻辑
+        let baseStoragePath = storagePath;
+        // 检查存储路径是否已经包含 starpact-local
+        if (storagePath.endsWith('starpact-local')) {
+          // 如果包含，去掉末尾的 starpact-local
+          baseStoragePath = storagePath.substring(0, storagePath.lastIndexOf('starpact-local')).trim();
+        }
+        
+        // 将文件夹转换为相册格式
+        const foldersToSave = folders.filter(folder => !['all', 'favorites'].includes(folder.id));
+        
+        for (const folder of foldersToSave) {
+          const album: ImageAlbum = {
+            id: folder.id,
+            name: folder.name,
+            images: folder.images.map(img => ({
+              id: img.id,
+              name: img.name,
+              size: img.size,
+              type: img.type,
+              url: '', // 不存储Data URL，只存储本地文件路径
+              width: img.width,
+              height: img.height,
+              addedAt: img.dateAdded.getTime(),
+              filePath: img.path || '',
+              tags: img.tags
+            })),
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          };
+          
+          await GalleryStorage.saveAlbum(baseStoragePath, album);
+        }
       }
-      
-      // 将文件夹转换为相册格式
-      const foldersToSave = folders.filter(folder => !['all', 'favorites'].includes(folder.id));
-      
-      console.log('需要保存的文件夹数量:', foldersToSave.length);
-      
-      foldersToSave.forEach(folder => {
-        console.log('保存文件夹:', folder.name, '包含图片数量:', folder.images.length);
-        
-        const album: ImageAlbum = {
-          id: folder.id,
-          name: folder.name,
-          images: folder.images.map(img => ({
-            id: img.id,
-            name: img.name,
-            size: img.size,
-            type: img.type,
-            url: '', // 不存储Data URL，只存储本地文件路径
-            width: img.width,
-            height: img.height,
-            addedAt: img.dateAdded.getTime(),
-            filePath: img.path || '',
-            tags: img.tags
-          })),
-          createdAt: Date.now(),
-          updatedAt: Date.now()
-        };
-        
-        console.log('准备保存相册:', album.name, '图片数量:', album.images.length);
-        const success = GalleryStorage.saveAlbum(baseStoragePath, album);
-        console.log('保存结果:', success);
-      });
-    } else {
-      console.log('存储路径未设置，跳过保存');
-    }
+    };
+    
+    saveImagesToStorage();
   }, [folders, storagePath]);
 
   // 当前文件夹
@@ -484,7 +459,7 @@ export function GalleryPage() {
   };
 
   // 处理删除图片
-  const handleDelete = (ids: string[]) => {
+  const handleDelete = async (ids: string[]) => {
     // 更新文件夹数据，移除删除的图片
     setFolders(prevFolders => {
       return prevFolders.map(folder => {
@@ -493,13 +468,13 @@ export function GalleryPage() {
         
         // 如果有存储路径，删除本地文件系统中的图片文件
         if (storagePath) {
-          ids.forEach(imgId => {
+          ids.forEach(async imgId => {
             const imgToDelete = folder.images.find(img => img.id === imgId);
             if (imgToDelete && imgToDelete.path) {
               try {
                 // 使用GalleryStorage删除图片文件
                 // 这里需要知道图片所属的相册ID，我们简化处理，使用默认相册
-                GalleryStorage.deleteImageFile(storagePath, imgId, 'default');
+                await GalleryStorage.deleteImageFile(storagePath, imgId, 'default');
               } catch (error) {
                 console.error('删除图片文件失败:', error);
               }
@@ -615,19 +590,20 @@ export function GalleryPage() {
         const imageItem = await createImageItem(file);
         
         // 如果有存储路径，保存图片到本地文件系统
-        if (storagePath) {
-          try {
-            // 使用GalleryStorage保存图片文件
-            const metadata = await GalleryStorage.saveImageFile(storagePath, file);
-            if (metadata) {
-              // 只更新图片项的本地文件路径，保持url为Data URL以避免Electron安全限制
-              imageItem.path = metadata.filePath || '';
+          if (storagePath) {
+            try {
+              // 使用GalleryStorage保存图片文件
+              const metadata = await GalleryStorage.saveImageFile(storagePath, file);
+              if (metadata) {
+                // 更新图片项的ID和本地文件路径，确保ID与IndexedDB中存储的一致
+                imageItem.id = metadata.id;
+                imageItem.path = metadata.filePath || '';
+              }
+            } catch (error) {
+              console.error('保存图片文件失败:', error);
+              // 即使保存失败，也继续添加图片项，只是使用Data URL
             }
-          } catch (error) {
-            console.error('保存图片文件失败:', error);
-            // 即使保存失败，也继续添加图片项，只是使用Data URL
           }
-        }
         
         newImages.push(imageItem);
         setImportProgress(Math.round((i + 1) / files.length * 100));
@@ -713,7 +689,8 @@ export function GalleryPage() {
             // 使用GalleryStorage保存图片文件
             const metadata = await GalleryStorage.saveImageFile(storagePath, file);
             if (metadata) {
-              // 只更新图片项的本地文件路径，保持url为Data URL以避免Electron安全限制
+              // 更新图片项的ID和本地文件路径，确保ID与IndexedDB中存储的一致
+              imageItem.id = metadata.id;
               imageItem.path = metadata.filePath || '';
             }
           } catch (error) {

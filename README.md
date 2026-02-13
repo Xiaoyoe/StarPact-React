@@ -270,9 +270,29 @@ npm run build
 
 ### 打包桌面应用
 
+#### 构建所有类型（默认）
+
 ```bash
 npm run electron:build
 ```
+
+#### 构建NSIS安装包
+
+```bash
+npm run electron:build:nsis
+```
+
+#### 构建便携式应用
+
+```bash
+npm run electron:build:portable
+```
+
+#### 打包输出
+
+- **输出目录**：`dist-electron/`
+- **NSIS安装包**：`dist-electron/React Vite App Setup {版本号}.exe`
+- **便携式应用**：`dist-electron/React Vite App-Portable-{版本号}.exe`
 
 ## Ollama 集成说明
 
@@ -395,13 +415,160 @@ Ollama 集成采用模块化设计，易于扩展：
 - 应用主题和布局设置
 - 存储路径配置
 
-### 存储系统
+### 存储管理
 
 项目使用分层存储架构：
 1. **配置存储**：保存应用设置和用户偏好
 2. **对话存储**：保存聊天历史记录
 3. **图库存储**：管理图片相关数据
 4. **视频存储**：管理视频播放列表
+5. **提示词模板存储**：管理预设和自定义提示词模板
+
+## 存储系统详解
+
+### 存储机制
+
+项目主要使用 **IndexedDB** 作为核心存储机制，结合 Electron 的文件系统访问能力，实现数据的持久化存储。
+
+#### 核心存储服务
+
+| 存储服务 | 职责 | 文件位置 |
+|---------|------|----------|
+| `GalleryStorage` | 管理图片文件和相册 | `src/services/storage/GalleryStorage.ts` |
+| `VideoPlaylistStorage` | 管理视频文件和播放列表 | `src/services/storage/VideoPlaylistStorage.ts` |
+| `PromptTemplateStorage` | 管理提示词模板 | `src/services/storage/PromptTemplateStorage.ts` |
+| `ConfigStorage` | 管理应用配置 | `src/services/storage/ConfigStorage.ts` |
+| `StorageManager` | 统一存储管理接口 | `src/services/storage/StorageManager.ts` |
+
+### 存储位置
+
+#### Electron 开发模式
+
+在开发模式下，IndexedDB 数据存储位置：
+
+- **Windows**：`C:\Users\{用户名}\AppData\Local\{应用名}\User Data\Default\IndexedDB`
+- **macOS**：`~/Library/Application Support/{应用名}/Default/IndexedDB`
+- **Linux**：`~/.config/{应用名}/Default/IndexedDB`
+
+#### 打包应用
+
+##### 便携式（Portable）
+
+- 数据存储在应用程序目录下的 `user-data` 文件夹中
+- 优点：可以随应用一起移动，无需安装
+- 缺点：存储在移动设备上可能影响性能
+
+##### 安装式（NSIS）
+
+- **Windows**：`C:\Users\{用户名}\AppData\Local\{应用名}\User Data\Default\IndexedDB`
+- **macOS**：`~/Library/Application Support/{应用名}/Default/IndexedDB`
+- **Linux**：`~/.config/{应用名}/Default/IndexedDB`
+
+### 存储方式比较
+
+#### 图片管理页面
+
+- **存储内容**：图片文件、相册信息、缩略图
+- **存储方式**：IndexedDB 存储文件数据，生成临时 Blob URL 用于显示
+- **持久化**：完全持久化，重启应用后数据不丢失
+- **特殊处理**：自动生成和管理 Blob URL，确保图片资源正确加载
+
+#### 视频播放页面
+
+- **存储内容**：视频文件、播放列表信息
+- **存储方式**：IndexedDB 存储文件数据，生成临时 Blob URL 用于播放
+- **持久化**：完全持久化，重启应用后数据不丢失
+- **特殊处理**：自动生成和管理 Blob URL，确保视频资源正确加载
+
+#### 提示词模板页面
+
+- **存储内容**：提示词模板（文本数据）
+- **存储方式**：IndexedDB 存储文本数据
+- **持久化**：完全持久化，重启应用后数据不丢失
+- **特殊处理**：无需 Blob URL 管理，直接存储和读取文本数据
+
+### 存储工作流
+
+#### 图片存储工作流
+
+1. 用户选择图片文件
+2. `GalleryStorage.saveImageFile()` 处理文件
+3. 文件数据存储到 IndexedDB
+4. 生成唯一 ID 和 Blob URL
+5. 图片信息添加到相册
+6. UI 使用 Blob URL 显示图片
+7. 切换页面或重启应用时，自动重新生成 Blob URL
+
+#### 视频存储工作流
+
+1. 用户选择视频文件
+2. `VideoPlaylistStorage.processVideoFile()` 处理文件
+3. 文件数据存储到 IndexedDB
+4. 生成唯一 ID 和 Blob URL
+5. 视频信息添加到播放列表
+6. 播放器使用 Blob URL 播放视频
+7. 切换页面或重启应用时，自动重新生成 Blob URL
+
+#### 提示词模板存储工作流
+
+1. 用户创建或编辑提示词模板
+2. `PromptTemplateStorage.saveTemplate()` 保存模板
+3. 模板数据存储到 IndexedDB
+4. 模板列表实时更新
+5. 重启应用后，模板数据保持不变
+
+### 存储优化
+
+1. **Blob URL 管理**：自动生成和释放 Blob URL，避免内存泄漏
+2. **数据压缩**：对大型媒体文件进行适当压缩
+3. **索引优化**：为常用查询字段创建索引，提高查询速度
+4. **批量操作**：使用事务进行批量存储操作，提高性能
+5. **错误处理**：完善的错误处理机制，确保存储操作可靠
+
+### 存储安全
+
+1. **本地存储**：所有数据存储在本地，不上传到任何服务器
+2. **权限控制**：遵循 Electron 的安全模型，限制文件系统访问
+3. **数据隔离**：不同类型的数据存储在不同的对象存储空间中
+4. **备份建议**：建议定期备份 `user-data` 文件夹，防止数据丢失
+
+### 存储相关 API
+
+#### GalleryStorage
+
+- `saveImageFile(file: File, albumId: string): Promise<ImageFile>` - 保存图片文件
+- `getAllAlbums(): Promise<Album[]>` - 获取所有相册
+- `getImagesByAlbumId(albumId: string): Promise<ImageFile[]>` - 获取指定相册的图片
+
+#### VideoPlaylistStorage
+
+- `processVideoFile(file: File): Promise<VideoFile>` - 处理并保存视频文件
+- `getAllPlaylists(): Promise<VideoPlaylist[]>` - 获取所有播放列表
+- `getVideosByPlaylistId(playlistId: string): Promise<VideoFile[]>` - 获取指定播放列表的视频
+
+#### PromptTemplateStorage
+
+- `saveTemplate(template: PromptTemplate): Promise<void>` - 保存提示词模板
+- `getAllTemplates(): Promise<PromptTemplate[]>` - 获取所有提示词模板
+- `deleteTemplate(id: string): Promise<void>` - 删除提示词模板
+
+### 常见存储问题
+
+#### Q: 图片/视频在切换页面后无法加载？
+
+A: 这是因为 Blob URL 具有临时性，页面切换或刷新后会失效。项目已实现自动重新生成 Blob URL 的机制，确保资源正确加载。
+
+#### Q: 存储容量有限制吗？
+
+A: IndexedDB 存储容量由浏览器/Electron 限制，通常为磁盘空间的一定比例（如 50%）。对于大型媒体文件，建议定期清理不需要的文件。
+
+#### Q: 如何备份存储的数据？
+
+A: 找到对应平台的存储位置，复制 `IndexedDB` 文件夹到安全位置即可。
+
+#### Q: 存储路径可以自定义吗？
+
+A: 目前存储路径由 Electron 自动管理，未来版本计划支持自定义存储路径功能。
 
 ## 架构设计
 

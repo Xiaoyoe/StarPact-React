@@ -510,32 +510,40 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
                 <button
                   onClick={() => setShowSpeedMenu(!showSpeedMenu)}
                   className={cn(
-                    'text-[12px] px-2.5 py-1.5 rounded-xl transition-all cursor-pointer font-mono tabular-nums',
-                    playbackRate !== 1 ? 'text-violet-400 bg-violet-500/10' : 'text-white/50 hover:text-white hover:bg-white/[0.08]'
+                    'text-[12px] px-2.5 py-1.5 rounded-xl transition-all cursor-pointer font-mono tabular-nums'
                   )}
+                  style={{
+                    backgroundColor: playbackRate !== 1 ? 'var(--primary-light)' : 'var(--bg-tertiary)',
+                    color: playbackRate !== 1 ? 'var(--primary-color)' : 'var(--text-secondary)',
+                    border: `1px solid ${playbackRate !== 1 ? 'var(--primary-color)/30' : 'var(--border-color)'}`
+                  }}
                   title="播放速度"
                 >
                   {playbackRate === 1 ? '倍速' : `${playbackRate}x`}
                 </button>
                 {showSpeedMenu && (
                   <div
-                    className="absolute bottom-full right-0 mb-2 bg-[#14142a]/95 backdrop-blur-xl rounded-xl border border-white/[0.08] shadow-2xl overflow-hidden py-1.5 min-w-[120px]"
-                    style={{ animation: 'fade-in 0.15s ease-out' }}
+                    className="absolute bottom-full right-0 mb-2 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden py-1.5 min-w-[120px]"
+                    style={{ 
+                      animation: 'fade-in 0.15s ease-out',
+                      backgroundColor: 'var(--bg-secondary)',
+                      border: `1px solid var(--border-color)`
+                    }}
                   >
                     {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3].map((rate) => (
                       <button
                         key={rate}
                         onClick={() => changeSpeed(rate)}
-                        className={cn(
-                          'flex items-center justify-between w-full px-4 py-1.5 text-[12px] transition-colors cursor-pointer',
-                          rate === playbackRate
-                            ? 'bg-violet-600/30 text-violet-300 font-medium'
-                            : 'text-slate-400 hover:bg-white/[0.05] hover:text-white'
-                        )}
+                        className="flex items-center justify-between w-full px-4 py-1.5 text-[12px] transition-colors cursor-pointer"
+                        style={{
+                          backgroundColor: rate === playbackRate ? 'var(--primary-light)' : 'transparent',
+                          color: rate === playbackRate ? 'var(--primary-color)' : 'var(--text-secondary)',
+                          border: `1px solid ${rate === playbackRate ? 'var(--primary-color)/30' : 'transparent'}`
+                        }}
                       >
                         <span>{rate === 1 ? '正常' : `${rate}x`}</span>
                         {rate === playbackRate && (
-                          <svg className="w-3.5 h-3.5 text-violet-400" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" /></svg>
+                          <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--primary-color)' }}><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" /></svg>
                         )}
                       </button>
                     ))}
@@ -551,10 +559,13 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
                   if (document.pictureInPictureElement) document.exitPictureInPicture();
                   else v.requestPictureInPicture();
                 }}
-                className="p-2 rounded-full hover:bg-white/[0.1] transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 title="画中画"
               >
-                <svg className="w-[18px] h-[18px] text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <rect x="2" y="3" width="20" height="14" rx="2" />
                   <rect x="11" y="9" width="9" height="6" rx="1" className="fill-current opacity-30" />
                 </svg>
@@ -563,13 +574,16 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               {/* Fullscreen */}
               <button
                 onClick={toggleFullscreen}
-                className="p-2 rounded-full hover:bg-white/[0.1] transition-colors"
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                 title={isFullscreen ? '退出全屏 (F)' : '全屏 (F)'}
               >
                 {isFullscreen ? (
-                  <svg className="w-[18px] h-[18px] text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" /></svg>
+                  <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16h3v3h2v-5H5v2zm3-8H5v2h5V5H8v3zm6 11h2v-3h3v-2h-5v5zm2-11V5h-2v5h5V8h-3z" /></svg>
                 ) : (
-                  <svg className="w-[18px] h-[18px] text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" /></svg>
+                  <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24"><path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" /></svg>
                 )}
               </button>
             </div>
