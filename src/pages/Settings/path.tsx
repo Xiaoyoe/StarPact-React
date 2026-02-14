@@ -7,12 +7,14 @@ import { useToast } from '@/components/Toast';
 import { PromptTemplateStorage } from '@/services/storage/PromptTemplateStorage';
 import { VideoPlaylistStorage } from '@/services/storage/VideoPlaylistStorage';
 import { VideoPlaylistStorageSync } from '@/services/storage/VideoPlaylistStorage';
-import { Download, Upload, RefreshCw } from 'lucide-react';
+import { IndexedDBStorage } from '@/services/storage/IndexedDBStorage';
+import { Download, Upload, RefreshCw, FolderOpen, Database } from 'lucide-react';
 
 export function PathPage() {
   const { storagePath, setStoragePath } = useStore();
   const [templateStoragePath, setTemplateStoragePath] = useState('');
   const [videoPlaylistStoragePath, setVideoPlaylistStoragePath] = useState('');
+  const [indexedDbStoragePath, setIndexedDbStoragePath] = useState('');
   const toast = useToast();
 
   // 从配置加载提示词模板存储路径
@@ -40,6 +42,19 @@ export function PathPage() {
   useEffect(() => {
     configStorage.set('videoPlaylistStoragePath', videoPlaylistStoragePath);
   }, [videoPlaylistStoragePath]);
+
+  // 从配置加载IndexedDB存储路径
+  useEffect(() => {
+    const savedIndexedDbPath = configStorage.get('indexedDbStoragePath');
+    if (savedIndexedDbPath) {
+      setIndexedDbStoragePath(savedIndexedDbPath);
+    }
+  }, []);
+
+  // 保存IndexedDB存储路径到配置
+  useEffect(() => {
+    configStorage.set('indexedDbStoragePath', indexedDbStoragePath);
+  }, [indexedDbStoragePath]);
 
   // 保存存储路径到配置
   useEffect(() => {
@@ -122,6 +137,177 @@ export function PathPage() {
     } catch (error) {
       console.error('打开路径失败:', error);
       toast.error('打开路径失败: ' + (error as Error).message + '\n请检查控制台获取详细信息');
+    }
+  };
+
+  // 全导出IndexedDB数据的处理函数
+  const handleExportAllData = async () => {
+    try {
+      const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+      
+      if (!isElectron) {
+        toast.info('浏览器环境下无法导出IndexedDB数据');
+        return;
+      }
+
+      const fs = require('fs');
+      const path = require('path');
+      const dbStorage = IndexedDBStorage.getInstance();
+
+      // 创建导出主文件夹
+      if (!indexedDbStoragePath) {
+        toast.info('请先设置自定义存储路径');
+        return;
+      }
+      
+      let exportBaseDir = indexedDbStoragePath;
+      const exportDir = path.join(exportBaseDir, `indexedb-export-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+      if (!fs.existsSync(exportDir)) {
+        fs.mkdirSync(exportDir, { recursive: true });
+      }
+
+      // 导出配置数据
+      const configDir = path.join(exportDir, 'config');
+      fs.mkdirSync(configDir, { recursive: true });
+      const configData = await dbStorage.getAll('config');
+      fs.writeFileSync(
+        path.join(configDir, 'config.json'),
+        JSON.stringify(configData, null, 2),
+        'utf8'
+      );
+
+      // 导出图片和相册数据
+      const galleryDir = path.join(exportDir, 'gallery');
+      const imagesDir = path.join(galleryDir, 'images');
+      fs.mkdirSync(imagesDir, { recursive: true });
+      
+      const albums = await dbStorage.getAll('gallery');
+      fs.writeFileSync(
+        path.join(galleryDir, 'albums.json'),
+        JSON.stringify(albums, null, 2),
+        'utf8'
+      );
+
+      // 导出图片文件
+      for (const album of albums) {
+        for (const image of album.images) {
+          if (image.id) {
+            try {
+              const imageData = await dbStorage.getFile('images', image.id);
+              if (imageData && imageData.blob) {
+                const imagePath = path.join(imagesDir, `${image.id}${path.extname(image.name)}`);
+                const buffer = Buffer.from(await imageData.blob.arrayBuffer());
+                fs.writeFileSync(imagePath, buffer);
+              }
+            } catch (error) {
+              console.error(`导出图片失败 ${image.id}:`, error);
+            }
+          }
+        }
+      }
+
+      // 导出视频和播放列表数据
+      const videoDir = path.join(exportDir, 'video-playlists');
+      const videosDir = path.join(videoDir, 'videos');
+      fs.mkdirSync(videosDir, { recursive: true });
+      
+      const playlists = await dbStorage.getAll('video-playlists');
+      fs.writeFileSync(
+        path.join(videoDir, 'playlists.json'),
+        JSON.stringify(playlists, null, 2),
+        'utf8'
+      );
+
+      // 导出视频文件
+      for (const playlist of playlists) {
+        if (playlist.videos) {
+          for (const video of playlist.videos) {
+            if (video.id) {
+              try {
+                const videoData = await dbStorage.getFile('videos', video.id);
+                if (videoData && videoData.blob) {
+                  const videoPath = path.join(videosDir, `${video.id}${path.extname(video.name)}`);
+                  const buffer = Buffer.from(await videoData.blob.arrayBuffer());
+                  fs.writeFileSync(videoPath, buffer);
+                }
+              } catch (error) {
+                console.error(`导出视频失败 ${video.id}:`, error);
+              }
+            }
+          }
+        }
+      }
+
+      // 导出提示词模板数据
+      const templatesDir = path.join(exportDir, 'prompt-templates');
+      fs.mkdirSync(templatesDir, { recursive: true });
+      
+      const templates = await dbStorage.getAll('prompt-templates');
+      fs.writeFileSync(
+        path.join(templatesDir, 'templates.json'),
+        JSON.stringify(templates, null, 2),
+        'utf8'
+      );
+
+      toast.success(`IndexedDB数据导出成功！\n导出路径:\n${exportDir}\n\n包含内容:\n- 配置数据\n- 图片相册数据\n- 视频播放列表数据\n- 提示词模板数据`);
+
+    } catch (error) {
+      console.error('导出IndexedDB数据失败:', error);
+      toast.error('导出数据失败: ' + (error as Error).message);
+    }
+  };
+
+  // 打开IndexedDB存储位置的处理函数
+  const handleOpenIndexedDBLocation = async () => {
+    try {
+      const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+      
+      if (!isElectron) {
+        toast.info('浏览器环境下无法打开IndexedDB存储位置');
+        return;
+      }
+
+      const path = require('path');
+      let indexedDbPath;
+      
+      if (!indexedDbStoragePath) {
+        toast.info('请先设置自定义存储路径');
+        return;
+      }
+      
+      indexedDbPath = indexedDbStoragePath;
+
+      // 检查路径是否存在
+      const fs = require('fs');
+      if (!fs.existsSync(indexedDbPath)) {
+        toast.info(`IndexedDB存储路径不存在:\n${indexedDbPath}\n\n将尝试打开用户数据目录...`);
+        // 尝试打开上一级目录
+        const parentDir = path.dirname(indexedDbPath);
+        if (fs.existsSync(parentDir)) {
+          indexedDbPath = parentDir;
+        } else {
+          toast.error('无法找到有效的用户数据目录');
+          return;
+        }
+      }
+
+      // 根据操作系统打开路径
+      if (process.platform === 'win32') {
+        const { spawn } = require('child_process');
+        spawn('explorer', [indexedDbPath], { detached: true, stdio: 'ignore' });
+      } else if (process.platform === 'darwin') {
+        const { exec } = require('child_process');
+        exec(`open "${indexedDbPath}"`);
+      } else {
+        const { exec } = require('child_process');
+        exec(`xdg-open "${indexedDbPath}"`);
+      }
+
+      toast.success(`正在打开IndexedDB存储位置:\n${indexedDbPath}`);
+
+    } catch (error) {
+      console.error('打开IndexedDB存储位置失败:', error);
+      toast.error('打开存储位置失败: ' + (error as Error).message);
     }
   };
 
@@ -446,6 +632,557 @@ export function PathPage() {
             }}
           >
             <Upload size={14} /> 从本地文件导入
+          </button>
+        </div>
+      </div>
+
+      {/* IndexedDB Storage Management */}
+      <div
+        className="rounded-xl p-4"
+        style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+      >
+        <h3 className="mb-3 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          IndexedDB存储管理
+        </h3>
+        <p className="mb-4 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+          管理IndexedDB中的所有数据，包括导出和查看存储位置
+        </p>
+        <div className="flex gap-2 mb-4">
+          <input
+            type="text"
+            value={indexedDbStoragePath}
+            onChange={(e) => {
+              const newPath = e.target.value;
+              setIndexedDbStoragePath(newPath);
+            }}
+            placeholder="请输入自定义存储路径（留空使用默认路径）"
+            className="flex-1 rounded-lg px-3 py-2 text-sm"
+            style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+          />
+          <button
+            className="rounded-lg px-4 py-2 text-sm transition-colors whitespace-nowrap"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
+            onClick={async () => {
+              try {
+                // 检查是否为 Electron 环境
+                const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+                
+                if (isElectron && window.electronAPI && window.electronAPI.file) {
+                  // Electron 环境：使用新的 electronAPI.file.selectFolder
+                  const result = await window.electronAPI.file.selectFolder({
+                    title: '选择存储路径',
+                    defaultPath: indexedDbStoragePath || undefined
+                  });
+                  
+                  if (result.success && result.path) {
+                    setIndexedDbStoragePath(result.path);
+                    toast.success('已选择存储路径:\n' + result.path);
+                  } else if (result.error) {
+                    toast.error('选择文件夹失败: ' + result.error);
+                  }
+                } else if ('showDirectoryPicker' in window) {
+                  // 浏览器环境：使用现代 File System Access API
+                  const handle = await window.showDirectoryPicker();
+                  
+                  // 尝试获取完整路径
+                  let folderPath = '';
+                  
+                  // 检查是否能获取路径
+                  try {
+                    if ('path' in handle) {
+                      folderPath = (handle as any).path;
+                    }
+                  } catch {
+                    // 忽略错误
+                  }
+                  
+                  if (folderPath) {
+                    setIndexedDbStoragePath(folderPath);
+                    toast.success('已选择存储路径:\n' + folderPath);
+                  } else {
+                    toast.info('已选择文件夹，但无法获取完整路径\n请手动输入完整存储路径');
+                  }
+                } else {
+                  // 不支持现代 API 的浏览器环境
+                  toast.info('当前环境不支持文件夹选择\n请手动输入完整存储路径');
+                }
+              } catch (error) {
+                console.error('选择文件夹失败:', error);
+                // 忽略用户取消选择的情况
+                if ((error as Error).name !== 'AbortError') {
+                  toast.error('选择文件夹失败: ' + (error as Error).message);
+                }
+              }
+            }}
+          >
+            选择路径
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm transition-colors"
+            style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}
+            onClick={async () => {
+              try {
+                // 检查是否为 Electron 环境
+                const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+                
+                if (isElectron) {
+                  // 实现全导出功能
+                  await handleExportAllData();
+                } else {
+                  // 浏览器环境：显示提示信息
+                  toast.info('浏览器环境下无法导出IndexedDB数据');
+                }
+              } catch (error) {
+                console.error('导出数据失败:', error);
+                toast.error('导出数据失败: ' + (error as Error).message);
+              }
+            }}
+          >
+            <Database size={14} /> 全导出数据
+          </button>
+          <button
+            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm transition-colors"
+            style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}
+            onClick={async () => {
+              try {
+                // 检查是否为 Electron 环境
+                const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+                
+                if (isElectron) {
+                  // 实现打开存储位置功能
+                  await handleOpenIndexedDBLocation();
+                } else {
+                  // 浏览器环境：显示提示信息
+                  toast.info('浏览器环境下无法打开IndexedDB存储位置');
+                }
+              } catch (error) {
+                console.error('打开存储位置失败:', error);
+                toast.error('打开存储位置失败: ' + (error as Error).message);
+              }
+            }}
+          >
+            <FolderOpen size={14} /> 打开存储位置
+          </button>
+        </div>
+      </div>
+
+      {/* Storage Path */}
+      <div
+        className="rounded-xl p-4"
+        style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+      >
+        <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          路径自定义存储
+        </h3>
+        <p className="mb-3 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+          自定义数据存储路径，用于保存对话记录、模型配置等数据
+        </p>
+        <div className="flex gap-2 mb-3">
+          <input
+            type="text"
+            value={storagePath}
+            onChange={(e) => {
+              const newPath = e.target.value;
+              setStoragePath(newPath);
+            }}
+            placeholder="请输入存储路径"
+            className="flex-1 rounded-lg px-3 py-2 text-sm"
+            style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+          />
+          <button
+            className="rounded-lg px-4 py-2 text-sm transition-colors whitespace-nowrap"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
+            onClick={async () => {
+              try {
+                // 检查是否支持现代 File System Access API
+                if ('showDirectoryPicker' in window) {
+                  // 使用现代 File System Access API
+                  const handle = await window.showDirectoryPicker();
+                  
+                  // 尝试获取完整路径
+                  let folderPath = '';
+                  
+                  // 检查是否为 Electron 环境
+                  const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+                  
+                  if (isElectron) {
+                    // Electron 环境：通过文件句柄获取路径
+                    try {
+                      // 尝试直接访问路径（如果可用）
+                      if ('path' in handle) {
+                        folderPath = (handle as any).path;
+                      } else {
+                        // 回退到传统方法
+                        throw new Error('Handle does not have path property');
+                      }
+                    } catch {
+                      // 如果无法直接获取路径，使用传统方法
+                      const folderInput = document.createElement('input');
+                      folderInput.type = 'file';
+                      folderInput.webkitdirectory = true;
+                      folderInput.multiple = false;
+                      
+                      folderInput.onchange = (e) => {
+                        const target = e.target as HTMLInputElement;
+                        if (target.files && target.files.length > 0) {
+                          const file = target.files[0];
+                          if (file.path) {
+                            folderPath = file.path;
+                            const lastSeparator = Math.max(folderPath.lastIndexOf('\\'), folderPath.lastIndexOf('/'));
+                            if (lastSeparator > -1) {
+                              folderPath = folderPath.substring(0, lastSeparator);
+                            }
+                            setStoragePath(folderPath);
+                            toast.success('已选择存储路径:\n' + folderPath);
+                          }
+                        }
+                      };
+                      
+                      folderInput.click();
+                      return;
+                    }
+                  } else {
+                    // 浏览器环境：使用传统方法
+                    const folderInput = document.createElement('input');
+                    folderInput.type = 'file';
+                    folderInput.webkitdirectory = true;
+                    folderInput.multiple = false;
+                    
+                    folderInput.onchange = (e) => {
+                      const target = e.target as HTMLInputElement;
+                      if (target.files && target.files.length > 0) {
+                        const file = target.files[0];
+                        let path = '';
+                        
+                        if (file.path) {
+                          path = file.path;
+                          const lastSeparator = Math.max(path.lastIndexOf('\\'), path.lastIndexOf('/'));
+                          if (lastSeparator > -1) {
+                            path = path.substring(0, lastSeparator);
+                          }
+                        } else if (target.value) {
+                          path = target.value;
+                        }
+                        
+                        if (path) {
+                          setStoragePath(path);
+                          toast.success('已选择存储路径:\n' + path);
+                        } else {
+                          toast.info('已选择文件夹，但无法获取完整路径\n请手动输入完整存储路径');
+                        }
+                      }
+                    };
+                    
+                    folderInput.click();
+                    return;
+                  }
+                  
+                  if (folderPath) {
+                    setStoragePath(folderPath);
+                    toast.success('已选择存储路径:\n' + folderPath);
+                  }
+                } else {
+                  // 传统方法：使用 input[type="file"] 元素
+                  const folderInput = document.createElement('input');
+                  folderInput.type = 'file';
+                  folderInput.webkitdirectory = true;
+                  folderInput.multiple = false;
+                  
+                  // 关键：设置为只选择文件夹
+                  folderInput.setAttribute('webkitdirectory', 'true');
+                  folderInput.setAttribute('directory', 'true');
+                  
+                  // 监听选择事件
+                  folderInput.onchange = (e) => {
+                    const target = e.target as HTMLInputElement;
+                    if (target.files && target.files.length > 0) {
+                      // 获取第一个文件的路径
+                      const file = target.files[0];
+                      let folderPath = '';
+                      
+                      // 在不同环境中获取路径
+                      if (file.path) {
+                        // Electron 环境
+                        folderPath = file.path;
+                        // 确保我们获取的是文件夹路径，不是文件路径
+                        if (folderPath.includes('\\') || folderPath.includes('/')) {
+                          // 移除文件名，只保留文件夹路径
+                          const lastSeparator = Math.max(folderPath.lastIndexOf('\\'), folderPath.lastIndexOf('/'));
+                          if (lastSeparator > -1) {
+                            folderPath = folderPath.substring(0, lastSeparator);
+                          }
+                        }
+                      } else if (target.value) {
+                        // 浏览器环境
+                        folderPath = target.value;
+                      }
+                      
+                      if (folderPath) {
+                        setStoragePath(folderPath);
+                        toast.success('已选择存储路径:\n' + folderPath);
+                      } else {
+                        toast.info('已选择文件夹，但无法获取完整路径\n请手动输入完整存储路径');
+                      }
+                    }
+                  };
+                  
+                  // 触发文件夹选择对话框
+                  folderInput.click();
+                }
+              } catch (error) {
+                console.error('选择文件夹失败:', error);
+                // 忽略用户取消选择的情况
+                if ((error as Error).name !== 'AbortError') {
+                  toast.error('选择文件夹失败: ' + (error as Error).message);
+                }
+              }
+            }}
+          >
+            选择路径
+          </button>
+        </div>
+        <div className="flex gap-2">
+          <button
+            className="rounded-lg px-4 py-2 text-sm transition-colors whitespace-nowrap"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
+            onClick={async () => {
+              try {
+                // 检查是否为 Electron 环境
+                const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+                
+                if (isElectron && storagePath) {
+                  // 检查starpact-local文件夹是否存在
+                  const fullStoragePath = StorageManager.getFullStoragePath(storagePath);
+                  let fs;
+                  
+                  try {
+                    fs = require('fs');
+                  } catch (e) {
+                    console.error('无法加载 fs 模块:', e);
+                    toast.error('无法访问文件系统，请检查权限');
+                    return;
+                  }
+                  
+                  if (fs && fs.existsSync) {
+                    if (fs.existsSync(fullStoragePath)) {
+                      // 检查子目录
+                      const subDirectories = [
+                        StorageManager.getVideoPlaylistsPath(storagePath),
+                        StorageManager.getGalleryPath(storagePath),
+                        StorageManager.getConfigPath(storagePath)
+                      ];
+                      
+                      let allSubDirsExist = true;
+                      subDirectories.forEach(subDir => {
+                        if (!fs.existsSync(subDir)) {
+                          allSubDirsExist = false;
+                        }
+                      });
+                      
+                      if (allSubDirsExist) {
+                        toast.success('存储路径已存在，且包含所有必要的子目录:\n' + fullStoragePath);
+                      } else {
+                        toast.info('存储路径已存在，但可能缺少部分子目录:\n' + fullStoragePath);
+                      }
+                    } else {
+                      toast.info('存储路径不存在:\n' + fullStoragePath);
+                    }
+                  } else {
+                    toast.error('无法访问文件系统功能');
+                  }
+                } else if (!isElectron) {
+                  // 浏览器环境：显示提示信息
+                  toast.info('浏览器环境下无法检测存储路径');
+                } else {
+                  // 没有设置存储路径
+                  toast.info('请先设置存储路径');
+                }
+              } catch (error) {
+                console.error('检测路径失败:', error);
+                toast.error('检测路径失败: ' + (error as Error).message);
+              }
+            }}
+          >
+            检测路径
+          </button>
+          <button
+            className="rounded-lg px-4 py-2 text-sm transition-colors whitespace-nowrap"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
+            onClick={handleCreateStorageDir}
+          >
+            创建存储目录
+          </button>
+          <button
+            className="rounded-lg px-4 py-2 text-sm transition-colors whitespace-nowrap"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
+            onClick={handleOpenStoragePath}
+          >
+            打开路径
+          </button>
+        </div>
+      </div>
+
+      {/* Prompt Template Storage */}
+      <div
+        className="rounded-xl p-4"
+        style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+      >
+        <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+          提示词模板存储
+        </h3>
+        <p className="mb-3 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+          自定义提示词模板存储路径，用于导出和导入模板
+        </p>
+        <div className="flex gap-2 mb-3">
+          <input
+            type="text"
+            value={templateStoragePath}
+            onChange={(e) => {
+              const newPath = e.target.value;
+              setTemplateStoragePath(newPath);
+            }}
+            placeholder="请输入存储路径"
+            className="flex-1 rounded-lg px-3 py-2 text-sm"
+            style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+          />
+          <button
+            className="rounded-lg px-4 py-2 text-sm transition-colors whitespace-nowrap"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
+            onClick={async () => {
+              try {
+                // 检查是否为 Electron 环境
+                const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+                
+                if (isElectron) {
+                  // Electron 环境：使用传统方法直接选择文件夹
+                  const folderInput = document.createElement('input');
+                  folderInput.type = 'file';
+                  folderInput.webkitdirectory = true;
+                  folderInput.multiple = false;
+                  
+                  // 关键：设置为只选择文件夹
+                  folderInput.setAttribute('webkitdirectory', 'true');
+                  folderInput.setAttribute('directory', 'true');
+                  
+                  // 监听选择事件
+                  folderInput.onchange = (e) => {
+                    const target = e.target as HTMLInputElement;
+                    if (target.files && target.files.length > 0) {
+                      // 获取第一个文件的路径
+                      const file = target.files[0];
+                      let folderPath = '';
+                      
+                      // Electron 环境中直接获取路径
+                      if (file.path) {
+                        folderPath = file.path;
+                        // 确保我们获取的是文件夹路径，不是文件路径
+                        if (folderPath.includes('\\') || folderPath.includes('/')) {
+                          // 移除文件名，只保留文件夹路径
+                          const lastSeparator = Math.max(folderPath.lastIndexOf('\\'), folderPath.lastIndexOf('/'));
+                          if (lastSeparator > -1) {
+                            folderPath = folderPath.substring(0, lastSeparator);
+                          }
+                        }
+                      }
+                      
+                      if (folderPath) {
+                        setTemplateStoragePath(folderPath);
+                        toast.success('已选择存储路径:\n' + folderPath);
+                      } else {
+                        toast.info('已选择文件夹，但无法获取完整路径\n请手动输入完整存储路径');
+                      }
+                    }
+                  };
+                  
+                  // 触发文件夹选择对话框
+                  folderInput.click();
+                } else if ('showDirectoryPicker' in window) {
+                  // 浏览器环境：使用现代 File System Access API
+                  const handle = await window.showDirectoryPicker();
+                  
+                  // 尝试获取完整路径
+                  let folderPath = '';
+                  
+                  // 检查是否能获取路径
+                  try {
+                    if ('path' in handle) {
+                      folderPath = (handle as any).path;
+                    }
+                  } catch {
+                    // 忽略错误
+                  }
+                  
+                  if (folderPath) {
+                    setTemplateStoragePath(folderPath);
+                    toast.success('已选择存储路径:\n' + folderPath);
+                  } else {
+                    toast.info('已选择文件夹，但无法获取完整路径\n请手动输入完整存储路径');
+                  }
+                } else {
+                  // 不支持现代 API 的浏览器环境
+                  toast.info('当前环境不支持文件夹选择\n请手动输入完整存储路径');
+                }
+              } catch (error) {
+                console.error('选择文件夹失败:', error);
+                // 忽略用户取消选择的情况
+                if ((error as Error).name !== 'AbortError') {
+                  toast.error('选择文件夹失败: ' + (error as Error).message);
+                }
+              }
+            }}
+          >
+            选择路径
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm transition-colors"
+            style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}
+            onClick={async () => {
+              try {
+                // 检查是否为 Electron 环境
+                const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+                
+                if (isElectron) {
+                  // 实现全导出功能
+                  await handleExportAllData();
+                } else {
+                  // 浏览器环境：显示提示信息
+                  toast.info('浏览器环境下无法导出IndexedDB数据');
+                }
+              } catch (error) {
+                console.error('导出数据失败:', error);
+                toast.error('导出数据失败: ' + (error as Error).message);
+              }
+            }}
+          >
+            <Database size={14} /> 全导出数据
+          </button>
+          <button
+            className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm transition-colors"
+            style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}
+            onClick={async () => {
+              try {
+                // 检查是否为 Electron 环境
+                const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
+                
+                if (isElectron) {
+                  // 实现打开存储位置功能
+                  await handleOpenIndexedDBLocation();
+                } else {
+                  // 浏览器环境：显示提示信息
+                  toast.info('浏览器环境下无法打开IndexedDB存储位置');
+                }
+              } catch (error) {
+                console.error('打开存储位置失败:', error);
+                toast.error('打开存储位置失败: ' + (error as Error).message);
+              }
+            }}
+          >
+            <FolderOpen size={14} /> 打开存储位置
           </button>
         </div>
       </div>

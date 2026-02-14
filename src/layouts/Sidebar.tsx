@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   MessageSquare, Bot, Settings, ScrollText, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, Lock, Unlock, BookOpen
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, Lock, Unlock, BookOpen, Globe
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -18,6 +18,7 @@ export function Sidebar() {
     searchQuery, setSearchQuery,
     ollamaModalOpen, setOllamaModalOpen,
     theme, setTheme,
+    webShortcutPopupOpen, setWebShortcutPopupOpen,
   } = useStore();
 
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
@@ -261,97 +262,121 @@ export function Sidebar() {
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
               transition={{ duration: 0.3, ease: 'easeInOut' }}
-              style={{ overflow: 'hidden' }}
             >
-              {/* Ollama panel */}
-              <div
-                onClick={() => setOllamaModalOpen(true)}
-                className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
-                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
-              >
+              <div style={{ height: '150px', overflowY: 'auto', paddingRight: '4px', backgroundColor: 'transparent' }}>
+                {/* Web Shortcut panel */}
                 <div
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
-                  style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  onClick={() => setWebShortcutPopupOpen(true)}
+                  className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
+                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
                 >
-                  <Cpu size={13} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                    Ollama 管理
+                  <div
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                    style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  >
+                    <Globe size={13} />
                   </div>
-                  <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    本地 AI 模型
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                      快捷网页
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      快速打开常用网站
+                    </div>
                   </div>
+                  <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
                 </div>
-                <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
-              </div>
 
-              {/* Logs panel */}
-              <div
-                onClick={() => setLogsPanelOpen(true)}
-                className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
-                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
-              >
+                {/* Ollama panel */}
                 <div
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
-                  style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  onClick={() => setOllamaModalOpen(true)}
+                  className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
+                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
                 >
-                  <FileText size={13} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                    系统日志
+                  <div
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                    style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  >
+                    <Cpu size={13} />
                   </div>
-                  <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    {logs.length} 条记录
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                      Ollama 管理
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      本地 AI 模型
+                    </div>
                   </div>
+                  <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
                 </div>
-                <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
-              </div>
 
-              {/* Model indicator at bottom */}
-              <div
-                className="mx-3 mb-1 flex items-center gap-2 rounded-lg p-2.5"
-                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
-              >
+                {/* Logs panel */}
                 <div
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
-                  style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  onClick={() => setLogsPanelOpen(true)}
+                  className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
+                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
                 >
-                  {activeModel?.name.charAt(0) || 'A'}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {activeModel?.name || '未选择模型'}
+                  <div
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                    style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  >
+                    <FileText size={13} />
                   </div>
-                  <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    {activeModel?.provider || '--'}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                      系统日志
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      {logs.length} 条记录
+                    </div>
                   </div>
+                  <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
                 </div>
-                <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
-              </div>
 
-              {/* Theme toggle */}
-              <div
-                onClick={handleThemeToggle}
-                className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
-                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
-              >
+                {/* Model indicator at bottom */}
                 <div
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
-                  style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  className="mx-3 mb-1 flex items-center gap-2 rounded-lg p-2.5"
+                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
                 >
-                  {isLightTheme ? '☀️' : '🌙'}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                    {isLightTheme ? '浅色主题' : '深色主题'}
+                  <div
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                    style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  >
+                    {activeModel?.name.charAt(0) || 'A'}
                   </div>
-                  <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    {isLightTheme ? '经典明亮风格' : '护眼暗色风格'}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                      {activeModel?.name || '未选择模型'}
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      {activeModel?.provider || '--'}
+                    </div>
                   </div>
+                  <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
                 </div>
-                <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
+
+                {/* Theme toggle */}
+                <div
+                  onClick={handleThemeToggle}
+                  className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
+                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
+                >
+                  <div
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                    style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  >
+                    {isLightTheme ? '☀️' : '🌙'}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                      {isLightTheme ? '浅色主题' : '深色主题'}
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      {isLightTheme ? '经典明亮风格' : '护眼暗色风格'}
+                    </div>
+                  </div>
+                  <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
+                </div>
               </div>
             </motion.div>
           )}

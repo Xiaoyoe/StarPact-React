@@ -12,6 +12,7 @@ import VideoPlayerPage from '@/pages/VideoPlayer';
 import PromptTemplatesPage from '@/pages/PromptTemplates';
 import { LogsPanel } from '@/components/LogsPanel';
 import { OllamaModal } from '@/components/OllamaModal';
+import { WebShortcutPopup } from '@/components/WebShortcutPopup';
 import { ToastProvider } from '@/components/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -43,7 +44,7 @@ function PageContent() {
 }
 
 export function App() {
-  const { activePage, setActivePage } = useStore();
+  const { activePage, setActivePage, webShortcutPopupOpen, setWebShortcutPopupOpen } = useStore();
   const [showPathConfigModal, setShowPathConfigModal] = useState(false);
   const [pathsConfigured, setPathsConfigured] = useState(false);
 
@@ -103,6 +104,11 @@ export function App() {
         </main>
         <LogsPanel />
         <OllamaModal />
+        <AnimatePresence>
+          {webShortcutPopupOpen && (
+            <WebShortcutPopup onClose={() => setWebShortcutPopupOpen(false)} />
+          )}
+        </AnimatePresence>
         
         {/* 路径未配置提示弹窗 */}
         <AnimatePresence>

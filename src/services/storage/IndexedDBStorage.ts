@@ -13,7 +13,7 @@ export class IndexedDBStorage {
    */
   private constructor() {
     this.dbName = 'starpact-db';
-    this.dbVersion = 2; // 增加版本号，强制触发数据库升级
+    this.dbVersion = 3; // 增加版本号，强制触发数据库升级
     this.initDatabase();
   }
 
@@ -80,6 +80,11 @@ export class IndexedDBStorage {
         db.createObjectStore('videos', { keyPath: 'id' });
       }
 
+      // 创建网页快捷方式存储
+      if (!db.objectStoreNames.contains('web-shortcuts')) {
+        db.createObjectStore('web-shortcuts', { keyPath: 'id' });
+      }
+
       console.log('IndexedDB数据库结构更新成功');
     };
   }
@@ -94,6 +99,52 @@ export class IndexedDBStorage {
 
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
+      
+      request.onupgradeneeded = (event) => {
+        const db = (event.target as IDBOpenDBRequest).result;
+        
+        // 创建配置存储
+        if (!db.objectStoreNames.contains('config')) {
+          db.createObjectStore('config', { keyPath: 'key' });
+        }
+
+        // 创建相册存储
+        if (!db.objectStoreNames.contains('gallery')) {
+          db.createObjectStore('gallery', { keyPath: 'id' });
+        }
+
+        // 创建播放列表存储
+        if (!db.objectStoreNames.contains('playlists')) {
+          db.createObjectStore('playlists', { keyPath: 'id' });
+        }
+
+        // 创建视频播放列表存储
+        if (!db.objectStoreNames.contains('video-playlists')) {
+          db.createObjectStore('video-playlists', { keyPath: 'id' });
+        }
+
+        // 创建提示词模板存储
+        if (!db.objectStoreNames.contains('prompt-templates')) {
+          db.createObjectStore('prompt-templates', { keyPath: 'id' });
+        }
+
+        // 创建图片存储
+        if (!db.objectStoreNames.contains('images')) {
+          db.createObjectStore('images', { keyPath: 'id' });
+        }
+
+        // 创建视频存储
+        if (!db.objectStoreNames.contains('videos')) {
+          db.createObjectStore('videos', { keyPath: 'id' });
+        }
+
+        // 创建网页快捷方式存储
+        if (!db.objectStoreNames.contains('web-shortcuts')) {
+          db.createObjectStore('web-shortcuts', { keyPath: 'id' });
+        }
+
+        console.log('IndexedDB数据库结构更新成功');
+      };
       
       request.onsuccess = (event) => {
         this.db = (event.target as IDBOpenDBRequest).result;

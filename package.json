@@ -26,11 +26,15 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         },
         {
           "target": "portable",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ]
     },
@@ -53,6 +57,7 @@
     "electron-is-dev": "^2.0.0",
     "electron-store": "^11.0.2",
     "framer-motion": "^12.33.0",
+    "idb": "^8.0.3",
     "lucide-react": "^0.563.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",

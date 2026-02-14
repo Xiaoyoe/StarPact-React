@@ -120,6 +120,10 @@ interface AppState {
   // Search
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+
+  // Web Shortcuts
+  webShortcutPopupOpen: boolean;
+  setWebShortcutPopupOpen: (open: boolean) => void;
 }
 
 export const generateId = () => Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
@@ -511,6 +515,10 @@ export const useStore = create<AppState>((set) => ({
   searchQuery: '',
   setSearchQuery: (query) => set({ searchQuery: query }),
 
+  // Web Shortcuts
+  webShortcutPopupOpen: false,
+  setWebShortcutPopupOpen: (open) => set({ webShortcutPopupOpen: open }),
+
   // Ollama
   ollamaModalOpen: false,
   setOllamaModalOpen: (open) => set({ ollamaModalOpen: open }),
@@ -524,3 +532,4 @@ export const useStore = create<AppState>((set) => ({
   })),
   setOllamaLogs: (logs) => set({ ollamaLogs: logs }),
 }));
+

@@ -44,7 +44,8 @@ React_UI_Web/
 │   │   ├── NovelEditor.tsx # 小说编辑器组件
 │   │   ├── OllamaModal.tsx # Ollama 管理弹窗组件
 │   │   ├── Toast.tsx       # 提示组件
-│   │   └── VideoPlayer.tsx # 视频播放器组件
+│   │   ├── VideoPlayer.tsx # 视频播放器组件
+│   │   └── WebShortcutPopup.tsx # 网页快捷方式弹窗组件
 │   ├── constants/          # 常量定义
 │   │   ├── config.ts       # 配置常量
 │   │   └── themes.ts       # 主题常量
@@ -232,7 +233,16 @@ React_UI_Web/
 - **实时切换**：无需重启即可切换主题
 - **组件适配**：所有组件自动适配当前主题
 
-### 11. 存储管理
+### 11. 网页快捷方式
+- **快捷访问**：快速打开常用网页
+- **分类管理**：支持添加、编辑、删除网页快捷方式
+- **收藏功能**：标记常用网页为星标
+- **排序功能**：支持随机排序、正序和倒序
+- **JSON导入导出**：批量导入导出网页快捷方式
+- **主题适配**：自动适配应用主题颜色
+- **默认浏览器打开**：使用系统默认浏览器打开网页
+
+### 12. 存储管理
 - **配置存储**：保存应用配置和用户偏好
 - **路径配置**：自定义各模块的存储路径
 - **数据持久化**：确保数据在应用重启后保持
@@ -439,6 +449,7 @@ Ollama 集成采用模块化设计，易于扩展：
 | `PromptTemplateStorage` | 管理提示词模板 | `src/services/storage/PromptTemplateStorage.ts` |
 | `ConfigStorage` | 管理应用配置 | `src/services/storage/ConfigStorage.ts` |
 | `StorageManager` | 统一存储管理接口 | `src/services/storage/StorageManager.ts` |
+| `IndexedDBStorage` | 管理网页快捷方式 | `src/services/storage/IndexedDBStorage.ts` |
 
 ### 存储位置
 
@@ -516,6 +527,14 @@ Ollama 集成采用模块化设计，易于扩展：
 3. 模板数据存储到 IndexedDB
 4. 模板列表实时更新
 5. 重启应用后，模板数据保持不变
+
+#### 网页快捷方式存储工作流
+
+1. 用户添加或编辑网页快捷方式
+2. `IndexedDBStorage` 保存快捷方式数据
+3. 数据存储到 IndexedDB 的 `web-shortcuts` 对象存储空间
+4. 快捷方式列表实时更新
+5. 重启应用后，快捷方式数据保持不变
 
 ### 存储优化
 
@@ -722,6 +741,7 @@ MIT License
 - 内容比较工具
 - 日志系统
 - 提示模板管理
+- 网页快捷方式功能
 - 13 种主题支持
 - 存储管理系统
 

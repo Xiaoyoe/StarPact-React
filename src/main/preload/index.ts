@@ -44,6 +44,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('ollama:pullProgress', listener);
     },
   },
+  file: {
+    selectFolder: (options?: {
+      title?: string;
+      defaultPath?: string;
+    }) => ipcRenderer.invoke(IPC_CHANNELS.FILE.SELECT_FOLDER, options),
+  },
 });
 
 declare global {
@@ -68,6 +74,16 @@ declare global {
         onLog: (callback: (log: any) => void) => () => void;
         onChatChunk: (callback: (chunk: string) => void) => () => void;
         onPullProgress: (callback: (progress: any) => void) => () => void;
+      };
+      file: {
+        selectFolder: (options?: {
+          title?: string;
+          defaultPath?: string;
+        }) => Promise<{
+          success: boolean;
+          path: string | null;
+          error?: string;
+        }>;
       };
     };
   }

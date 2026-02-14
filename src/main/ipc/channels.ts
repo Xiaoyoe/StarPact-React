@@ -15,4 +15,7 @@ export const IPC_CHANNELS = {
     COPY_MODEL: 'ollama:copyModel',
     GENERATE_EMBEDDING: 'ollama:generateEmbedding',
   },
+  FILE: {
+    SELECT_FOLDER: 'file:selectFolder',
+  },
 } as const;
