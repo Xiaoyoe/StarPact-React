@@ -54,12 +54,16 @@ export class ConfigStorage {
    */
   private async loadConfig(): Promise<void> {
     try {
+      // 延迟加载，确保 IndexedDB 初始化完成
+      await new Promise(resolve => setTimeout(resolve, 500));
       const storedConfig = await this.dbStorage.get<{ data: AppConfig }>('config', 'app-config');
       if (storedConfig && storedConfig.data) {
         this.configCache = { ...this.getDefaultConfig(), ...storedConfig.data };
       }
     } catch (error) {
       console.error('加载配置失败:', error);
+      // 加载失败时使用默认配置
+      this.configCache = this.getDefaultConfig();
     }
   }
 

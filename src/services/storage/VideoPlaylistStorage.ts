@@ -31,7 +31,26 @@ export interface VideoPlaylist {
  * 视频播放列表存储服务
  */
 export class VideoPlaylistStorage {
-  private static dbStorage: IndexedDBStorage = IndexedDBStorage.getInstance();
+  private static get dbStorage(): IndexedDBStorage {
+    try {
+      return IndexedDBStorage.getInstance();
+    } catch (error) {
+      console.error('Failed to get IndexedDB instance:', error);
+      // 返回一个空对象，避免应用崩溃
+      return {
+        put: async () => {},
+        get: async () => null,
+        getAll: async () => [],
+        delete: async () => {},
+        clear: async () => {},
+        storeFile: async () => {},
+        getFile: async () => null,
+        exportDatabase: async () => new Blob(),
+        importDatabase: async () => {},
+        close: () => {}
+      } as any;
+    }
+  }
 
   /**
    * 保存视频播放列表

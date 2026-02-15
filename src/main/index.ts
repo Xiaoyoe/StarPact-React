@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { registerOllamaHandlers } from './ipc/ollamaHandlers';
 import { registerFileHandlers } from './ipc/fileHandlers';
+import { registerStorageHandlers } from './ipc/storageHandlers';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -34,6 +35,7 @@ function createWindow() {
 app.whenReady().then(() => {
   registerOllamaHandlers();
   registerFileHandlers();
+  registerStorageHandlers();
   createWindow();
 });
 

@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+const { contextBridge, ipcRenderer } = require('electron');
 
 // 暴露基本的electron API给渲染进程
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 对话框API
   dialog: {
     showOpenDialog: (options) => ipcRenderer.invoke('dialog:showOpenDialog', options),
+  },
+  
+  // 文件操作API
+  file: {
+    selectFolder: (options) => ipcRenderer.invoke('file:selectFolder', options),
   },
   
   // 监听路径未配置通知

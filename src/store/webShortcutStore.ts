@@ -107,5 +107,9 @@ export const useWebShortcutStore = create<WebShortcutState>((set) => ({
   },
 }));
 
-// Load shortcuts on initialization
-useWebShortcutStore.getState().loadShortcuts();
+// Load shortcuts on initialization (with error handling)
+setTimeout(() => {
+  useWebShortcutStore.getState().loadShortcuts().catch(error => {
+    console.error('Failed to load shortcuts during initialization:', error);
+  });
+}, 1000); // Delay to ensure IndexedDB is initialized

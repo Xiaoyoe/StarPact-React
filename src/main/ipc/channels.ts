@@ -18,4 +18,11 @@ export const IPC_CHANNELS = {
   FILE: {
     SELECT_FOLDER: 'file:selectFolder',
   },
+  STORAGE: {
+    GET_MODULE_PATH: 'storage:getModulePath',
+    SAVE_MODULE_PATH: 'storage:saveModulePath',
+    CHECK_ALL_PATHS: 'storage:checkAllPaths',
+    MIGRATE_MODULE_DATA: 'storage:migrateModuleData',
+    PATH_NOT_CONFIGURED: 'storage:pathNotConfigured',
+  },
 } as const;
