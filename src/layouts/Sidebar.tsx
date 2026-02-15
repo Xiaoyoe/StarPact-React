@@ -83,6 +83,7 @@ export function Sidebar() {
       style={{
         backgroundColor: 'var(--bg-secondary)',
         borderColor: 'var(--border-color)',
+        paddingBottom: '60px'
       }}
     >
       {/* Header */}
@@ -253,67 +254,25 @@ export function Sidebar() {
         </div>
       )}
 
+      {/* 内容占位符，确保展开面板位置一致 */}
+      <div className="flex-1"></div>
+
       {/* Bottom panels (with animation) */}
       {!sidebarCollapsed && (
         <AnimatePresence>
           {bottomPanelsVisible && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
+              initial={{ opacity: 0, y: 20, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: 20, height: 0 }}
               transition={{ duration: 0.3, ease: 'easeInOut' }}
+              className="w-full"
             >
-              <div style={{ height: '150px', overflowY: 'auto', paddingRight: '4px', backgroundColor: 'transparent' }}>
-                {/* Web Shortcut panel */}
-                <div
-                  onClick={() => setWebShortcutPopupOpen(true)}
-                  className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
-                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
-                >
-                  <div
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
-                    style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
-                  >
-                    <Globe size={13} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                      快捷网页
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      快速打开常用网站
-                    </div>
-                  </div>
-                  <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
-                </div>
-
-                {/* Ollama panel */}
-                <div
-                  onClick={() => setOllamaModalOpen(true)}
-                  className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
-                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
-                >
-                  <div
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
-                    style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
-                  >
-                    <Cpu size={13} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                      Ollama 管理
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      本地 AI 模型
-                    </div>
-                  </div>
-                  <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
-                </div>
-
+              <div className="px-3 py-2 space-y-1" style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
                 {/* Logs panel */}
                 <div
                   onClick={() => setLogsPanelOpen(true)}
-                  className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
                   style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
                 >
                   <div
@@ -333,9 +292,9 @@ export function Sidebar() {
                   <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
                 </div>
 
-                {/* Model indicator at bottom */}
+                {/* Model indicator */}
                 <div
-                  className="mx-3 mb-1 flex items-center gap-2 rounded-lg p-2.5"
+                  className="flex items-center gap-2 rounded-lg p-2.5"
                   style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
                 >
                   <div
@@ -355,24 +314,67 @@ export function Sidebar() {
                   <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
                 </div>
 
-                {/* Theme toggle */}
+                {/* Test Model 1 */}
                 <div
-                  onClick={handleThemeToggle}
-                  className="mx-3 mb-1 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
+                  className="flex items-center gap-2 rounded-lg p-2.5"
                   style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
                 >
                   <div
                     className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
                     style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
                   >
-                    {isLightTheme ? '☀️' : '🌙'}
+                    G
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                      {isLightTheme ? '浅色主题' : '深色主题'}
+                      gpt-4o
                     </div>
                     <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      {isLightTheme ? '经典明亮风格' : '护眼暗色风格'}
+                      OpenAI
+                    </div>
+                  </div>
+                  <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
+                </div>
+
+                {/* Test Model 2 */}
+                <div
+                  className="flex items-center gap-2 rounded-lg p-2.5"
+                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
+                >
+                  <div
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                    style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  >
+                    L
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                      llama3-70b
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      Meta
+                    </div>
+                  </div>
+                  <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
+                </div>
+
+                {/* Test Model 3 */}
+                <div
+                  className="flex items-center gap-2 rounded-lg p-2.5"
+                  style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
+                >
+                  <div
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                    style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                  >
+                    C
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                      claude-3-opus
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      Anthropic
                     </div>
                   </div>
                   <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
@@ -383,34 +385,70 @@ export function Sidebar() {
         </AnimatePresence>
       )}
 
-      {/* Toggle button for bottom panels */}
-      {!sidebarCollapsed && (
-        <div
-          onClick={() => setBottomPanelsVisible(!bottomPanelsVisible)}
-          className="mx-3 mb-3 flex cursor-pointer items-center gap-2 rounded-lg p-2.5"
-          style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
-        >
-          <div
-            className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
-            style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+      {/* Bottom navigation bar */}
+      <motion.div 
+        className="border-t" 
+        initial={{ width: sidebarCollapsed ? 68 : 280 }}
+        animate={{ width: sidebarCollapsed ? 68 : 280 }}
+        transition={{ duration: 0.2, ease: 'easeInOut' }}
+        style={{ 
+          backgroundColor: 'var(--bg-secondary)', 
+          borderColor: 'var(--border-color)',
+          position: 'fixed',
+          bottom: 0,
+          zIndex: 10
+        }}
+      >
+        <div className="flex items-center justify-around py-2">
+          {/* Theme toggle button */}
+          <button
+            onClick={handleThemeToggle}
+            className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+            style={{ color: 'var(--text-secondary)' }}
+            title={isLightTheme ? '切换到深色主题' : '切换到浅色主题'}
           >
-            {bottomPanelsVisible ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-              {bottomPanelsVisible ? '收起面板' : '展开面板'}
+            <div className="flex h-8 w-8 items-center justify-center rounded-md">
+              {isLightTheme ? '☀️' : '🌙'}
             </div>
-            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-              {bottomPanelsVisible ? '隐藏Ollama、日志和模型信息' : '显示Ollama、日志和模型信息'}
+          </button>
+
+          {/* Web shortcut button */}
+          <button
+            onClick={() => setWebShortcutPopupOpen(true)}
+            className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+            style={{ color: 'var(--text-secondary)' }}
+            title="快捷网页"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-md">
+              <Globe size={18} />
             </div>
-          </div>
-          {bottomPanelsVisible ? (
-            <Lock size={14} style={{ color: '#10b981' }} />
-          ) : (
-            <Unlock size={14} style={{ color: '#ef4444' }} />
-          )}
+          </button>
+
+          {/* Ollama manager button */}
+          <button
+            onClick={() => setOllamaModalOpen(true)}
+            className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+            style={{ color: 'var(--text-secondary)' }}
+            title="Ollama 管理器"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-md">
+              <Cpu size={18} />
+            </div>
+          </button>
+
+          {/* Expand/collapse button */}
+          <button
+            onClick={() => setBottomPanelsVisible(!bottomPanelsVisible)}
+            className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+            style={{ color: 'var(--text-secondary)' }}
+            title={bottomPanelsVisible ? '收起面板' : '展开面板'}
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-md">
+              {bottomPanelsVisible ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </div>
+          </button>
         </div>
-      )}
+      </motion.div>
     </motion.aside>
   );
 }

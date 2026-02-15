@@ -86,40 +86,6 @@ export class PromptTemplateStorage {
   }
 
   /**
-   * 从假数据文件导入初始模板
-   * @returns 导入的模板数量
-   */
-  static async importMockData(): Promise<number> {
-    try {
-      console.log('开始从假数据文件导入初始模板');
-      
-      // 读取假数据文件
-      const response = await fetch('/src/services/storage/mock-data/prompt-templates.json');
-      if (!response.ok) {
-        throw new Error('Failed to load mock data');
-      }
-      
-      const mockTemplates = await response.json() as Template[];
-      console.log('加载的假数据模板数量:', mockTemplates.length);
-      
-      // 保存到IndexedDB
-      let importedCount = 0;
-      for (const template of mockTemplates) {
-        const success = await this.saveTemplate(template);
-        if (success) {
-          importedCount++;
-        }
-      }
-      
-      console.log('成功导入的模板数量:', importedCount);
-      return importedCount;
-    } catch (error) {
-      console.error('导入假数据失败:', error);
-      return 0;
-    }
-  }
-
-  /**
    * 获取所有模板
    * @returns 模板数组
    */
@@ -129,16 +95,6 @@ export class PromptTemplateStorage {
       
       const templates = await this.dbStorage.getAll<Template>('prompt-templates');
       console.log('最终加载的模板数量:', templates.length);
-      
-      // 如果没有模板，自动导入假数据
-      if (templates.length === 0) {
-        console.log('没有找到模板，开始导入假数据');
-        await this.importMockData();
-        // 重新获取导入后的模板
-        const importedTemplates = await this.dbStorage.getAll<Template>('prompt-templates');
-        console.log('导入后加载的模板数量:', importedTemplates.length);
-        return importedTemplates;
-      }
       
       return templates;
     } catch (error) {
