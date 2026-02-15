@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { generateId } from './index';
-import { IndexedDBStorage } from '@/services/storage/IndexedDBStorage';
+import { WebShortcutStorage } from '@/services/storage/WebShortcutStorage';
 
 export interface WebShortcut {
   id: string;
@@ -23,8 +23,6 @@ interface WebShortcutState {
   loadShortcuts: () => Promise<void>;
 }
 
-const indexedDB = IndexedDBStorage.getInstance();
-
 export const useWebShortcutStore = create<WebShortcutState>((set) => ({
   shortcuts: [],
   addShortcut: async (shortcut) => {
@@ -35,8 +33,7 @@ export const useWebShortcutStore = create<WebShortcutState>((set) => ({
       updatedAt: Date.now(),
     };
     
-    // Save to IndexedDB
-    await indexedDB.put('web-shortcuts', newShortcut);
+    await WebShortcutStorage.saveShortcut('', newShortcut);
     
     set((state) => ({
       shortcuts: [newShortcut, ...state.shortcuts],
@@ -51,8 +48,7 @@ export const useWebShortcutStore = create<WebShortcutState>((set) => ({
             ...updates,
             updatedAt: Date.now(),
           };
-          // Save to IndexedDB
-          indexedDB.put('web-shortcuts', updatedShortcut);
+          WebShortcutStorage.saveShortcut('', updatedShortcut);
           return updatedShortcut;
         }
         return shortcut;
@@ -61,18 +57,14 @@ export const useWebShortcutStore = create<WebShortcutState>((set) => ({
     });
   },
   deleteShortcut: async (id) => {
-    // Delete from IndexedDB
-    await indexedDB.delete('web-shortcuts', id);
+    await WebShortcutStorage.deleteShortcut('', id);
     
     set((state) => ({
       shortcuts: state.shortcuts.filter((shortcut) => shortcut.id !== id),
     }));
   },
   deleteShortcuts: async (ids) => {
-    // Delete from IndexedDB
-    for (const id of ids) {
-      await indexedDB.delete('web-shortcuts', id);
-    }
+    await WebShortcutStorage.deleteShortcuts('', ids);
     
     set((state) => ({
       shortcuts: state.shortcuts.filter((shortcut) => !ids.includes(shortcut.id)),
@@ -87,8 +79,7 @@ export const useWebShortcutStore = create<WebShortcutState>((set) => ({
             isFavorite: !shortcut.isFavorite,
             updatedAt: Date.now(),
           };
-          // Save to IndexedDB
-          indexedDB.put('web-shortcuts', updatedShortcut);
+          WebShortcutStorage.saveShortcut('', updatedShortcut);
           return updatedShortcut;
         }
         return shortcut;
@@ -98,7 +89,7 @@ export const useWebShortcutStore = create<WebShortcutState>((set) => ({
   },
   loadShortcuts: async () => {
     try {
-      const shortcuts = await indexedDB.getAll<WebShortcut>('web-shortcuts');
+      const shortcuts = await WebShortcutStorage.getAllShortcuts('');
       set({ shortcuts: shortcuts.sort((a, b) => b.updatedAt - a.updatedAt) });
     } catch (error) {
       console.error('Failed to load shortcuts:', error);
