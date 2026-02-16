@@ -16,8 +16,6 @@ function VideoPlayerPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showToolbar, setShowToolbar] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
-  const [showSizeModal, setShowSizeModal] = useState(false);
-  const [playerSize, setPlayerSize] = useState<'small' | 'medium' | 'large'>('medium');
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [filters, setFilters] = useState<VideoFilters>(DEFAULT_FILTERS);
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
@@ -328,7 +326,7 @@ function VideoPlayerPage() {
         backgroundColor: 'var(--bg-secondary)',
         backdropFilter: 'blur(8px)'
       }}>
-        {/* Left: Logo and title */}
+        {/* Left: Video info */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ 
             background: 'linear-gradient(to right, var(--primary-color), var(--primary-dark))' 
@@ -338,34 +336,28 @@ function VideoPlayerPage() {
               <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold" style={{ 
-            background: 'linear-gradient(to right, var(--primary-color), var(--primary-dark))',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent'
-          }}>
-            VideoPlayer
-          </h1>
+          {currentVideo && (
+            <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              {videoInfo ? `${videoInfo.width}×${videoInfo.height}` : '未知分辨率'} - {formatFileSize(currentVideo.size)} - {formatDuration(currentVideo.duration)}
+            </div>
+          )}
+        </div>
+
+        {/* Center: Video filename */}
+        <div className="flex-1 text-center mx-6">
+          {currentVideo ? (
+            <h1 className="text-lg font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+              {currentVideo.name.replace(/\.[^/.]+$/, '')}
+            </h1>
+          ) : (
+            <h1 className="text-lg font-medium" style={{ color: 'var(--text-tertiary)' }}>
+              暂无视频文件
+            </h1>
+          )}
         </div>
 
         {/* Right: Actions */}
         <div className="flex items-center gap-3">
-          {/* Size control */}
-          <button
-            onClick={() => setShowSizeModal(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-300"
-            style={{ 
-              backgroundColor: 'var(--bg-tertiary)', 
-              color: 'var(--text-primary)',
-              border: `1px solid var(--border-color)`
-            }}
-            title="播放器大小"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-            </svg>
-            <span>{playerSize === 'small' ? '小' : playerSize === 'medium' ? '中' : '大'}</span>
-          </button>
-          
           <button
             onClick={openFilePicker}
             className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-300"
@@ -428,7 +420,7 @@ function VideoPlayerPage() {
                 className="w-full max-w-6xl mx-auto transition-all duration-300 ease-in-out"
                 style={{
                   aspectRatio: '16/9',
-                  maxHeight: playerSize === 'small' ? '60vh' : playerSize === 'medium' ? '80vh' : '90vh'
+                  maxHeight: '80vh'
                 }}
               >
                 {currentVideo ? (
@@ -448,25 +440,7 @@ function VideoPlayerPage() {
                       onTimeUpdate={(time) => setCurrentTime(time)}
                       onDuration={(dur) => setDuration(dur)}
                     />
-                    {/* Video info overlay */}
-                    <div className="absolute bottom-0 left-0 right-0 p-4" style={{ 
-                      background: 'linear-gradient(to top, rgba(0,0,0,0.8), transparent)'
-                    }}>
-                      <h3 className="text-lg font-semibold truncate" style={{ color: 'white' }}>
-                        {currentVideo.name.replace(/\.[^/.]+$/, '')}
-                      </h3>
-                      <div className="flex items-center gap-3 mt-1 text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                        <span>{formatDuration(currentVideo.duration)}</span>
-                        <span>•</span>
-                        <span>{formatFileSize(currentVideo.size)}</span>
-                        {videoInfo && (
-                          <>
-                            <span>•</span>
-                            <span>{videoInfo.width}×{videoInfo.height}</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
+
                   </div>
                 ) : (
                   <div className="w-full h-full flex flex-col items-center justify-center rounded-xl border-2 border-dashed" style={{ 
@@ -759,80 +733,6 @@ function VideoPlayerPage() {
         </div>
       </main>
 
-      {/* Size selection modal */}
-      {showSizeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ backgroundColor: 'var(--bg-modal-overlay)', backdropFilter: 'blur(4px)' }}>
-          <div 
-            className="border rounded-xl shadow-2xl p-6 max-w-md w-full mx-4 transition-all duration-300 ease-in-out"
-            style={{ 
-              backgroundColor: 'var(--bg-secondary)',
-              borderColor: 'var(--border-color)',
-              boxShadow: 'var(--shadow-lg)'
-            }}
-          >
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>选择播放器大小</h3>
-              <button
-                onClick={() => setShowSizeModal(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-                style={{ 
-                  backgroundColor: 'var(--bg-tertiary)', 
-                  color: 'var(--text-secondary)'
-                }}
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="space-y-3">
-              {
-                [
-                  { id: 'small', name: '小', desc: '适合小屏幕或多任务' },
-                  { id: 'medium', name: '中', desc: '默认大小，平衡显示效果' },
-                  { id: 'large', name: '大', desc: '全屏显示，最佳观看体验' }
-                ].map((size) => (
-                  <button
-                    key={size.id}
-                    onClick={() => {
-                      setPlayerSize(size.id as 'small' | 'medium' | 'large');
-                      setShowSizeModal(false);
-                    }}
-                    className="w-full p-4 rounded-lg border transition-all duration-300 ease-in-out flex items-center justify-between"
-                    style={{
-                      backgroundColor: size.id === playerSize ? 'var(--primary-light)' : 'var(--bg-tertiary)',
-                      borderColor: size.id === playerSize ? 'var(--primary-color)' : 'var(--border-color)',
-                      transform: size.id === playerSize ? 'scale(1.02)' : 'scale(1)'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (size.id !== playerSize) {
-                        e.currentTarget.style.transform = 'scale(1.02)';
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (size.id !== playerSize) {
-                        e.currentTarget.style.transform = 'scale(1)';
-                      }
-                    }}
-                  >
-                    <div>
-                      <div className="font-medium" style={{ color: size.id === playerSize ? 'var(--primary-color)' : 'var(--text-primary)' }}>
-                        {size.name}
-                      </div>
-                      <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>{size.desc}</div>
-                    </div>
-                    {size.id === playerSize && (
-                      <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--primary-color)' }}>
-                        <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-                      </svg>
-                    )}
-                  </button>
-                ))
-              }
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Shortcuts modal */}
       {showShortcuts && (

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { cn } from '@/utils/cn';
 import type { VideoFilters, VideoInfo } from '@/types/video';
 import { DEFAULT_FILTERS } from '@/types/video';
@@ -373,29 +373,32 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
           {/* Progress bar */}
           <div
             ref={progressRef}
-            className="group/prog relative h-[5px] w-full cursor-pointer rounded-full mb-3.5 hover:h-[7px] transition-all duration-200"
+            className="group/prog relative h-[6px] w-full cursor-pointer rounded-full mb-3.5 hover:h-[8px] transition-all duration-300"
             style={{ backgroundColor: 'var(--text-secondary)/12' }}
             onClick={handleProgressClick}
             onMouseDown={() => setIsDraggingProgress(true)}
             onMouseMove={handleProgressHover}
             onMouseLeave={() => setHoverTime(null)}
           >
+            {/* Timeline line */}
+            <div className="absolute left-0 right-0 h-[1px] bottom-[2px] opacity-60 transition-all duration-300 group-hover/prog:opacity-80" style={{ backgroundColor: 'var(--text-secondary)' }} />
             {/* Buffered */}
-            <div className="absolute h-full rounded-full" style={{ backgroundColor: 'var(--text-secondary)/08', width: `${bufferedPercent}%` }} />
+            <div className="absolute h-full rounded-full" style={{ backgroundColor: 'var(--text-secondary)/20', width: `${bufferedPercent}%` }} />
             {/* Progress */}
-            <div className="relative h-full rounded-full" style={{ backgroundColor: 'var(--primary-color)', boxShadow: `0 0 8px var(--primary-color)/40`, width: `${progress}%` }}>
+            <div className="relative h-full rounded-full transition-all duration-300" style={{ backgroundColor: 'var(--primary-color)', boxShadow: `0 0 10px var(--primary-color)/50`, width: `${progress}%` }}>
               {/* Thumb */}
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full shadow-lg opacity-0 group-hover/prog:opacity-100 scale-75 group-hover/prog:scale-100 transition-all duration-200 ring-2" style={{ backgroundColor: 'var(--text-primary)', boxShadow: `0 0 8px var(--primary-color)/40`, ringColor: 'var(--primary-color)/50' }} />
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full shadow-lg opacity-0 group-hover/prog:opacity-100 scale-75 group-hover/prog:scale-100 transition-all duration-300 ring-2" style={{ backgroundColor: 'var(--text-primary)', boxShadow: `0 0 10px var(--primary-color)/50`, ringColor: 'var(--primary-color)/50' }} />
             </div>
             {/* Hover time tooltip */}
             {hoverTime !== null && (
               <div
-                className="absolute -top-10 -translate-x-1/2 px-2.5 py-1 rounded-lg border text-[11px] tabular-nums pointer-events-none shadow-lg backdrop-blur-sm"
+                className="absolute -top-12 -translate-x-1/2 px-3 py-1.5 rounded-lg border text-[11px] tabular-nums pointer-events-none shadow-lg backdrop-blur-sm transition-all duration-300"
                 style={{ 
-                  left: Math.max(20, Math.min(hoverX, (progressRef.current?.clientWidth ?? 0) - 20)),
-                  backgroundColor: 'var(--bg-secondary)/90',
-                  borderColor: 'var(--text-secondary)/10',
-                  color: 'var(--text-primary)'
+                  left: Math.max(24, Math.min(hoverX, (progressRef.current?.clientWidth ?? 0) - 24)),
+                  backgroundColor: 'var(--bg-secondary)/95',
+                  borderColor: 'var(--text-secondary)/20',
+                  color: 'var(--text-primary)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
                 }}
               >
                 {formatTime(hoverTime)}
