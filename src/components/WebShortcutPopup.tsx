@@ -329,11 +329,12 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
         {/* Close button */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 cursor-pointer"
+          className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-full cursor-pointer"
           style={{
             transform: sidebarCollapsed ? 'translateY(-10px)' : 'translateY(0)',
             backgroundColor: 'var(--bg-tertiary)',
             color: 'var(--text-secondary)',
+            transition: 'transform 0.3s ease-in-out',
             '&:hover': {
               backgroundColor: 'var(--bg-hover)',
               color: 'var(--text-primary)'
@@ -437,11 +438,12 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
 
         {/* Right Panel - Toolbar */}
         <div 
-          className="border-l flex flex-col overflow-y-auto custom-scrollbar transition-all duration-300"
+          className="border-l flex flex-col overflow-y-auto custom-scrollbar"
           style={{
             width: sidebarCollapsed ? '60px' : '288px',
             borderColor: 'var(--border-color)',
             backgroundColor: 'var(--bg-secondary)',
+            transition: 'width 0.3s ease-in-out',
           }}
         >
           {/* Toolbar Header */}
