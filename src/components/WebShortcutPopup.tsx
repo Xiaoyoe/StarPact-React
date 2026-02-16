@@ -14,6 +14,8 @@ import {
   Trash,
   CheckCircle2,
   LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { useWebShortcutStore, type WebShortcut } from '@/store/webShortcutStore';
 import { cn } from '@/utils/cn';
@@ -57,6 +59,21 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
   const [isVisible, setIsVisible] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [sortMode, setSortMode] = useState<'normal' | 'reverse' | 'random'>('normal');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const toggleSidebar = () => {
+    if (!sidebarCollapsed) {
+      // 点击收缩时，检查是否打开了添加/编辑/删除模式
+      if (rightPanelMode !== 'idle') {
+        setRightPanelMode('idle');
+        setEditingId(null);
+        setSelectedIds([]);
+        setFormData(emptyForm);
+        setShowIconPicker(false);
+      }
+    }
+    setSidebarCollapsed(!sidebarCollapsed);
+  };
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -147,6 +164,9 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
 
   // Add mode
   const handleStartAdd = () => {
+    if (sidebarCollapsed) {
+      setSidebarCollapsed(false);
+    }
     setRightPanelMode('add');
     setEditingId(null);
     setFormData(emptyForm);
@@ -155,6 +175,9 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
 
   // Edit mode
   const handleStartEdit = (shortcut: WebShortcut) => {
+    if (sidebarCollapsed) {
+      setSidebarCollapsed(false);
+    }
     setRightPanelMode('edit');
     setEditingId(shortcut.id);
     setFormData({
@@ -169,6 +192,9 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
 
   // Delete mode
   const handleStartDelete = () => {
+    if (sidebarCollapsed) {
+      setSidebarCollapsed(false);
+    }
     setRightPanelMode('delete');
     setSelectedIds([]);
     setEditingId(null);
@@ -303,8 +329,9 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
         {/* Close button */}
         <button
           onClick={handleClose}
-          className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 cursor-pointer"
+          className="absolute top-4 right-4 z-20 w-8 h-8 flex items-center justify-center rounded-full transition-all duration-300 cursor-pointer"
           style={{
+            transform: sidebarCollapsed ? 'translateY(-10px)' : 'translateY(0)',
             backgroundColor: 'var(--bg-tertiary)',
             color: 'var(--text-secondary)',
             '&:hover': {
@@ -361,6 +388,21 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 9-4 4-4-4"/><path d="m21 15-4-4-4 4"/><path d="M7 5v14"/></svg>
                   )}
                 </button>
+                <button
+                  onClick={toggleSidebar}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
+                  style={{
+                    backgroundColor: 'var(--bg-tertiary)',
+                    color: 'var(--text-secondary)',
+                    '&:hover': {
+                      backgroundColor: 'var(--bg-hover)',
+                      color: 'var(--text-primary)'
+                    }
+                  }}
+                  title={sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+                >
+                  {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+                </button>
               </div>
             </div>
             <p className="text-sm mt-1 ml-12" style={{ color: 'var(--text-secondary)' }}>
@@ -395,8 +437,9 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
 
         {/* Right Panel - Toolbar */}
         <div 
-          className="w-72 border-l flex flex-col overflow-y-auto custom-scrollbar"
+          className="border-l flex flex-col overflow-y-auto custom-scrollbar transition-all duration-300"
           style={{
+            width: sidebarCollapsed ? '60px' : '288px',
             borderColor: 'var(--border-color)',
             backgroundColor: 'var(--bg-secondary)',
           }}
@@ -406,30 +449,33 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
             className="p-5 border-b"
             style={{ borderColor: 'var(--border-color)' }}
           >
-            <h3 
-              className="font-semibold text-base"
-              style={{ color: 'var(--text-primary)' }}
-            >
-              工具栏
-            </h3>
+            {!sidebarCollapsed && (
+              <h3 
+                className="font-semibold text-base"
+                style={{ color: 'var(--text-primary)' }}
+              >
+                工具栏
+              </h3>
+            )}
           </div>
 
           {rightPanelMode === 'idle' && (
-            <div className="p-5 space-y-3 flex-1">
+            <div className={sidebarCollapsed ? "p-2 flex flex-col items-center space-y-2 flex-1" : "p-5 space-y-3 flex-1"}>
               <button
                 onClick={handleStartAdd}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/30 transition-all duration-200 group cursor-pointer"
+                className={sidebarCollapsed ? "w-10 h-10 flex items-center justify-center rounded-xl bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/30 transition-all duration-200 group cursor-pointer" : "w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-gradient-to-r from-purple-500/20 to-blue-500/20 border border-purple-500/30 transition-all duration-200 group cursor-pointer"}
                 style={{ color: 'var(--text-primary)' }}
+                title="添加新网页"
               >
                 <div className="w-8 h-8 rounded-lg bg-purple-500/30 flex items-center justify-center group-hover:bg-purple-500/40 transition-colors">
                   <Plus size={16} style={{ color: 'var(--text-primary)' }} />
                 </div>
-                <span className="font-medium text-sm">添加新网页</span>
+                {!sidebarCollapsed && <span className="font-medium text-sm">添加新网页</span>}
               </button>
 
               <button
                 onClick={handleStartDelete}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 group cursor-pointer"
+                className={sidebarCollapsed ? "w-10 h-10 flex items-center justify-center rounded-xl border transition-all duration-200 group cursor-pointer" : "w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 group cursor-pointer"}
                 style={{
                   backgroundColor: 'var(--bg-tertiary)',
                   borderColor: 'var(--border-color)',
@@ -440,6 +486,7 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
                     color: 'var(--error-color)'
                   }
                 }}
+                title="批量删除"
               >
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
                   style={{
@@ -451,12 +498,12 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
                 >
                   <Trash2 size={16} />
                 </div>
-                <span className="font-medium text-sm">批量删除</span>
+                {!sidebarCollapsed && <span className="font-medium text-sm">批量删除</span>}
               </button>
 
               <button
                 onClick={handleExportJSON}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 group cursor-pointer"
+                className={sidebarCollapsed ? "w-10 h-10 flex items-center justify-center rounded-xl border transition-all duration-200 group cursor-pointer" : "w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 group cursor-pointer"}
                 style={{
                   backgroundColor: 'var(--bg-tertiary)',
                   borderColor: 'var(--border-color)',
@@ -467,6 +514,7 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
                     color: 'var(--primary-color)'
                   }
                 }}
+                title="导出 JSON"
               >
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
                   style={{
@@ -478,12 +526,12 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </div>
-                <span className="font-medium text-sm">导出 JSON</span>
+                {!sidebarCollapsed && <span className="font-medium text-sm">导出 JSON</span>}
               </button>
 
               <button
                 onClick={handleImportJSON}
-                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 group cursor-pointer"
+                className={sidebarCollapsed ? "w-10 h-10 flex items-center justify-center rounded-xl border transition-all duration-200 group cursor-pointer" : "w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all duration-200 group cursor-pointer"}
                 style={{
                   backgroundColor: 'var(--bg-tertiary)',
                   borderColor: 'var(--border-color)',
@@ -494,6 +542,7 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
                     color: 'var(--success-color)'
                   }
                 }}
+                title="导入 JSON"
               >
                 <div className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors"
                   style={{
@@ -505,7 +554,7 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 </div>
-                <span className="font-medium text-sm">导入 JSON</span>
+                {!sidebarCollapsed && <span className="font-medium text-sm">导入 JSON</span>}
               </button>
               <input
                 type="file"
@@ -518,7 +567,7 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
           )}
 
           {/* Stats - always at bottom of toolbar */}
-          {rightPanelMode === 'idle' && (
+          {rightPanelMode === 'idle' && !sidebarCollapsed && (
             <div 
               className="mt-auto pt-4 border-t"
               style={{ borderColor: 'var(--border-color)' }}
