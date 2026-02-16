@@ -1082,9 +1082,11 @@ interface ToolbarProps {
   onDeleteSelected: () => void;
   onImport: () => void;
   onImportFolder: () => void;
+  onClearAlbum: () => void;
   folderName: string;
   onToggleSidebar: () => void;
   showSidebar: boolean;
+  isSystemAlbum: boolean;
 } 
 
 export function GalleryToolbar({
@@ -1094,8 +1096,9 @@ export function GalleryToolbar({
   searchQuery, onSearchChange,
   selectedCount, totalCount,
   onSelectAll, onDeselectAll, onDeleteSelected,
-  onImport, onImportFolder, folderName,
-  onToggleSidebar, showSidebar
+  onImport, onImportFolder, onClearAlbum,
+  folderName, onToggleSidebar, showSidebar,
+  isSystemAlbum
 }: ToolbarProps) {
   
   const viewModes: { mode: ViewMode; icon: React.ReactNode; label: string }[] = [
@@ -1275,6 +1278,22 @@ export function GalleryToolbar({
               <FolderOpen size={14} />
               导入文件夹
             </button>
+            {!isSystemAlbum && (
+              <button
+                onClick={onClearAlbum}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                style={{
+                  backgroundColor: 'rgba(239, 68, 68, 0.2)',
+                  color: 'rgb(239, 68, 68)',
+                  '&:hover': {
+                    backgroundColor: 'rgba(239, 68, 68, 0.3)'
+                  }
+                }}
+              >
+                <Trash2 size={14} />
+                清空相册
+              </button>
+            )}
             <button
               onClick={onToggleSidebar}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"

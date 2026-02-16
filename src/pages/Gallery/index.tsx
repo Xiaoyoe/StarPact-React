@@ -425,6 +425,68 @@ export function GalleryPage() {
     }
   };
 
+  // 处理清空相册
+  const handleClearAlbum = async () => {
+    // 只清空非系统相册
+    if (activeFolderId === 'all' || activeFolderId === 'favorites') {
+      toast.info('系统相册无法清空');
+      return;
+    }
+    
+    // 修复路径重复问题
+    let baseStoragePath = storagePath;
+    if (storagePath && storagePath.endsWith('starpact-local')) {
+      baseStoragePath = storagePath.substring(0, storagePath.lastIndexOf('starpact-local')).trim();
+    }
+    
+    // 清空相册
+    if (storagePath) {
+      try {
+        // 调用清空相册方法
+        const success = await GalleryStorage.clearAlbum(baseStoragePath, activeFolderId);
+        if (success) {
+          console.log('清空相册成功:', activeFolderId);
+          toast.success('相册已清空');
+          
+          // 更新本地状态
+          setFolders(prevFolders => {
+            return prevFolders.map(folder => {
+              if (folder.id === activeFolderId) {
+                return {
+                  ...folder,
+                  images: []
+                };
+              }
+              // 同时更新全部图片文件夹
+              if (folder.id === 'all') {
+                const deletedImageIds = activeFolder.images.map(img => img.id);
+                return {
+                  ...folder,
+                  images: folder.images.filter(img => !deletedImageIds.includes(img.id))
+                };
+              }
+              // 同时更新收藏文件夹
+              if (folder.id === 'favorites') {
+                const deletedImageIds = activeFolder.images.map(img => img.id);
+                return {
+                  ...folder,
+                  images: folder.images.filter(img => !deletedImageIds.includes(img.id))
+                };
+              }
+              return folder;
+            });
+          });
+        } else {
+          console.error('清空相册失败:', activeFolderId);
+          toast.error('清空相册失败，请重试');
+        }
+      } catch (error) {
+        console.error('清空相册失败:', error);
+        toast.error('清空相册失败，请重试');
+      }
+    }
+  };
+
   // 处理图片查看
   const handleView = (index: number) => {
     setViewerIndex(index);
@@ -460,27 +522,28 @@ export function GalleryPage() {
 
   // 处理删除图片
   const handleDelete = async (ids: string[]) => {
+    // 修复路径重复问题
+    let baseStoragePath = storagePath;
+    if (storagePath && storagePath.endsWith('starpact-local')) {
+      baseStoragePath = storagePath.substring(0, storagePath.lastIndexOf('starpact-local')).trim();
+    }
+    
+    // 批量删除图片文件
+    if (storagePath) {
+      try {
+        // 批量删除images表中的图片文件
+        await GalleryStorage.deleteImageFiles(ids);
+        console.log('删除图片文件成功，数量:', ids.length);
+      } catch (error) {
+        console.error('删除图片文件失败:', error);
+      }
+    }
+    
     // 更新文件夹数据，移除删除的图片
     setFolders(prevFolders => {
       return prevFolders.map(folder => {
         // 过滤出未删除的图片
         const remainingImages = folder.images.filter(img => !ids.includes(img.id));
-        
-        // 如果有存储路径，删除本地文件系统中的图片文件
-        if (storagePath) {
-          ids.forEach(async imgId => {
-            const imgToDelete = folder.images.find(img => img.id === imgId);
-            if (imgToDelete && imgToDelete.path) {
-              try {
-                // 使用GalleryStorage删除图片文件
-                // 这里需要知道图片所属的相册ID，我们简化处理，使用默认相册
-                await GalleryStorage.deleteImageFile(storagePath, imgId, 'default');
-              } catch (error) {
-                console.error('删除图片文件失败:', error);
-              }
-            }
-          });
-        }
         
         return {
           ...folder,
@@ -760,9 +823,11 @@ export function GalleryPage() {
         onDeleteSelected={handleDeleteSelected}
         onImport={handleImport}
         onImportFolder={handleImportFolder}
+        onClearAlbum={handleClearAlbum}
         folderName={activeFolder.name}
         onToggleSidebar={() => setShowSidebar(!showSidebar)}
         showSidebar={showSidebar}
+        isSystemAlbum={activeFolderId === 'all' || activeFolderId === 'favorites'}
       />
 
       {/* 加载状态 */}

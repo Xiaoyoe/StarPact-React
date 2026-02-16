@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Database, Loader, X, Grid, ChevronUp, ChevronDown, PlayCircle } from 'lucide-react';
+import { Database, Loader, X, Grid, ChevronUp, ChevronDown } from 'lucide-react';
 import { useToast } from '@/components/Toast';
-import { VideoStorageTest } from '@/services/storage/VideoStorageTest';
 
 interface DataManagerProps {
   isOpen: boolean;
@@ -17,7 +16,7 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [dbData, setDbData] = useState<Record<string, any> | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [columns, setColumns] = useState<1 | 2 | 3>(2);
+  const [columns, setColumns] = useState<1 | 2 | 3>(1);
   const [showTableSort, setShowTableSort] = useState(false);
   const [directoryCollapsed, setDirectoryCollapsed] = useState(false);
   const [dataCollapsed, setDataCollapsed] = useState(false);
@@ -263,31 +262,6 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                   {isLoading ? <Loader size={14} className="animate-spin" /> : <Database size={14} />}
                   {isLoading ? '获取中...' : '获取indexDB数据'}
                 </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      setIsLoading(true);
-                      await VideoStorageTest.runAllTests();
-                      toast.success('视频存储测试完成');
-                    } catch (error) {
-                      console.error('测试失败:', error);
-                      toast.error('测试失败: ' + (error instanceof Error ? error.message : '未知错误'));
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  disabled={isLoading}
-                  className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm transition-colors whitespace-nowrap"
-                  style={{
-                    backgroundColor: 'var(--bg-tertiary)',
-                    color: 'var(--text-primary)',
-                    border: '1px solid var(--border-color)',
-                    opacity: isLoading ? 0.7 : 1
-                  }}
-                >
-                  {isLoading ? <Loader size={14} className="animate-spin" /> : <PlayCircle size={14} />}
-                  {isLoading ? '测试中...' : '运行视频存储测试'}
-                </button>
               </div>
 
               {/* 错误提示 */}
@@ -328,7 +302,16 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                       </button>
                     </div>
                     
-                    {!directoryCollapsed && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ 
+                        opacity: directoryCollapsed ? 0 : 1, 
+                        height: directoryCollapsed ? 0 : 'auto',
+                        scaleY: directoryCollapsed ? 0 : 1
+                      }}
+                      transition={{ duration: 0.3, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
                       <div>
                         {showTableSort ? (
                           <div className="grid grid-cols-2 gap-4">
@@ -378,7 +361,7 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                           </div>
                         )}
                       </div>
-                    )}
+                    </motion.div>
                   </div>
 
                   {/* 有数据的存储对象区域 */}
@@ -401,7 +384,16 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                       </button>
                     </div>
                     
-                    {!dataCollapsed && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ 
+                        opacity: dataCollapsed ? 0 : 1, 
+                        height: dataCollapsed ? 0 : 'auto',
+                        scaleY: dataCollapsed ? 0 : 1
+                      }}
+                      transition={{ duration: 0.3, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
                       <div>
                         {Object.entries(dbData).filter(([_, storeData]) => Array.isArray(storeData) && storeData.length > 0).length === 0 ? (
                           <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>没有有数据的存储</p>
@@ -430,7 +422,7 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                           </div>
                         )}
                       </div>
-                    )}
+                    </motion.div>
                   </div>
 
                   {/* 无数据的存储对象区域 */}
@@ -453,7 +445,16 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                       </button>
                     </div>
                     
-                    {!emptyDataCollapsed && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ 
+                        opacity: emptyDataCollapsed ? 0 : 1, 
+                        height: emptyDataCollapsed ? 0 : 'auto',
+                        scaleY: emptyDataCollapsed ? 0 : 1
+                      }}
+                      transition={{ duration: 0.3, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
                       <div>
                         {Object.entries(dbData).filter(([_, storeData]) => !Array.isArray(storeData) || storeData.length === 0).length === 0 ? (
                           <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>没有无数据的存储</p>
@@ -482,7 +483,7 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                           </div>
                         )}
                       </div>
-                    )}
+                    </motion.div>
                   </div>
 
                   {/* 数据介绍 */}

@@ -359,6 +359,57 @@ export class GalleryStorage {
       return null;
     }
   }
+
+  /**
+   * 批量删除图片文件
+   * @param imageIds 图片ID数组
+   * @returns 是否所有图片都删除成功
+   */
+  static async deleteImageFiles(imageIds: string[]): Promise<boolean> {
+    try {
+      for (const imageId of imageIds) {
+        await this.dbStorage.delete('images', imageId);
+      }
+      return true;
+    } catch (error) {
+      console.error('批量删除图片文件失败:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 清空相册并删除所有图片
+   * @param storagePath 存储路径（兼容参数）
+   * @param albumId 相册ID
+   * @returns 是否清空成功
+   */
+  static async clearAlbum(storagePath: string, albumId: string): Promise<boolean> {
+    try {
+      const album = await this.loadAlbum(storagePath, albumId);
+      if (!album) {
+        return false;
+      }
+
+      // 收集所有图片ID
+      const imageIds = album.images.map(img => img.id);
+
+      // 批量删除图片文件
+      if (imageIds.length > 0) {
+        await this.deleteImageFiles(imageIds);
+      }
+
+      // 清空相册
+      album.images = [];
+      album.updatedAt = Date.now();
+      album.coverImageId = undefined;
+
+      // 保存更新后的相册
+      return await this.saveAlbum(storagePath, album);
+    } catch (error) {
+      console.error('清空相册失败:', error);
+      return false;
+    }
+  }
 }
 
 /**
