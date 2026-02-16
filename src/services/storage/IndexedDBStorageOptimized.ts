@@ -60,9 +60,9 @@ export class IndexedDBStorageOptimized {
         galleryStore.createIndex('name', 'name', { unique: false });
       }
 
-      // 创建播放列表存储
-      if (!db.objectStoreNames.contains('playlists')) {
-        const playlistsStore = db.createObjectStore('playlists', { keyPath: 'id' });
+      // 创建视频播放列表存储
+      if (!db.objectStoreNames.contains('video-playlists')) {
+        const playlistsStore = db.createObjectStore('video-playlists', { keyPath: 'id' });
         playlistsStore.createIndex('name', 'name', { unique: false });
       }
 
@@ -454,7 +454,7 @@ export class IndexedDBStorageOptimized {
     const exportData: any = {};
     
     // 导出所有存储对象
-    const stores = ['config', 'gallery', 'playlists'];
+    const stores = ['config', 'gallery', 'video-playlists'];
     for (const store of stores) {
       exportData[store] = await this.getAll(store);
     }

@@ -1,4 +1,3 @@
-import { StorageManager } from './StorageManager';
 import { IndexedDBStorage } from './IndexedDBStorage';
 
 /**
@@ -58,9 +57,8 @@ export class VideoPlaylistStorage {
    * @param playlist 播放列表数据
    * @returns 是否保存成功
    */
-  static async savePlaylist(storagePath: string, playlist: VideoPlaylist): Promise<boolean> {
+  static async savePlaylist(_storagePath: string, playlist: VideoPlaylist): Promise<boolean> {
     try {
-      // 使用IndexedDB存储播放列表数据
       await this.dbStorage.put('video-playlists', playlist);
       return true;
     } catch (error) {
@@ -75,7 +73,7 @@ export class VideoPlaylistStorage {
    * @param playlistId 播放列表ID
    * @returns 播放列表数据或null
    */
-  static async loadPlaylist(storagePath: string, playlistId: string): Promise<VideoPlaylist | null> {
+  static async loadPlaylist(_storagePath: string, playlistId: string): Promise<VideoPlaylist | null> {
     try {
       const playlist = await this.dbStorage.get<VideoPlaylist>('video-playlists', playlistId);
       return playlist;
@@ -90,7 +88,7 @@ export class VideoPlaylistStorage {
    * @param storagePath 存储路径（兼容参数）
    * @returns 播放列表数组
    */
-  static async getAllPlaylists(storagePath: string): Promise<VideoPlaylist[]> {
+  static async getAllPlaylists(_storagePath: string): Promise<VideoPlaylist[]> {
     try {
       const playlists = await this.dbStorage.getAll<VideoPlaylist>('video-playlists');
       
@@ -140,7 +138,7 @@ export class VideoPlaylistStorage {
    * @param playlistId 播放列表ID
    * @returns 是否删除成功
    */
-  static async deletePlaylist(storagePath: string, playlistId: string): Promise<boolean> {
+  static async deletePlaylist(_storagePath: string, playlistId: string): Promise<boolean> {
     try {
       await this.dbStorage.delete('video-playlists', playlistId);
       return true;
@@ -157,9 +155,9 @@ export class VideoPlaylistStorage {
    * @param exportPath 导出路径（兼容参数）
    * @returns 是否导出成功
    */
-  static async exportPlaylist(storagePath: string, playlistId: string, exportPath: string): Promise<boolean> {
+  static async exportPlaylist(_storagePath: string, playlistId: string, _exportPath: string): Promise<boolean> {
     try {
-      const playlist = await this.loadPlaylist(storagePath, playlistId);
+      const playlist = await this.loadPlaylist('', playlistId);
       if (!playlist) {
         return false;
       }
@@ -190,10 +188,9 @@ export class VideoPlaylistStorage {
    * @param importPath 导入路径（兼容参数）
    * @returns 导入的播放列表或null
    */
-  static async importPlaylist(storagePath: string, importPath: string): Promise<VideoPlaylist | null> {
+  static async importPlaylist(_storagePath: string, _importPath: string): Promise<VideoPlaylist | null> {
     try {
-      // 注意：这里的importPath参数在IndexedDB环境中不使用
-      // 实际使用时应该使用importPlaylistFromFile方法
+      // 注意：此方法在IndexedDB环境中不使用，实际使用时应使用importPlaylistFromFile方法
       return null;
     } catch (error) {
       console.error('导入视频播放列表失败:', error);
@@ -207,7 +204,7 @@ export class VideoPlaylistStorage {
    * @param file 播放列表文件
    * @returns 导入的播放列表或null
    */
-  static async importPlaylistFromFile(storagePath: string, file: File): Promise<VideoPlaylist | null> {
+  static async importPlaylistFromFile(_storagePath: string, file: File): Promise<VideoPlaylist | null> {
     try {
       const text = await file.text();
       const playlist = JSON.parse(text) as VideoPlaylist;
@@ -215,11 +212,11 @@ export class VideoPlaylistStorage {
       // 生成新的ID，避免冲突
       const newPlaylist: VideoPlaylist = {
         ...playlist,
-        id: `playlist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        id: `playlist_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
         updatedAt: Date.now()
       };
 
-      await this.savePlaylist(storagePath, newPlaylist);
+      await this.savePlaylist('', newPlaylist);
       return newPlaylist;
     } catch (error) {
       console.error('从文件导入视频播放列表失败:', error);
@@ -233,12 +230,12 @@ export class VideoPlaylistStorage {
    * @param videoFile 视频文件
    * @returns 处理后的视频文件
    */
-  static async processVideoFile(storagePath: string, videoFile: VideoFile): Promise<VideoFile> {
+  static async processVideoFile(_storagePath: string, videoFile: VideoFile): Promise<VideoFile> {
     try {
       // 如果视频文件是File对象，存储到IndexedDB
       if (videoFile.file instanceof File) {
         const file = videoFile.file;
-        const videoId = videoFile.id || `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const videoId = videoFile.id || `video_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
         
         // 读取文件为Blob
         const blob = await new Promise<Blob>((resolve, reject) => {
@@ -317,24 +314,56 @@ export class VideoPlaylistStorage {
   }
 
   /**
-   * 同步方法（兼容旧代码）
+   * 清空所有视频播放列表
+   * @param storagePath 存储路径（兼容参数）
+   * @returns 是否清空成功
    */
-  static savePlaylistSync(storagePath: string, playlist: VideoPlaylist): boolean {
-    this.savePlaylist(storagePath, playlist).catch(console.error);
-    return true;
+  static async clearAllPlaylists(_storagePath: string): Promise<boolean> {
+    try {
+      await this.dbStorage.clear('video-playlists');
+      return true;
+    } catch (error) {
+      console.error('清空所有视频播放列表失败:', error);
+      return false;
+    }
   }
 
   /**
-   * 同步获取所有播放列表（兼容旧代码）
+   * 删除视频文件
+   * @param videoId 视频ID
+   * @returns 是否删除成功
    */
-  static getAllPlaylistsSync(storagePath: string): VideoPlaylist[] {
-    // 注意：这里返回空数组，实际使用时应该使用异步方法
-    return [];
+  static async deleteVideoFile(videoId: string): Promise<boolean> {
+    try {
+      await this.dbStorage.delete('videos', videoId);
+      return true;
+    } catch (error) {
+      console.error('删除视频文件失败:', error);
+      return false;
+    }
+  }
+
+  /**
+   * 批量删除视频文件
+   * @param videoIds 视频ID数组
+   * @returns 是否所有视频都删除成功
+   */
+  static async deleteVideoFiles(videoIds: string[]): Promise<boolean> {
+    try {
+      for (const videoId of videoIds) {
+        await this.deleteVideoFile(videoId);
+      }
+      return true;
+    } catch (error) {
+      console.error('批量删除视频文件失败:', error);
+      return false;
+    }
   }
 }
 
 /**
  * 同步方法（兼容旧代码）
+ * 注意：此方法仅用于兼容旧代码，实际使用时应优先使用异步方法
  */
 export class VideoPlaylistStorageSync {
   /**
@@ -348,16 +377,16 @@ export class VideoPlaylistStorageSync {
   /**
    * 同步加载播放列表（内部使用异步实现）
    */
-  static loadPlaylist(storagePath: string, playlistId: string): VideoPlaylist | null {
-    // 注意：这里返回null，实际使用时应该使用异步方法
+  static loadPlaylist(_storagePath: string, _playlistId: string): VideoPlaylist | null {
+    // 注意：同步方法无法返回异步加载的结果，实际使用时应该使用异步方法
     return null;
   }
 
   /**
    * 同步获取所有播放列表（内部使用异步实现）
    */
-  static getAllPlaylists(storagePath: string): VideoPlaylist[] {
-    // 注意：这里返回空数组，实际使用时应该使用异步方法
+  static getAllPlaylists(_storagePath: string): VideoPlaylist[] {
+    // 注意：同步方法无法返回异步加载的结果，实际使用时应该使用异步方法
     return [];
   }
 
@@ -380,8 +409,8 @@ export class VideoPlaylistStorageSync {
   /**
    * 同步导入播放列表（内部使用异步实现）
    */
-  static importPlaylist(storagePath: string, importPath: string): VideoPlaylist | null {
-    // 注意：这里返回null，实际使用时应该使用异步方法
+  static importPlaylist(_storagePath: string, _importPath: string): VideoPlaylist | null {
+    // 注意：同步方法无法返回异步加载的结果，实际使用时应该使用异步方法
     return null;
   }
 
@@ -440,7 +469,7 @@ export class VideoPlaylistStorageSync {
           // 生成新的ID，避免冲突
           const newPlaylist: VideoPlaylist = {
             ...playlist,
-            id: `playlist_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            id: `playlist_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`,
             updatedAt: Date.now()
           };
           

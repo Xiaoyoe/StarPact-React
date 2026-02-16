@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Database, Loader, X, Grid, ChevronUp, ChevronDown } from 'lucide-react';
+import { Database, Loader, X, Grid, ChevronUp, ChevronDown, PlayCircle } from 'lucide-react';
 import { useToast } from '@/components/Toast';
+import { VideoStorageTest } from '@/services/storage/VideoStorageTest';
 
 interface DataManagerProps {
   isOpen: boolean;
@@ -262,6 +263,31 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                   {isLoading ? <Loader size={14} className="animate-spin" /> : <Database size={14} />}
                   {isLoading ? '获取中...' : '获取indexDB数据'}
                 </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      setIsLoading(true);
+                      await VideoStorageTest.runAllTests();
+                      toast.success('视频存储测试完成');
+                    } catch (error) {
+                      console.error('测试失败:', error);
+                      toast.error('测试失败: ' + (error instanceof Error ? error.message : '未知错误'));
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
+                  disabled={isLoading}
+                  className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm transition-colors whitespace-nowrap"
+                  style={{
+                    backgroundColor: 'var(--bg-tertiary)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--border-color)',
+                    opacity: isLoading ? 0.7 : 1
+                  }}
+                >
+                  {isLoading ? <Loader size={14} className="animate-spin" /> : <PlayCircle size={14} />}
+                  {isLoading ? '测试中...' : '运行视频存储测试'}
+                </button>
               </div>
 
               {/* 错误提示 */}
@@ -314,10 +340,11 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                                 border: '1px solid var(--border-color)',
                                 color: 'var(--text-secondary)',
                                 maxHeight: '150px',
-                                fontFamily: 'monospace'
+                                fontFamily: 'monospace',
+                                userSelect: 'text'
                               }}
                             >
-                              <pre>{JSON.stringify(getDirectoryStructure(dbData), null, 2)}</pre>
+                              <pre style={{ userSelect: 'text' }}>{JSON.stringify(getDirectoryStructure(dbData), null, 2)}</pre>
                             </div>
                             
                             {/* 右侧：表结构排序 */}
@@ -328,10 +355,11 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                                 border: '1px solid var(--border-color)',
                                 color: 'var(--text-secondary)',
                                 maxHeight: '150px',
-                                fontFamily: 'monospace'
+                                fontFamily: 'monospace',
+                                userSelect: 'text'
                               }}
                             >
-                              <pre>{JSON.stringify(getTableStructureSort(dbData), null, 2)}</pre>
+                              <pre style={{ userSelect: 'text' }}>{JSON.stringify(getTableStructureSort(dbData), null, 2)}</pre>
                             </div>
                           </div>
                         ) : (
@@ -342,10 +370,11 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                               border: '1px solid var(--border-color)',
                               color: 'var(--text-secondary)',
                               maxHeight: '150px',
-                              fontFamily: 'monospace'
+                              fontFamily: 'monospace',
+                              userSelect: 'text'
                             }}
                           >
-                            <pre>{JSON.stringify(getDirectoryStructure(dbData), null, 2)}</pre>
+                            <pre style={{ userSelect: 'text' }}>{JSON.stringify(getDirectoryStructure(dbData), null, 2)}</pre>
                           </div>
                         )}
                       </div>
@@ -390,10 +419,11 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                                     border: '1px solid var(--border-color)',
                                     color: 'var(--text-secondary)',
                                     maxHeight: '200px',
-                                    fontFamily: 'monospace'
+                                    fontFamily: 'monospace',
+                                    userSelect: 'text'
                                   }}
                                 >
-                                  <pre>{JSON.stringify(storeData, null, 2)}</pre>
+                                  <pre style={{ userSelect: 'text' }}>{JSON.stringify(storeData, null, 2)}</pre>
                                 </div>
                               </div>
                             ))}
@@ -441,10 +471,11 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                                     border: '1px solid var(--border-color)',
                                     color: 'var(--text-tertiary)',
                                     maxHeight: '200px',
-                                    fontFamily: 'monospace'
+                                    fontFamily: 'monospace',
+                                    userSelect: 'text'
                                   }}
                                 >
-                                  <pre>此存储对象中没有数据</pre>
+                                  <pre style={{ userSelect: 'text' }}>此存储对象中没有数据</pre>
                                 </div>
                               </div>
                             ))}

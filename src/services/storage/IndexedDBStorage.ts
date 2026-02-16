@@ -42,52 +42,52 @@ export class IndexedDBStorage {
       console.log('IndexedDB初始化成功');
     };
 
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result;
-      
-      // 创建配置存储
-      if (!db.objectStoreNames.contains('config')) {
-        db.createObjectStore('config', { keyPath: 'key' });
-      }
-
-      // 创建相册存储
-      if (!db.objectStoreNames.contains('gallery')) {
-        db.createObjectStore('gallery', { keyPath: 'id' });
-      }
-
-      // 创建播放列表存储
-      if (!db.objectStoreNames.contains('playlists')) {
-        db.createObjectStore('playlists', { keyPath: 'id' });
-      }
-
-      // 创建视频播放列表存储
-      if (!db.objectStoreNames.contains('video-playlists')) {
-        db.createObjectStore('video-playlists', { keyPath: 'id' });
-      }
-
-      // 创建提示词模板存储
-      if (!db.objectStoreNames.contains('prompt-templates')) {
-        db.createObjectStore('prompt-templates', { keyPath: 'id' });
-      }
-
-      // 创建图片存储
-      if (!db.objectStoreNames.contains('images')) {
-        db.createObjectStore('images', { keyPath: 'id' });
-      }
-
-      // 创建视频存储
-      if (!db.objectStoreNames.contains('videos')) {
-        db.createObjectStore('videos', { keyPath: 'id' });
-      }
-
-      // 创建网页快捷方式存储
-      if (!db.objectStoreNames.contains('web-shortcuts')) {
-        db.createObjectStore('web-shortcuts', { keyPath: 'id' });
-      }
-
-      console.log('IndexedDB数据库结构更新成功');
-    };
+    request.onupgradeneeded = this.handleDatabaseUpgrade;
   }
+
+  /**
+   * 处理数据库升级
+   */
+  private handleDatabaseUpgrade = (event: IDBVersionChangeEvent): void => {
+    const db = (event.target as IDBOpenDBRequest).result;
+    
+    // 创建配置存储
+    if (!db.objectStoreNames.contains('config')) {
+      db.createObjectStore('config', { keyPath: 'key' });
+    }
+
+    // 创建相册存储
+    if (!db.objectStoreNames.contains('gallery')) {
+      db.createObjectStore('gallery', { keyPath: 'id' });
+    }
+
+    // 创建视频播放列表存储
+    if (!db.objectStoreNames.contains('video-playlists')) {
+      db.createObjectStore('video-playlists', { keyPath: 'id' });
+    }
+
+    // 创建提示词模板存储
+    if (!db.objectStoreNames.contains('prompt-templates')) {
+      db.createObjectStore('prompt-templates', { keyPath: 'id' });
+    }
+
+    // 创建图片存储
+    if (!db.objectStoreNames.contains('images')) {
+      db.createObjectStore('images', { keyPath: 'id' });
+    }
+
+    // 创建视频存储
+    if (!db.objectStoreNames.contains('videos')) {
+      db.createObjectStore('videos', { keyPath: 'id' });
+    }
+
+    // 创建网页快捷方式存储
+    if (!db.objectStoreNames.contains('web-shortcuts')) {
+      db.createObjectStore('web-shortcuts', { keyPath: 'id' });
+    }
+
+    console.log('IndexedDB数据库结构更新成功');
+  };
 
   /**
    * 获取数据库实例
@@ -100,51 +100,7 @@ export class IndexedDBStorage {
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(this.dbName, this.dbVersion);
       
-      request.onupgradeneeded = (event) => {
-        const db = (event.target as IDBOpenDBRequest).result;
-        
-        // 创建配置存储
-        if (!db.objectStoreNames.contains('config')) {
-          db.createObjectStore('config', { keyPath: 'key' });
-        }
-
-        // 创建相册存储
-        if (!db.objectStoreNames.contains('gallery')) {
-          db.createObjectStore('gallery', { keyPath: 'id' });
-        }
-
-        // 创建播放列表存储
-        if (!db.objectStoreNames.contains('playlists')) {
-          db.createObjectStore('playlists', { keyPath: 'id' });
-        }
-
-        // 创建视频播放列表存储
-        if (!db.objectStoreNames.contains('video-playlists')) {
-          db.createObjectStore('video-playlists', { keyPath: 'id' });
-        }
-
-        // 创建提示词模板存储
-        if (!db.objectStoreNames.contains('prompt-templates')) {
-          db.createObjectStore('prompt-templates', { keyPath: 'id' });
-        }
-
-        // 创建图片存储
-        if (!db.objectStoreNames.contains('images')) {
-          db.createObjectStore('images', { keyPath: 'id' });
-        }
-
-        // 创建视频存储
-        if (!db.objectStoreNames.contains('videos')) {
-          db.createObjectStore('videos', { keyPath: 'id' });
-        }
-
-        // 创建网页快捷方式存储
-        if (!db.objectStoreNames.contains('web-shortcuts')) {
-          db.createObjectStore('web-shortcuts', { keyPath: 'id' });
-        }
-
-        console.log('IndexedDB数据库结构更新成功');
-      };
+      request.onupgradeneeded = this.handleDatabaseUpgrade;
       
       request.onsuccess = (event) => {
         this.db = (event.target as IDBOpenDBRequest).result;
@@ -298,7 +254,7 @@ export class IndexedDBStorage {
     const exportData: any = {};
     
     // 导出所有存储对象
-    const stores = ['config', 'gallery', 'playlists', 'video-playlists', 'prompt-templates'];
+    const stores = ['config', 'gallery', 'video-playlists', 'prompt-templates'];
     for (const store of stores) {
       exportData[store] = await this.getAll(store);
     }

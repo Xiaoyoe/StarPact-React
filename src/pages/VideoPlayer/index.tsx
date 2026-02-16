@@ -121,11 +121,18 @@ function VideoPlayerPage() {
     });
   }, [storagePath]);
 
-  const removeFile = useCallback((id: string) => {
+  const removeFile = useCallback(async (id: string) => {
+    // 查找要删除的视频
+    const videoToRemove = playlist.find(v => v.id === id);
+    if (!videoToRemove) return;
+    
+    // 释放Blob URL
+    URL.revokeObjectURL(videoToRemove.url);
+    
+    // 更新本地状态
     setPlaylist(prev => {
       const index = prev.findIndex(v => v.id === id);
       if (index === -1) return prev;
-      URL.revokeObjectURL(prev[index].url);
       const updated = prev.filter(v => v.id !== id);
       setCurrentIndex(ci => {
         if (updated.length === 0) return -1;
@@ -135,10 +142,43 @@ function VideoPlayerPage() {
       });
       return updated;
     });
-  }, []);
+    
+    // 同步更新到IndexedDB
+    if (storagePath) {
+      try {
+        // 删除视频文件
+        await VideoPlaylistStorage.deleteVideoFile(id);
+        console.log('删除视频文件成功:', id);
+        
+        // 更新播放列表
+        const updatedPlaylist = playlist.filter(v => v.id !== id);
+        if (updatedPlaylist.length === 0) {
+          await VideoPlaylistStorage.clearAllPlaylists(storagePath);
+        } else {
+          const currentPlaylist: VideoPlaylist = {
+            id: 'default-playlist',
+            name: '默认播放列表',
+            videos: updatedPlaylist,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          };
+          await VideoPlaylistStorage.savePlaylist(storagePath, currentPlaylist);
+        }
+        console.log('更新播放列表成功');
+      } catch (error) {
+        console.error('更新IndexedDB数据失败:', error);
+      }
+    }
+  }, [playlist, storagePath]);
 
-  const clearPlaylist = useCallback(() => {
-    playlist.forEach(v => URL.revokeObjectURL(v.url));
+  const clearPlaylist = useCallback(async () => {
+    // 收集视频ID并释放Blob URL
+    const videoIds = playlist.map(v => {
+      URL.revokeObjectURL(v.url);
+      return v.id;
+    });
+    
+    // 清空本地状态
     setPlaylist([]);
     setCurrentIndex(-1);
     setVideoInfo(null);
@@ -146,7 +186,24 @@ function VideoPlayerPage() {
     setIsPlaying(false);
     setCurrentTime(0);
     setDuration(0);
-  }, [playlist]);
+    
+    // 清空IndexedDB中的数据
+    if (storagePath) {
+      try {
+        // 批量删除视频文件
+        if (videoIds.length > 0) {
+          await VideoPlaylistStorage.deleteVideoFiles(videoIds);
+          console.log('删除视频文件成功，数量:', videoIds.length);
+        }
+        
+        // 清空播放列表
+        await VideoPlaylistStorage.clearAllPlaylists(storagePath);
+        console.log('清空播放列表成功');
+      } catch (error) {
+        console.error('清空IndexedDB数据失败:', error);
+      }
+    }
+  }, [playlist, storagePath]);
 
   const shufflePlaylist = useCallback(() => {
     setPlaylist(prev => {
