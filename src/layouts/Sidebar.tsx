@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   MessageSquare, Bot, Settings, ScrollText, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, Lock, Unlock, BookOpen, Globe
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, Lock, Unlock, BookOpen, Globe, Database
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -19,6 +19,7 @@ export function Sidebar() {
     ollamaModalOpen, setOllamaModalOpen,
     theme, setTheme,
     webShortcutPopupOpen, setWebShortcutPopupOpen,
+    dataManagerOpen, setDataManagerOpen,
   } = useStore();
 
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
@@ -314,23 +315,24 @@ export function Sidebar() {
                   <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
                 </div>
 
-                {/* Test Model 1 */}
+                {/* Database indicator */}
                 <div
-                  className="flex items-center gap-2 rounded-lg p-2.5"
+                  onClick={() => setDataManagerOpen(true)}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg p-2.5 transition-colors hover:opacity-90"
                   style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
                 >
                   <div
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                    className="flex h-7 w-7 items-center justify-center rounded-md"
                     style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
                   >
-                    G
+                    <Database size={14} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                      gpt-4o
+                      数据库管理
                     </div>
                     <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      OpenAI
+                      查看本地存储数据
                     </div>
                   </div>
                   <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />

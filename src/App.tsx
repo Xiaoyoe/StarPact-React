@@ -13,6 +13,7 @@ import PromptTemplatesPage from '@/pages/PromptTemplates';
 import { LogsPanel } from '@/components/LogsPanel';
 import { OllamaModal } from '@/components/OllamaModal';
 import { WebShortcutPopup } from '@/components/WebShortcutPopup';
+import { DataManager } from '@/components/DataManager';
 import { ToastProvider } from '@/components/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -44,7 +45,7 @@ function PageContent() {
 }
 
 export function App() {
-  const { activePage, setActivePage, webShortcutPopupOpen, setWebShortcutPopupOpen } = useStore();
+  const { activePage, setActivePage, webShortcutPopupOpen, setWebShortcutPopupOpen, dataManagerOpen, setDataManagerOpen } = useStore();
   const [showPathConfigModal, setShowPathConfigModal] = useState(false);
   const [pathsConfigured, setPathsConfigured] = useState(false);
 
@@ -103,12 +104,13 @@ export function App() {
           <PageContent />
         </main>
         <LogsPanel />
-        <OllamaModal />
-        <AnimatePresence>
-          {webShortcutPopupOpen && (
-            <WebShortcutPopup onClose={() => setWebShortcutPopupOpen(false)} />
-          )}
-        </AnimatePresence>
+      <OllamaModal />
+      <AnimatePresence>
+        {webShortcutPopupOpen && (
+          <WebShortcutPopup onClose={() => setWebShortcutPopupOpen(false)} />
+        )}
+      </AnimatePresence>
+      <DataManager isOpen={dataManagerOpen} onClose={() => setDataManagerOpen(false)} />
         
         {/* 路径未配置提示弹窗 */}
         <AnimatePresence>

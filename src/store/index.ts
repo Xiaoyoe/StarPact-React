@@ -124,6 +124,10 @@ interface AppState {
   // Web Shortcuts
   webShortcutPopupOpen: boolean;
   setWebShortcutPopupOpen: (open: boolean) => void;
+
+  // Data Manager
+  dataManagerOpen: boolean;
+  setDataManagerOpen: (open: boolean) => void;
 }
 
 export const generateId = () => Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
@@ -518,6 +522,10 @@ export const useStore = create<AppState>((set) => ({
   // Web Shortcuts
   webShortcutPopupOpen: false,
   setWebShortcutPopupOpen: (open) => set({ webShortcutPopupOpen: open }),
+
+  // Data Manager
+  dataManagerOpen: false,
+  setDataManagerOpen: (open) => set({ dataManagerOpen: open }),
 
   // Ollama
   ollamaModalOpen: false,
