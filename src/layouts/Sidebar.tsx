@@ -399,55 +399,97 @@ export function Sidebar() {
           zIndex: 10
         }}
       >
-        <div className="flex items-center justify-around py-2">
-          {/* Theme toggle button */}
-          <button
-            onClick={handleThemeToggle}
-            className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
-            style={{ color: 'var(--text-secondary)' }}
-            title={isLightTheme ? '切换到深色主题' : '切换到浅色主题'}
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-md">
-              {isLightTheme ? '☀️' : '🌙'}
-            </div>
-          </button>
+        {sidebarCollapsed ? (
+          /* 侧边栏收缩状态：垂直排列，只显示三个按钮 */
+          <div className="flex flex-col items-center justify-center py-2 gap-2">
+            {/* Web shortcut button */}
+            <button
+              onClick={() => setWebShortcutPopupOpen(true)}
+              className="flex items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              style={{ color: 'var(--text-secondary)' }}
+              title="快捷网页"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-md">
+                <Globe size={18} />
+              </div>
+            </button>
 
-          {/* Web shortcut button */}
-          <button
-            onClick={() => setWebShortcutPopupOpen(true)}
-            className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
-            style={{ color: 'var(--text-secondary)' }}
-            title="快捷网页"
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-md">
-              <Globe size={18} />
-            </div>
-          </button>
+            {/* Ollama manager button */}
+            <button
+              onClick={() => setOllamaModalOpen(true)}
+              className="flex items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              style={{ color: 'var(--text-secondary)' }}
+              title="Ollama 管理器"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-md">
+                <Cpu size={18} />
+              </div>
+            </button>
 
-          {/* Ollama manager button */}
-          <button
-            onClick={() => setOllamaModalOpen(true)}
-            className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
-            style={{ color: 'var(--text-secondary)' }}
-            title="Ollama 管理器"
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-md">
-              <Cpu size={18} />
-            </div>
-          </button>
+            {/* Theme toggle button */}
+            <button
+              onClick={handleThemeToggle}
+              className="flex items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              style={{ color: 'var(--text-secondary)' }}
+              title={isLightTheme ? '切换到深色主题' : '切换到浅色主题'}
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-md">
+                {isLightTheme ? '☀️' : '🌙'}
+              </div>
+            </button>
+          </div>
+        ) : (
+          /* 侧边栏展开状态：水平排列，显示四个按钮 */
+          <div className="flex items-center justify-around py-2">
+            {/* Theme toggle button */}
+            <button
+              onClick={handleThemeToggle}
+              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              style={{ color: 'var(--text-secondary)' }}
+              title={isLightTheme ? '切换到深色主题' : '切换到浅色主题'}
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-md">
+                {isLightTheme ? '☀️' : '🌙'}
+              </div>
+            </button>
 
-          {/* Expand/collapse button */}
-          <button
-            onClick={() => setBottomPanelsVisible(!bottomPanelsVisible)}
-            className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
-            style={{ color: 'var(--text-secondary)' }}
-            title={bottomPanelsVisible ? '收起面板' : '展开面板'}
-          >
-            <div className="flex h-8 w-8 items-center justify-center rounded-md">
-              {bottomPanelsVisible ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-            </div>
-          </button>
-        </div>
+            {/* Web shortcut button */}
+            <button
+              onClick={() => setWebShortcutPopupOpen(true)}
+              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              style={{ color: 'var(--text-secondary)' }}
+              title="快捷网页"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-md">
+                <Globe size={18} />
+              </div>
+            </button>
+
+            {/* Ollama manager button */}
+            <button
+              onClick={() => setOllamaModalOpen(true)}
+              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              style={{ color: 'var(--text-secondary)' }}
+              title="Ollama 管理器"
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-md">
+                <Cpu size={18} />
+              </div>
+            </button>
+
+            {/* Expand/collapse button */}
+            <button
+              onClick={() => setBottomPanelsVisible(!bottomPanelsVisible)}
+              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              style={{ color: 'var(--text-secondary)' }}
+              title={bottomPanelsVisible ? '收起面板' : '展开面板'}
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-md">
+                {bottomPanelsVisible ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+              </div>
+            </button>
+          </div>
+        )}
       </motion.div>
     </motion.aside>
   );
