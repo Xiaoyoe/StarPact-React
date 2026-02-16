@@ -1,0 +1,165 @@
+.container {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  z-index: 100;
+}
+
+.navButton {
+  width: 40px;
+  height: 24px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.navButton:hover {
+  background-color: var(--bg-tertiary);
+  transform: scale(1.05);
+  border-color: var(--primary-color);
+}
+
+.navPointsContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-height: 400px;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.navPointsContainer::-webkit-scrollbar {
+  width: 2px;
+}
+
+.navPointsContainer::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.navPointsContainer::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 1px;
+}
+
+.navPoint {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 12px;
+  width: 100%;
+  min-height: 32px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.navPoint:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.navPointIndicator {
+  width: 20px;
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--text-tertiary);
+  transition: all 0.2s ease;
+}
+
+.navPoint:hover .navPointIndicator {
+  background-color: var(--primary-color);
+  width: 24px;
+}
+
+.navPointHovered .navPointIndicator {
+  background-color: var(--primary-color);
+  width: 24px;
+}
+
+.previewBox {
+  position: absolute;
+  left: -350px;
+  top: 50%;
+  transform: translateY(-50%);
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 10px 16px;
+  max-width: 300px;
+  box-shadow: var(--shadow-lg);
+  z-index: 9999;
+  pointer-events: none;
+  right: auto;
+  display: block !important;
+  min-width: 150px;
+  min-height: 30px;
+  white-space: normal;
+  word-wrap: break-word;
+}
+
+.previewText {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  margin: 0;
+  word-wrap: break-word;
+  white-space: normal;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.previewText::-webkit-scrollbar {
+  width: 2px;
+}
+
+.previewText::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.previewText::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 1px;
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .container {
+    right: 10px;
+  }
+  
+  .previewBox {
+    max-width: 150px;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    right: 8px;
+  }
+  
+  .navButton {
+    width: 28px;
+    height: 28px;
+  }
+  
+  .navButton svg {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .previewBox {
+    display: none;
+  }
+}

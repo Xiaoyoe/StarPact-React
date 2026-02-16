@@ -255,7 +255,7 @@ export function Sidebar() {
       )}
 
       {/* 内容占位符，确保展开面板位置一致 */}
-      <div className="flex-1"></div>
+      {activePage !== 'chat' && <div className="flex-1"></div>}
 
       {/* Bottom panels (with animation) */}
       {!sidebarCollapsed && (

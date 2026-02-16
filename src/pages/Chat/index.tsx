@@ -11,6 +11,7 @@ import { useStore, generateId } from '@/store';
 import type { ChatMessage } from '@/store';
 import { cn } from '@/utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ChatQuickNav } from '@/components/ChatQuickNav';
 
 // Simulated AI responses
 const aiResponses = [
@@ -162,7 +163,7 @@ function CodeBlock({ language, children }: { language: string; children: string 
 
 function MessageBubble({ message, isLast }: { message: ChatMessage; isLast: boolean }) {
   const isUser = message.role === 'user';
-  const [showActions, setShowActions] = useState(false);
+  const [showActions, setShowActions] = useState(true);
 
   const formatTime = (ts: number) => {
     const d = new Date(ts);
@@ -175,8 +176,7 @@ function MessageBubble({ message, isLast }: { message: ChatMessage; isLast: bool
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2 }}
       className={cn("group flex gap-3 px-4 py-3", isUser ? "flex-row-reverse" : "flex-row")}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
+      data-message-id={message.id}
     >
       {/* Avatar */}
       <div
@@ -280,6 +280,8 @@ export function ChatPage() {
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [showModelSelect, setShowModelSelect] = useState(false);
+  const [hoveredMessage, setHoveredMessage] = useState<string | null>(null);
+  const [showNav, setShowNav] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -347,6 +349,12 @@ export function ChatPage() {
     };
     addMessage(convId, userMsg);
     setInputValue('');
+    
+    // Reset input height
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = '36px';
+    }
 
     addLog({
       id: generateId(),
@@ -389,6 +397,14 @@ export function ChatPage() {
 
   return (
     <div className="flex h-full flex-col no-select">
+      {/* 快速导航组件 */}
+    {showNav && activeConversation && activeConversation.messages.length > 0 && (
+      <ChatQuickNav 
+        messages={activeConversation.messages} 
+        onHoverMessage={setHoveredMessage}
+      />
+    )}
+      
       {/* Header */}
       <header
         className="flex items-center justify-between border-b px-6 no-select"
@@ -408,9 +424,31 @@ export function ChatPage() {
             </span>
           )}
         </div>
+        
+        <div className="flex items-center">
+          {/* 悬停消息显示气泡 */}
+          {hoveredMessage && (
+            <div 
+              className="mr-4 px-4 py-2 rounded-lg text-sm flex items-center"
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                border: '1px solid var(--border-color)',
+                maxWidth: '350px',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                boxShadow: 'var(--shadow-md)',
+                height: '36px',
+                fontSize: '13px'
+              }}
+            >
+              <span>{hoveredMessage}</span>
+            </div>
+          )}
 
-        {/* Model Selector */}
-        <div className="relative">
+          {/* Model Selector */}
+          <div className="relative">
           <button
             onClick={() => setShowModelSelect(!showModelSelect)}
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
@@ -479,6 +517,22 @@ export function ChatPage() {
             )}
           </AnimatePresence>
         </div>
+        
+        {/* Nav Toggle Button */}
+        <button
+          onClick={() => setShowNav(!showNav)}
+          className="ml-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
+          style={{
+            backgroundColor: showNav ? 'var(--primary-color)' : 'var(--bg-secondary)',
+            color: showNav ? 'white' : 'var(--text-primary)',
+            border: '1px solid var(--border-color)',
+          }}
+          title={showNav ? '隐藏导航' : '显示导航'}
+        >
+          <RotateCcw size={14} />
+          导航点
+        </button>
+        </div>
       </header>
 
       {/* Messages */}
@@ -540,9 +594,8 @@ export function ChatPage() {
 
       {/* Input Area */}
       <div
-        className="border-t p-4 no-select"
+        className="p-4 no-select"
         style={{
-          borderColor: 'var(--border-color)',
           backgroundColor: 'var(--bg-primary)',
         }}
       >
@@ -599,9 +652,6 @@ export function ChatPage() {
             >
               {isStreaming ? <Square size={16} /> : <Send size={16} />}
             </button>
-          </div>
-          <div className="mt-2 text-center text-xs" style={{ color: 'var(--text-tertiary)' }}>
-            AI 生成的内容可能存在不准确之处，请注意甄别
           </div>
         </div>
       </div>
