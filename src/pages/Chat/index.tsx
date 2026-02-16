@@ -205,18 +205,19 @@ function MessageBubble({ message, isLast }: { message: ChatMessage; isLast: bool
         {/* Bubble */}
         <div
           className={cn(
-            "relative rounded-2xl px-4 py-3",
+            "relative rounded-2xl px-4 py-3 copy-allowed",
             isUser ? "rounded-tr-md" : "rounded-tl-md"
           )}
           style={{
             backgroundColor: isUser ? 'var(--bg-chat-user)' : 'var(--bg-chat-ai)',
             color: 'var(--text-primary)',
+            userSelect: 'text',
           }}
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+            <p className="whitespace-pre-wrap text-sm leading-relaxed copy-allowed" style={{ userSelect: 'text' }}>{message.content}</p>
           ) : (
-            <div className={cn("markdown-body", message.isStreaming && isLast && 'typing-cursor')}>
+            <div className={cn("markdown-body copy-allowed", message.isStreaming && isLast && 'typing-cursor')} style={{ userSelect: 'text' }}>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
                 components={{
@@ -298,15 +299,19 @@ export function ChatPage() {
     let currentText = '';
     const words = fullText.split('');
 
+    // 优化流式输出速度，减少延迟
     for (let i = 0; i < words.length; i++) {
       currentText += words[i];
-      updateMessage(conversationId, messageId, {
-        content: currentText,
-        isStreaming: true,
-      });
-      // Variable speed for more realistic feel
-      const delay = words[i] === '\n' ? 30 : (words[i] === ' ' ? 15 : 8);
-      await new Promise(r => setTimeout(r, delay));
+      // 每5个字符更新一次，提高响应速度
+      if (i % 5 === 0 || i === words.length - 1) {
+        updateMessage(conversationId, messageId, {
+          content: currentText,
+          isStreaming: true,
+        });
+        // 减少延迟时间，加快响应速度
+        const delay = words[i] === '\n' ? 10 : (words[i] === ' ' ? 5 : 2);
+        await new Promise(r => setTimeout(r, delay));
+      }
     }
 
     updateMessage(conversationId, messageId, { isStreaming: false });
@@ -383,10 +388,10 @@ export function ChatPage() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col no-select">
       {/* Header */}
       <header
-        className="flex items-center justify-between border-b px-6"
+        className="flex items-center justify-between border-b px-6 no-select"
         style={{
           height: 56,
           borderColor: 'var(--border-color)',
@@ -478,7 +483,7 @@ export function ChatPage() {
 
       {/* Messages */}
       <div
-        className="flex-1 overflow-y-auto"
+        className="flex-1 overflow-y-auto no-select"
         style={{ backgroundColor: 'var(--bg-primary)' }}
         onClick={() => setShowModelSelect(false)}
       >
@@ -535,7 +540,7 @@ export function ChatPage() {
 
       {/* Input Area */}
       <div
-        className="border-t p-4"
+        className="border-t p-4 no-select"
         style={{
           borderColor: 'var(--border-color)',
           backgroundColor: 'var(--bg-primary)',
@@ -563,10 +568,11 @@ export function ChatPage() {
               onKeyDown={handleKeyDown}
               placeholder="输入消息... (Shift+Enter 换行)"
               rows={1}
-              className="max-h-32 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-sm outline-none"
+              className="max-h-32 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-sm outline-none copy-allowed"
               style={{
                 color: 'var(--text-primary)',
                 lineHeight: '1.5',
+                userSelect: 'text',
               }}
               onInput={(e) => {
                 const target = e.target as HTMLTextAreaElement;

@@ -200,8 +200,8 @@ function ResultManagerModal({ template, onClose, onUpdateResults, showToast }: {
   const showForm = isAdding || editing;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto backdrop-blur-sm py-8" style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }} onClick={onClose}>
-      <div className="w-full max-w-3xl rounded-2xl shadow-2xl mx-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto backdrop-blur-sm py-8 no-select" style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }} onClick={onClose}>
+      <div className="w-full max-w-3xl rounded-2xl shadow-2xl mx-4 no-select" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }} onClick={e => e.stopPropagation()}>
         {/* 头部 */}
         <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: 'var(--border-color)' }}>
           <div className="flex items-center gap-3">
@@ -417,8 +417,8 @@ function TemplateFormModal({ template, onSave, onClose }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto backdrop-blur-sm py-8" style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }} onClick={onClose}>
-      <div className="w-full max-w-2xl rounded-2xl shadow-2xl mx-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto backdrop-blur-sm py-8 no-select" style={{ backgroundColor: 'rgba(0, 0, 0, 0.4)' }} onClick={onClose}>
+      <div className="w-full max-w-2xl rounded-2xl shadow-2xl mx-4 no-select" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between border-t border-b px-6 py-4" style={{ borderColor: 'var(--border-color)' }}>
           <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl shadow-sm" style={{ backgroundColor: 'var(--primary-color)' }}>
@@ -443,14 +443,15 @@ function TemplateFormModal({ template, onSave, onClose }: {
               onChange={e => { setFormData({ ...formData, title: e.target.value }); setErrors({ ...errors, title: undefined }); }}
               placeholder="输入模板标题..."
               className={cn(
-                "w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition-all",
+                "w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition-all copy-allowed",
                 errors.title ? "border-red-300 focus:border-red-400 focus:ring-2 focus:ring-red-100" : "border-slate-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
               )}
               style={{ 
                 borderColor: errors.title ? 'var(--error-color)' : 'var(--border-color)', 
                 backgroundColor: 'var(--bg-primary)',
                 color: 'var(--text-primary)',
-                placeholderColor: 'var(--text-tertiary)'
+                placeholderColor: 'var(--text-tertiary)',
+                userSelect: 'text'
               }}
             />
             {errors.title && <p className="mt-1 text-xs" style={{ color: 'var(--error-color)' }}>{errors.title}</p>}
@@ -476,17 +477,18 @@ function TemplateFormModal({ template, onSave, onClose }: {
             <div>
               <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>版本备注</label>
               <input
-                value={formData.versionNote}
-                onChange={e => setFormData({ ...formData, versionNote: e.target.value })}
-                placeholder="选填，如 v1.0"
-                className="w-full rounded-xl border px-4 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all"
-                style={{ 
-                  borderColor: 'var(--border-color)', 
-                  backgroundColor: 'var(--bg-primary)',
-                  color: 'var(--text-primary)',
-                  placeholderColor: 'var(--text-tertiary)'
-                }}
-              />
+                  value={formData.versionNote}
+                  onChange={e => setFormData({ ...formData, versionNote: e.target.value })}
+                  placeholder="选填，如 v1.0"
+                  className="w-full rounded-xl border px-4 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all copy-allowed"
+                  style={{ 
+                    borderColor: 'var(--border-color)', 
+                    backgroundColor: 'var(--bg-primary)',
+                    color: 'var(--text-primary)',
+                    placeholderColor: 'var(--text-tertiary)',
+                    userSelect: 'text'
+                  }}
+                />
             </div>
           </div>
 
@@ -507,14 +509,15 @@ function TemplateFormModal({ template, onSave, onClose }: {
               rows={8}
               placeholder="输入提示词内容..."
               className={cn(
-                "w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all resize-none leading-relaxed",
+                "w-full rounded-xl border px-4 py-3 text-sm outline-none transition-all resize-none leading-relaxed copy-allowed",
                 errors.content ? "border-red-300 focus:border-red-400 focus:ring-2 focus:ring-red-100" : "border-slate-200 focus:border-violet-400 focus:ring-2 focus:ring-violet-100"
               )}
               style={{ 
                 borderColor: errors.content ? 'var(--error-color)' : 'var(--border-color)', 
                 backgroundColor: 'var(--bg-primary)',
                 color: 'var(--text-primary)',
-                placeholderColor: 'var(--text-tertiary)'
+                placeholderColor: 'var(--text-tertiary)',
+                userSelect: 'text'
               }}
             />
             {errors.content && <p className="mt-1 text-xs" style={{ color: 'var(--error-color)' }}>{errors.content}</p>}
@@ -565,8 +568,20 @@ function TemplateCard({ template, onEdit, onDelete, onManageResults, showToast }
 
   const gradClass = categoryColorMap[template.category] || 'from-slate-400 to-slate-500';
 
+  const handleCardClick = (e: React.MouseEvent) => {
+    // 阻止事件冒泡，确保点击按钮时不会触发卡片点击
+    if ((e.target as HTMLElement).closest('button')) {
+      return;
+    }
+    setExpanded(!expanded);
+  };
+
   return (
-    <div className="group relative rounded-2xl border p-5 shadow-sm hover:shadow-lg hover:border-slate-200 transition-all duration-300" style={{ borderColor: 'var(--border-color)', backgroundColor: 'transparent' }}>
+    <div 
+      className="group relative rounded-2xl border p-5 shadow-sm hover:shadow-lg hover:border-slate-200 transition-all duration-300 cursor-pointer no-select"
+      style={{ borderColor: 'var(--border-color)', backgroundColor: 'transparent' }}
+      onClick={handleCardClick}
+    >
       {/* 顶部色条 */}
       <div className={cn("absolute top-0 left-6 right-6 h-1 rounded-b-full bg-gradient-to-r opacity-60 group-hover:opacity-100 transition-opacity", gradClass)} />
       
@@ -622,7 +637,10 @@ function TemplateCard({ template, onEdit, onDelete, onManageResults, showToast }
         </pre>
         {contentShort && (
           <button
-            onClick={() => setExpanded(!expanded)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setExpanded(!expanded);
+            }}
             className="mt-2 inline-flex items-center gap-1 text-xs font-medium transition-colors"
             style={{ color: 'var(--primary-color)' }}
           >
@@ -638,7 +656,10 @@ function TemplateCard({ template, onEdit, onDelete, onManageResults, showToast }
           {formatDate(template.createdAt)}
         </span>
         <button
-          onClick={onManageResults}
+          onClick={(e) => {
+            e.stopPropagation();
+            onManageResults();
+          }}
           className="inline-flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-medium text-white hover:opacity-90 transition-all shadow-sm"
           style={{ backgroundColor: 'var(--primary-color)' }}
         >
@@ -804,7 +825,7 @@ export default function PromptTemplatesPage() {
   const hasFilters = searchQuery || filterCategory || filterTag;
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div className="min-h-screen no-select" style={{ backgroundColor: 'var(--bg-primary)' }}>
       <Toast message={toastMsg} visible={toastVisible} />
 
       {/* 搜索与筛选栏 */}

@@ -79,7 +79,7 @@ export function Sidebar() {
       initial={false}
       animate={{ width: sidebarCollapsed ? 68 : 280 }}
       transition={{ duration: 0.2, ease: 'easeInOut' }}
-      className="flex h-full flex-col border-r"
+      className="flex h-full flex-col border-r no-select"
       style={{
         backgroundColor: 'var(--bg-secondary)',
         borderColor: 'var(--border-color)',

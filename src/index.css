@@ -66,6 +66,22 @@ body {
   color: var(--text-inverse);
 }
 
+/* Text Selection Restriction */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Allow copying even with no-select */
+.no-select.copy-allowed {
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  user-select: text;
+}
+
 /* Button Hover Effects */
 .btn-secondary {
   background-color: var(--bg-secondary);

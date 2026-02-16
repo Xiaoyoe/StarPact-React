@@ -97,9 +97,9 @@ export function App() {
 
   return (
     <ToastProvider>
-      <div className="flex h-screen overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)' }}>
+      <div className="flex h-screen overflow-hidden no-select" style={{ backgroundColor: 'var(--bg-primary)' }}>
         <Sidebar />
-        <main className="min-w-0 flex-1">
+        <main className="min-w-0 flex-1 no-select">
           <PageContent />
         </main>
         <LogsPanel />
