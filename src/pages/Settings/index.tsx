@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  Palette, Type, Layout, Monitor, Info, RefreshCw, Download, Upload, Shield
+  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { ThemeType } from '@/store';
@@ -17,8 +17,6 @@ import { PathPage } from './path';
 export function SettingsPage() {
   const {
     theme, setTheme,
-    fontSize, setFontSize,
-    layoutMode, setLayoutMode,
     sendOnEnter, setSendOnEnter,
     storagePath, setStoragePath,
   } = useStore();
@@ -27,6 +25,8 @@ export function SettingsPage() {
   const [templateStoragePath, setTemplateStoragePath] = useState('');
   const [videoPlaylistStoragePath, setVideoPlaylistStoragePath] = useState('');
   const toast = useToast();
+  
+
 
   // 从配置加载提示词模板存储路径
   useEffect(() => {
@@ -57,14 +57,10 @@ export function SettingsPage() {
   // 从配置存储加载设置
   useEffect(() => {
     const savedTheme = configStorage.get('theme');
-    const savedFontSize = configStorage.get('fontSize');
-    const savedLayoutMode = configStorage.get('layoutMode');
     const savedSendOnEnter = configStorage.get('sendOnEnter');
     const savedStoragePath = configStorage.get('storagePath');
 
     if (savedTheme) setTheme(savedTheme);
-    if (savedFontSize) setFontSize(savedFontSize);
-    if (savedLayoutMode) setLayoutMode(savedLayoutMode);
     if (savedSendOnEnter !== undefined) setSendOnEnter(savedSendOnEnter);
     if (savedStoragePath) setStoragePath(savedStoragePath);
   }, []);
@@ -74,13 +70,9 @@ export function SettingsPage() {
     configStorage.set('theme', theme);
   }, [theme]);
 
-  useEffect(() => {
-    configStorage.set('fontSize', fontSize);
-  }, [fontSize]);
 
-  useEffect(() => {
-    configStorage.set('layoutMode', layoutMode);
-  }, [layoutMode]);
+
+
 
   useEffect(() => {
     configStorage.set('sendOnEnter', sendOnEnter);
@@ -120,8 +112,8 @@ export function SettingsPage() {
 
   const tabs = [
     { id: 'appearance' as const, label: '外观', icon: Palette },
-    { id: 'general' as const, label: '通用', icon: Layout },
-    { id: 'path' as const, label: '路径', icon: Layout },
+    { id: 'general' as const, label: '通用', icon: Monitor },
+    { id: 'path' as const, label: '路径', icon: RefreshCw },
     { id: 'about' as const, label: '关于', icon: Info },
   ];
 
@@ -269,184 +261,9 @@ export function SettingsPage() {
                 ))}
               </section>
 
-              {/* Font Size */}
-              <section>
-                <h2 className="mb-1 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  <Type size={16} className="mr-2 inline" />
-                  字体大小
-                </h2>
-                <p className="mb-4 text-sm" style={{ color: 'var(--text-tertiary)' }}>
-                  调整界面字体大小
-                </p>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>小</span>
-                  <input
-                    type="range"
-                    min="12"
-                    max="18"
-                    step="1"
-                    value={fontSize}
-                    onChange={(e) => setFontSize(parseInt(e.target.value))}
-                    className="flex-1 accent-[var(--primary-color)]"
-                  />
-                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>大</span>
-                  <span
-                    className="w-12 text-center text-sm font-medium"
-                    style={{ color: 'var(--text-primary)' }}
-                  >
-                    {fontSize}px
-                  </span>
-                </div>
-                <div
-                  className="mt-3 rounded-lg p-3"
-                  style={{
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-color)',
-                    fontSize: `${fontSize}px`,
-                    color: 'var(--text-primary)',
-                  }}
-                >
-                  预览文本：这是一段示例文字，用于预览字体大小效果。
-                </div>
-              </section>
 
-              {/* Layout */}
-              <section>
-                <h2 className="mb-1 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  <Monitor size={16} className="mr-2 inline" />
-                  布局模式
-                </h2>
-                <p className="mb-4 text-sm" style={{ color: 'var(--text-tertiary)' }}>
-                  选择适合屏幕尺寸的布局
-                </p>
-                <div className="flex gap-3">
-                  {[
-                    { id: 'compact' as const, name: '紧凑', desc: '适合小屏幕' },
-                    { id: 'comfortable' as const, name: '舒适', desc: '默认推荐' },
-                    { id: 'wide' as const, name: '宽屏', desc: '适合大屏幕' },
-                  ].map(l => (
-                    <button
-                      key={l.id}
-                      onClick={() => setLayoutMode(l.id)}
-                      className="flex-1 rounded-xl p-4 text-center transition-all active:scale-[0.98]"
-                      style={{
-                        border: `2px solid ${layoutMode === l.id ? 'var(--primary-color)' : 'var(--border-color)'}`,
-                        backgroundColor: 'var(--bg-secondary)',
-                      }}
-                    >
-                      <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{l.name}</div>
-                      <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{l.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </section>
 
-              {/* Picture-in-Picture Themes */}
-              <section>
-                <h2 className="mb-1 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  <Monitor size={16} className="mr-2 inline" />
-                  画中画主题
-                </h2>
-                <p className="mb-4 text-sm" style={{ color: 'var(--text-tertiary)' }}>
-                  选择画中画功能的主题风格，支持自定义组件
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  {/* Default PiP */}
-                  <button
-                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
-                    style={{
-                      border: `2px solid var(--border-color)`,
-                      backgroundColor: 'var(--bg-secondary)',
-                    }}
-                  >
-                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
-                      默认画中画
-                    </div>
-                    <div className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
-                      系统默认的画中画功能
-                    </div>
-                    <div className="text-xs font-medium" style={{ color: 'var(--primary-color)' }}>
-                      ✓ 当前使用
-                    </div>
-                  </button>
-                  
-                  {/* Custom PiP Components (Placeholders) */}
-                  <button
-                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
-                    style={{
-                      border: `2px dashed var(--border-color)`,
-                      backgroundColor: 'var(--bg-secondary)',
-                    }}
-                  >
-                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
-                      自定义画中画 1
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      留空 - 待实现
-                    </div>
-                  </button>
-                  
-                  <button
-                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
-                    style={{
-                      border: `2px dashed var(--border-color)`,
-                      backgroundColor: 'var(--bg-secondary)',
-                    }}
-                  >
-                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
-                      自定义画中画 2
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      留空 - 待实现
-                    </div>
-                  </button>
-                  
-                  <button
-                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
-                    style={{
-                      border: `2px dashed var(--border-color)`,
-                      backgroundColor: 'var(--bg-secondary)',
-                    }}
-                  >
-                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
-                      自定义画中画 3
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      留空 - 待实现
-                    </div>
-                  </button>
-                  
-                  <button
-                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
-                    style={{
-                      border: `2px dashed var(--border-color)`,
-                      backgroundColor: 'var(--bg-secondary)',
-                    }}
-                  >
-                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
-                      自定义画中画 4
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      留空 - 待实现
-                    </div>
-                  </button>
-                  
-                  <button
-                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
-                    style={{
-                      border: `2px dashed var(--border-color)`,
-                      backgroundColor: 'var(--bg-secondary)',
-                    }}
-                  >
-                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
-                      自定义画中画 5
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      留空 - 待实现
-                    </div>
-                  </button>
-                </div>
-              </section>
+
             </motion.div>
           )}
 
