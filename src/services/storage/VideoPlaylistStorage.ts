@@ -22,6 +22,7 @@ export interface VideoPlaylist {
   id: string;
   name: string;
   videos: VideoFile[];
+  autoPlay?: boolean;
   createdAt: number;
   updatedAt: number;
 }

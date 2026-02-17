@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useToast } from '@/components/Toast';
 import { VideoPlayer } from '@/components/VideoPlayer';
 import { VideoFile, VideoFilters, VideoInfo, RepeatMode, DEFAULT_FILTERS } from '@/types/video';
 import { cn } from '@/utils/cn';
@@ -10,12 +11,14 @@ const ACCEPTED_EXTENSIONS = /\.(mp4|webm|mkv|avi|mov|flv|wmv|m4v|ogg|ogv|3gp|ts|
 
 function VideoPlayerPage() {
   const { theme, storagePath } = useStore();
+  const toast = useToast();
   const [playlist, setPlaylist] = useState<VideoFile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [isDragging, setIsDragging] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showToolbar, setShowToolbar] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
+  const [autoPlay, setAutoPlay] = useState(true);
   const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
   const [filters, setFilters] = useState<VideoFilters>(DEFAULT_FILTERS);
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
@@ -26,6 +29,17 @@ function VideoPlayerPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCountRef = useRef(0);
   const playerRef = useRef<HTMLVideoElement>(null);
+  const prevPlaylistLengthRef = useRef(playlist.length);
+
+  // 监听播放列表变化，显示添加成功提示
+  useEffect(() => {
+    // 只有当播放列表长度增加时才显示提示
+    if (playlist.length > prevPlaylistLengthRef.current) {
+      toast.success('视频添加成功');
+    }
+    // 更新记录的长度
+    prevPlaylistLengthRef.current = playlist.length;
+  }, [playlist, toast]);
 
   const currentVideo = currentIndex >= 0 && currentIndex < playlist.length ? playlist[currentIndex] : null;
 
@@ -38,10 +52,16 @@ function VideoPlayerPage() {
           if (playlists.length > 0) {
             const latestPlaylist = playlists[0];
             setPlaylist(latestPlaylist.videos);
-            setCurrentIndex(0);
+            // 读取自动播放设置，如果没有则默认为true
+            setAutoPlay(latestPlaylist.autoPlay !== false);
+            // 只有在自动播放开启时才自动选择第一个视频
+            if (latestPlaylist.autoPlay !== false) {
+              setCurrentIndex(0);
+            }
           }
         } catch (error) {
           console.error('加载播放列表失败:', error);
+          toast.error('加载播放列表失败');
         }
       }
     };
@@ -57,17 +77,19 @@ function VideoPlayerPage() {
             id: 'default-playlist',
             name: '默认播放列表',
             videos: playlist,
+            autoPlay: autoPlay,
             createdAt: Date.now(),
             updatedAt: Date.now()
           };
           const success = await VideoPlaylistStorage.savePlaylist(storagePath, currentPlaylist);
         } catch (error) {
           console.error('保存播放列表失败:', error);
+          toast.error('保存播放列表失败');
         }
       }
     };
     savePlaylist();
-  }, [playlist, storagePath]);
+  }, [playlist, autoPlay, storagePath]);
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
     const files = Array.from(fileList).filter(f =>
@@ -163,8 +185,10 @@ function VideoPlayerPage() {
           await VideoPlaylistStorage.savePlaylist(storagePath, currentPlaylist);
         }
         console.log('更新播放列表成功');
+        toast.success('视频删除成功');
       } catch (error) {
         console.error('更新IndexedDB数据失败:', error);
+        toast.error('删除视频文件失败');
       }
     }
   }, [playlist, storagePath]);
@@ -197,27 +221,92 @@ function VideoPlayerPage() {
         // 清空播放列表
         await VideoPlaylistStorage.clearAllPlaylists(storagePath);
         console.log('清空播放列表成功');
+        toast.success('播放列表已清空');
       } catch (error) {
         console.error('清空IndexedDB数据失败:', error);
+        toast.error('清空播放列表失败');
       }
     }
   }, [playlist, storagePath]);
 
-  const shufflePlaylist = useCallback(() => {
+
+
+  // 拖拽相关的状态和函数
+  const [draggedItemId, setDraggedItemId] = useState<string | null>(null);
+  const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+
+  // 开始拖拽
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    setDraggedItemId(id);
+    e.dataTransfer.effectAllowed = 'move';
+    // 设置拖拽时的视觉效果
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '0.5';
+      e.currentTarget.style.transform = 'scale(1.02)';
+    }
+  };
+
+  // 结束拖拽
+  const handleDragEnd = (e: React.DragEvent) => {
+    setDraggedItemId(null);
+    setHoveredItemId(null);
+    // 恢复元素样式
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.style.opacity = '1';
+      e.currentTarget.style.transform = 'scale(1)';
+    }
+  };
+
+  // 拖拽悬停
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setHoveredItemId(id);
+  };
+
+  // 离开悬停
+  const handleDragLeave = () => {
+    setHoveredItemId(null);
+  };
+
+  // 放置
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    setHoveredItemId(null);
+    if (!draggedItemId || draggedItemId === targetId) return;
+
+    let isOrderChanged = false;
+
     setPlaylist(prev => {
-      const currentId = currentIndex >= 0 ? prev[currentIndex]?.id : null;
-      const shuffled = [...prev];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      const newPlaylist = [...prev];
+      const draggedIndex = newPlaylist.findIndex(item => item.id === draggedItemId);
+      const targetIndex = newPlaylist.findIndex(item => item.id === targetId);
+
+      if (draggedIndex !== -1 && targetIndex !== -1) {
+        // 移除拖拽项
+        const [draggedItem] = newPlaylist.splice(draggedIndex, 1);
+        // 插入到目标位置
+        newPlaylist.splice(targetIndex, 0, draggedItem);
+        
+        // 更新当前播放索引（如果拖拽的是当前播放的视频）
+        if (currentIndex === draggedIndex) {
+          setCurrentIndex(targetIndex);
+        } else if (currentIndex > draggedIndex && currentIndex <= targetIndex) {
+          setCurrentIndex(currentIndex - 1);
+        } else if (currentIndex < draggedIndex && currentIndex >= targetIndex) {
+          setCurrentIndex(currentIndex + 1);
+        }
+
+        isOrderChanged = true;
+        return newPlaylist;
       }
-      if (currentId) {
-        const newIdx = shuffled.findIndex(v => v.id === currentId);
-        setCurrentIndex(newIdx);
-      }
-      return shuffled;
+      return prev;
     });
-  }, [currentIndex]);
+
+    if (isOrderChanged) {
+      toast.success('播放列表顺序已调整');
+    }
+  };
 
   const handleVideoEnded = useCallback(() => {
     if (repeatMode === 'one') {
@@ -327,18 +416,10 @@ function VideoPlayerPage() {
         backdropFilter: 'blur(8px)'
       }}>
         {/* Left: Video info */}
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ 
-            background: 'linear-gradient(to right, var(--primary-color), var(--primary-dark))' 
-          }}>
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ color: 'white' }}>
-              <polygon points="23 7 16 12 23 17 23 7" />
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-            </svg>
-          </div>
+        <div className="flex items-center">
           {currentVideo && (
             <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              {videoInfo ? `${videoInfo.width}×${videoInfo.height}` : '未知分辨率'} - {formatFileSize(currentVideo.size)} - {formatDuration(currentVideo.duration)}
+              {videoInfo ? `${videoInfo.width}×${videoInfo.height}` : '未知分辨率'} &nbsp;•&nbsp; {formatFileSize(currentVideo.size)} &nbsp;•&nbsp; {formatDuration(currentVideo.duration)}
             </div>
           )}
         </div>
@@ -373,6 +454,25 @@ function VideoPlayerPage() {
             <span>选择视频</span>
           </button>
           <button
+            onClick={() => {
+              const newAutoPlay = !autoPlay;
+              setAutoPlay(newAutoPlay);
+              toast.success(newAutoPlay ? '自动播放已开启' : '自动播放已关闭');
+            }}
+            className="flex items-center justify-center w-10 h-10 rounded-full transition-colors"
+            style={{ 
+              backgroundColor: autoPlay ? 'var(--primary-light)' : 'var(--bg-tertiary)', 
+              color: autoPlay ? 'var(--primary-color)' : 'var(--text-primary)',
+              border: `1px solid ${autoPlay ? 'var(--primary-color)/30' : 'var(--border-color)'}`
+            }}
+            title={autoPlay ? '关闭自动播放' : '开启自动播放'}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <polygon points="23 7 16 12 23 17 23 7" />
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+            </svg>
+          </button>
+          <button
             onClick={() => setShowShortcuts(true)}
             className="flex items-center justify-center w-10 h-10 rounded-full transition-colors"
             style={{ 
@@ -387,7 +487,11 @@ function VideoPlayerPage() {
             </svg>
           </button>
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
+            onClick={() => {
+              const newSidebarOpen = !sidebarOpen;
+              setSidebarOpen(newSidebarOpen);
+              setShowToolbar(newSidebarOpen);
+            }}
             className="flex items-center justify-center w-10 h-10 rounded-full transition-colors"
             style={{ 
               backgroundColor: 'var(--bg-tertiary)', 
@@ -476,11 +580,17 @@ function VideoPlayerPage() {
 
           {/* Bottom controls */}
           <div 
-            className={`shrink-0 border-t px-6 py-4 transition-all duration-300 ease-in-out transform ${showToolbar ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'}`}
             style={{ 
-              borderColor: 'var(--border-color)',
+              shrink: 0,
+              borderTop: `1px solid var(--border-color)`,
+              padding: '16px 24px',
               backgroundColor: 'var(--bg-secondary)',
-              backdropFilter: 'blur(8px)'
+              backdropFilter: 'blur(8px)',
+              boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.1)',
+              transition: 'all 0.4s ease-in-out',
+              transform: showToolbar ? 'translateY(0)' : 'translateY(100%)',
+              opacity: showToolbar ? 1 : 0,
+              pointerEvents: showToolbar ? 'auto' : 'none'
             }}
           >
             <div className="flex items-center justify-between gap-4">
@@ -555,11 +665,14 @@ function VideoPlayerPage() {
 
         {/* Sidebar */}
         <div 
-          className={cn(
-            'shrink-0 border-l transition-all duration-300 ease-in-out',
-            sidebarOpen ? 'w-full lg:w-96 max-h-[60vh] lg:max-h-none' : 'w-0 max-h-0 lg:max-h-none overflow-hidden'
-          )}
-          style={{ borderColor: 'var(--border-color)' }}
+          style={{
+            borderLeft: `1px solid var(--border-color)`,
+            transition: 'all 0.4s ease-in-out',
+            width: sidebarOpen ? '384px' : '0',
+            overflow: 'hidden',
+            opacity: sidebarOpen ? 1 : 0,
+            flex: '0 0 auto'
+          }}
         >
           <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--bg-secondary)' }}>
             {/* Sidebar header */}
@@ -574,20 +687,6 @@ function VideoPlayerPage() {
                   }}>
                     {playlist.length}
                   </span>
-                  <button
-                    onClick={shufflePlaylist}
-                    className="flex items-center justify-center w-8 h-8 rounded-full transition-colors"
-                    style={{ 
-                      backgroundColor: 'var(--bg-tertiary)', 
-                      color: 'var(--text-primary)',
-                      border: `1px solid var(--border-color)`
-                    }}
-                    title="随机播放"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 21l-7.5-1.5L4.5 21V3m15 0h-3M4.5 3v18" />
-                    </svg>
-                  </button>
                   <button
                     onClick={clearPlaylist}
                     className="flex items-center justify-center w-8 h-8 rounded-full transition-colors"
@@ -608,7 +707,7 @@ function VideoPlayerPage() {
             </div>
 
             {/* Playlist items */}
-            <div className="flex-1 overflow-y-auto p-3">
+            <div className="flex-1 overflow-y-auto p-3" style={{ maxHeight: 'calc(100vh - 200px)' }}>
               {playlist.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center p-8">
                   <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24" style={{ color: 'var(--text-tertiary)' }}>
@@ -639,13 +738,23 @@ function VideoPlayerPage() {
                         : 'hover:bg-[var(--bg-tertiary)]'
                     )}
                     style={{
-                      backgroundColor: currentIndex === index ? 'var(--primary-light)' : 'var(--bg-tertiary)',
-                      border: `1px solid ${currentIndex === index ? 'var(--primary-color)/30' : 'var(--border-color)'}`
+                      backgroundColor: currentIndex === index ? 'var(--primary-light)' : 
+                                    hoveredItemId === video.id ? 'var(--primary-light)/50' : 'var(--bg-tertiary)',
+                      border: `1px solid ${currentIndex === index ? 'var(--primary-color)/30' : 
+                                    hoveredItemId === video.id ? 'var(--primary-color)/50' : 'var(--border-color)'}`,
+                      boxShadow: hoveredItemId === video.id ? '0 2px 8px var(--primary-color)/20' : 'none',
+                      transition: 'all 0.2s ease-in-out'
                     }}
                     onClick={() => {
                       setCurrentIndex(index);
                       setIsPlaying(true);
                     }}
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, video.id)}
+                    onDragEnd={handleDragEnd}
+                    onDragOver={(e) => handleDragOver(e, video.id)}
+                    onDragLeave={handleDragLeave}
+                    onDrop={(e) => handleDrop(e, video.id)}
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3">

@@ -340,6 +340,113 @@ export function SettingsPage() {
                   ))}
                 </div>
               </section>
+
+              {/* Picture-in-Picture Themes */}
+              <section>
+                <h2 className="mb-1 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  <Monitor size={16} className="mr-2 inline" />
+                  画中画主题
+                </h2>
+                <p className="mb-4 text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                  选择画中画功能的主题风格，支持自定义组件
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Default PiP */}
+                  <button
+                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
+                    style={{
+                      border: `2px solid var(--border-color)`,
+                      backgroundColor: 'var(--bg-secondary)',
+                    }}
+                  >
+                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+                      默认画中画
+                    </div>
+                    <div className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                      系统默认的画中画功能
+                    </div>
+                    <div className="text-xs font-medium" style={{ color: 'var(--primary-color)' }}>
+                      ✓ 当前使用
+                    </div>
+                  </button>
+                  
+                  {/* Custom PiP Components (Placeholders) */}
+                  <button
+                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
+                    style={{
+                      border: `2px dashed var(--border-color)`,
+                      backgroundColor: 'var(--bg-secondary)',
+                    }}
+                  >
+                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+                      自定义画中画 1
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      留空 - 待实现
+                    </div>
+                  </button>
+                  
+                  <button
+                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
+                    style={{
+                      border: `2px dashed var(--border-color)`,
+                      backgroundColor: 'var(--bg-secondary)',
+                    }}
+                  >
+                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+                      自定义画中画 2
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      留空 - 待实现
+                    </div>
+                  </button>
+                  
+                  <button
+                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
+                    style={{
+                      border: `2px dashed var(--border-color)`,
+                      backgroundColor: 'var(--bg-secondary)',
+                    }}
+                  >
+                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+                      自定义画中画 3
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      留空 - 待实现
+                    </div>
+                  </button>
+                  
+                  <button
+                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
+                    style={{
+                      border: `2px dashed var(--border-color)`,
+                      backgroundColor: 'var(--bg-secondary)',
+                    }}
+                  >
+                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+                      自定义画中画 4
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      留空 - 待实现
+                    </div>
+                  </button>
+                  
+                  <button
+                    className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
+                    style={{
+                      border: `2px dashed var(--border-color)`,
+                      backgroundColor: 'var(--bg-secondary)',
+                    }}
+                  >
+                    <div className="text-sm font-medium mb-2" style={{ color: 'var(--text-primary)' }}>
+                      自定义画中画 5
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      留空 - 待实现
+                    </div>
+                  </button>
+                </div>
+              </section>
             </motion.div>
           )}
 
