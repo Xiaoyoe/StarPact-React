@@ -73,6 +73,10 @@ interface AppState {
   theme: ThemeType;
   setTheme: (theme: ThemeType) => void;
 
+  // Wallpaper
+  chatWallpaper: string;
+  setChatWallpaper: (wallpaper: string) => void;
+
   // Navigation
   activePage: 'chat' | 'models' | 'settings' | 'logs' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates';
   setActivePage: (page: 'chat' | 'models' | 'settings' | 'logs' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates') => void;
@@ -116,6 +120,8 @@ interface AppState {
   setSendOnEnter: (val: boolean) => void;
   storagePath: string;
   setStoragePath: (path: string) => void;
+  compactMode: boolean;
+  setCompactMode: (val: boolean) => void;
 
   // Search
   searchQuery: string;
@@ -432,6 +438,10 @@ export const useStore = create<AppState>((set) => ({
     set({ theme });
   },
 
+  // Wallpaper
+  chatWallpaper: '',
+  setChatWallpaper: (wallpaper) => set({ chatWallpaper: wallpaper }),
+
   // Navigation
   activePage: 'chat',
   setActivePage: (page) => set({ activePage: page }),
@@ -514,6 +524,8 @@ export const useStore = create<AppState>((set) => ({
   setSendOnEnter: (val) => set({ sendOnEnter: val }),
   storagePath: '',
   setStoragePath: (path) => set({ storagePath: path }),
+  compactMode: false,
+  setCompactMode: (val) => set({ compactMode: val }),
 
   // Search
   searchQuery: '',

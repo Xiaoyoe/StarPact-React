@@ -12,6 +12,7 @@ import type { ChatMessage } from '@/store';
 import { cn } from '@/utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChatQuickNav } from '@/components/ChatQuickNav';
+import { configStorage } from '@/services/storage/ConfigStorage';
 
 // Simulated AI responses
 const aiResponses = [
@@ -161,7 +162,7 @@ function CodeBlock({ language, children }: { language: string; children: string 
   );
 }
 
-function MessageBubble({ message, isLast }: { message: ChatMessage; isLast: boolean }) {
+function MessageBubble({ message, isLast, compactMode }: { message: ChatMessage; isLast: boolean; compactMode: boolean }) {
   const isUser = message.role === 'user';
   const [showActions, setShowActions] = useState(true);
 
@@ -209,9 +210,10 @@ function MessageBubble({ message, isLast }: { message: ChatMessage; isLast: bool
             isUser ? "rounded-tr-md" : "rounded-tl-md"
           )}
           style={{
-            backgroundColor: isUser ? 'var(--bg-chat-user)' : 'var(--bg-chat-ai)',
+            backgroundColor: compactMode ? 'transparent' : (isUser ? 'var(--bg-chat-user)' : 'var(--bg-chat-ai)'),
             color: 'var(--text-primary)',
             userSelect: 'text',
+            border: '1px solid var(--border-color)',
           }}
         >
           {isUser ? (
@@ -275,6 +277,8 @@ export function ChatPage() {
     models, activeModelId, setActiveModel,
     addMessage, updateMessage, addConversation,
     addLog,
+    chatWallpaper, setChatWallpaper,
+    compactMode, setCompactMode,
   } = useStore();
 
   const [inputValue, setInputValue] = useState('');
@@ -295,6 +299,14 @@ export function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [activeConversation?.messages, scrollToBottom]);
+
+  // 从配置加载壁纸设置
+  useEffect(() => {
+    const savedWallpaper = configStorage.get('chatWallpaper');
+    if (savedWallpaper) {
+      setChatWallpaper(savedWallpaper);
+    }
+  }, []);
 
   const simulateStreaming = async (conversationId: string, messageId: string, fullText: string) => {
     setIsStreaming(true);
@@ -396,7 +408,7 @@ export function ChatPage() {
   };
 
   return (
-    <div className="flex h-full flex-col no-select">
+    <div className="flex h-full flex-col no-select" style={{ backgroundColor: compactMode ? 'transparent' : 'var(--bg-primary)', backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
       {/* 快速导航组件 */}
     {showNav && activeConversation && activeConversation.messages.length > 0 && (
       <ChatQuickNav 
@@ -411,7 +423,7 @@ export function ChatPage() {
         style={{
           height: 56,
           borderColor: 'var(--border-color)',
-          backgroundColor: 'var(--bg-primary)',
+          backgroundColor: compactMode ? 'transparent' : 'var(--bg-primary)',
         }}
       >
         <div className="flex items-center gap-3">
@@ -431,14 +443,14 @@ export function ChatPage() {
             <div 
               className="mr-4 px-4 py-2 rounded-lg text-sm flex items-center"
               style={{
-                backgroundColor: 'var(--bg-secondary)',
+                backgroundColor: compactMode ? 'transparent' : 'var(--bg-secondary)',
                 color: 'var(--text-primary)',
                 border: '1px solid var(--border-color)',
                 maxWidth: '350px',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                boxShadow: 'var(--shadow-md)',
+                boxShadow: compactMode ? 'none' : 'var(--shadow-md)',
                 height: '36px',
                 fontSize: '13px'
               }}
@@ -447,13 +459,28 @@ export function ChatPage() {
             </div>
           )}
 
+          {/* Compact Mode Button */}
+          <button
+            onClick={() => setCompactMode(!compactMode)}
+            className="mr-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
+            style={{
+              backgroundColor: compactMode ? 'var(--primary-color)' : 'var(--bg-secondary)',
+              color: compactMode ? 'white' : 'var(--text-primary)',
+              border: '1px solid var(--border-color)',
+            }}
+            title={compactMode ? '退出简洁模式' : '进入简洁模式'}
+          >
+            <Square size={14} />
+            简洁
+          </button>
+
           {/* Model Selector */}
           <div className="relative">
           <button
             onClick={() => setShowModelSelect(!showModelSelect)}
             className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
             style={{
-              backgroundColor: 'var(--bg-secondary)',
+              backgroundColor: compactMode ? 'transparent' : 'var(--bg-secondary)',
               color: 'var(--text-primary)',
               border: '1px solid var(--border-color)',
             }}
@@ -523,7 +550,7 @@ export function ChatPage() {
           onClick={() => setShowNav(!showNav)}
           className="ml-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
           style={{
-            backgroundColor: showNav ? 'var(--primary-color)' : 'var(--bg-secondary)',
+            backgroundColor: showNav ? 'var(--primary-color)' : (compactMode ? 'transparent' : 'var(--bg-secondary)'),
             color: showNav ? 'white' : 'var(--text-primary)',
             border: '1px solid var(--border-color)',
           }}
@@ -538,7 +565,9 @@ export function ChatPage() {
       {/* Messages */}
       <div
         className="flex-1 overflow-y-auto no-select"
-        style={{ backgroundColor: 'var(--bg-primary)' }}
+        style={{
+          backgroundColor: 'transparent',
+        }}
         onClick={() => setShowModelSelect(false)}
       >
         {!activeConversation || activeConversation.messages.length === 0 ? (
@@ -585,6 +614,7 @@ export function ChatPage() {
                 key={msg.id}
                 message={msg}
                 isLast={idx === activeConversation.messages.length - 1}
+                compactMode={compactMode}
               />
             ))}
             <div ref={messagesEndRef} />
@@ -596,14 +626,14 @@ export function ChatPage() {
       <div
         className="p-4 no-select"
         style={{
-          backgroundColor: 'var(--bg-primary)',
+          backgroundColor: compactMode ? 'transparent' : 'var(--bg-primary)',
         }}
       >
         <div className="mx-auto max-w-4xl">
           <div
             className="flex items-end gap-2 rounded-2xl p-3"
             style={{
-              backgroundColor: 'var(--bg-secondary)',
+              backgroundColor: compactMode ? 'transparent' : 'var(--bg-secondary)',
               border: '1px solid var(--border-color)',
             }}
           >

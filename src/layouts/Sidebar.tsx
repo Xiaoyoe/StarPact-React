@@ -20,10 +20,12 @@ export function Sidebar() {
     theme, setTheme,
     webShortcutPopupOpen, setWebShortcutPopupOpen,
     dataManagerOpen, setDataManagerOpen,
+    chatWallpaper, setChatWallpaper,
   } = useStore();
 
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
   const [bottomPanelsVisible, setBottomPanelsVisible] = useState(true);
+  const [wallpaperPopupOpen, setWallpaperPopupOpen] = useState(false);
 
   const activeModel = models.find(m => m.id === activeModelId);
   const isLightTheme = theme === 'light';
@@ -76,17 +78,102 @@ export function Sidebar() {
   };
 
   return (
-    <motion.aside
-      initial={false}
-      animate={{ width: sidebarCollapsed ? 68 : 280 }}
-      transition={{ duration: 0.2, ease: 'easeInOut' }}
-      className="flex h-full flex-col border-r no-select"
-      style={{
-        backgroundColor: 'var(--bg-secondary)',
-        borderColor: 'var(--border-color)',
-        paddingBottom: '60px'
-      }}
-    >
+    <>
+      {/* Wallpaper Selection Popup */}
+      <AnimatePresence>
+        {wallpaperPopupOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-transparent p-4"
+            onClick={() => setWallpaperPopupOpen(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="mb-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                选择聊天壁纸
+              </h3>
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {[
+                  { id: 'ling', name: '玲', path: '/src/images/background/ling.jpg' },
+                  { id: 'xue', name: '雪', path: '/src/images/background/xue.png' },
+                  { id: 'pool', name: '泳池', path: '/src/images/background/五女泳池.jpg' },
+                  { id: 'girl', name: '宅家少女', path: '/src/images/background/宅家少女.png' }
+                ].map((wallpaper) => (
+                  <button
+                    key={wallpaper.id}
+                    onClick={() => {
+                      setChatWallpaper(wallpaper.path);
+                      setWallpaperPopupOpen(false);
+                    }}
+                    className="rounded-lg overflow-hidden transition-all active:scale-[0.98]"
+                    style={{
+                      border: `2px solid ${chatWallpaper === wallpaper.path ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                    }}
+                  >
+                    <div className="aspect-square relative">
+                      <img
+                        src={wallpaper.path}
+                        alt={wallpaper.name}
+                        className="w-full h-full object-cover"
+                      />
+                      {chatWallpaper === wallpaper.path && (
+                        <div className="absolute inset-0 bg-primary-color bg-opacity-20 flex items-center justify-center">
+                          <div className="bg-primary-color text-white text-xs px-2 py-1 rounded-full">
+                            ✓ 当前
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2 text-center">
+                      <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                        {wallpaper.name}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setWallpaperPopupOpen(false)}
+                  className="rounded-lg px-4 py-2 text-sm transition-colors"
+                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={() => {
+                    setChatWallpaper('');
+                    setWallpaperPopupOpen(false);
+                  }}
+                  className="rounded-lg px-4 py-2 text-sm transition-colors"
+                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
+                >
+                  清除壁纸
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <motion.aside
+        initial={false}
+        animate={{ width: sidebarCollapsed ? 68 : 280 }}
+        transition={{ duration: 0.2, ease: 'easeInOut' }}
+        className="flex h-full flex-col border-r no-select"
+        style={{
+          backgroundColor: 'var(--bg-secondary)',
+          borderColor: 'var(--border-color)',
+          paddingBottom: '60px'
+        }}
+      >
       {/* Header */}
       <div className="flex items-center justify-between p-3" style={{ height: 56 }}>
         {!sidebarCollapsed && (
@@ -293,23 +380,24 @@ export function Sidebar() {
                   <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
                 </div>
 
-                {/* Model indicator */}
+                {/* Chat Wallpaper Setting */}
                 <div
-                  className="flex items-center gap-2 rounded-lg p-2.5"
+                  onClick={() => setWallpaperPopupOpen(true)}
+                  className="flex cursor-pointer items-center gap-2 rounded-lg p-2.5 transition-colors hover:opacity-90"
                   style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-light)' }}
                 >
                   <div
-                    className="flex h-7 w-7 items-center justify-center rounded-md text-xs font-bold"
+                    className="flex h-7 w-7 items-center justify-center rounded-md"
                     style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
                   >
-                    {activeModel?.name.charAt(0) || 'A'}
+                    <Images size={14} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                      {activeModel?.name || '未选择模型'}
+                      聊天壁纸设置
                     </div>
                     <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      {activeModel?.provider || '--'}
+                      {chatWallpaper ? '已设置壁纸' : '未设置壁纸'}
                     </div>
                   </div>
                   <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
@@ -493,6 +581,7 @@ export function Sidebar() {
           </div>
         )}
       </motion.div>
-    </motion.aside>
+      </motion.aside>
+    </>
   );
 }
