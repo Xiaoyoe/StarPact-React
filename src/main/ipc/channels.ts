@@ -25,4 +25,10 @@ export const IPC_CHANNELS = {
     MIGRATE_MODULE_DATA: 'storage:migrateModuleData',
     PATH_NOT_CONFIGURED: 'storage:pathNotConfigured',
   },
+  WINDOW: {
+    MINIMIZE: 'window:minimize',
+    MAXIMIZE: 'window:maximize',
+    CLOSE: 'window:close',
+    GET_MAXIMIZED: 'window:getMaximized',
+  },
 } as const;

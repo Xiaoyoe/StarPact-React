@@ -11,6 +11,7 @@ import sharp from 'sharp';
 import { useStore } from '@/store';
 import { GalleryStorage, ImageMetadata, ImageAlbum } from '@/services/storage/GalleryStorage';
 import { useToast } from '@/components/Toast';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // 检查是否为Electron环境
 const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
@@ -806,7 +807,7 @@ export function GalleryPage() {
 
   return (
     <div className="relative flex flex-col h-full" style={{ backgroundColor: 'var(--bg-primary)' }}>
-      {/* 工具栏 */}
+      {/* 顶部工具栏 */}
       <GalleryToolbar
         viewMode={viewMode}
         onViewModeChange={setViewMode}
@@ -857,13 +858,29 @@ export function GalleryPage() {
           </div>
 
           {/* 侧边栏 */}
-          <div className={`fixed right-0 top-1/4 bottom-1/4 w-60 transition-all duration-300 ease-in-out transform ${showSidebar ? 'translate-x-0' : 'translate-x-full'} z-40 rounded-l-lg shadow-xl`}>
-            <GallerySidebar
-              folders={folders}
-              activeFolderId={activeFolderId}
-              onSelectFolder={setActiveFolderId}
-            />
-          </div>
+          <AnimatePresence>
+            {showSidebar && (
+              <motion.div
+                initial={{ x: 280, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 280, opacity: 0 }}
+                transition={{ 
+                  type: 'spring', 
+                  stiffness: 300, 
+                  damping: 30,
+                  opacity: { duration: 0.2 }
+                }}
+                className="fixed right-0 top-1/4 bottom-1/4 w-60 z-40 rounded-l-lg shadow-xl overflow-hidden"
+                style={{ backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <GallerySidebar
+                  folders={folders}
+                  activeFolderId={activeFolderId}
+                  onSelectFolder={setActiveFolderId}
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 

@@ -50,6 +50,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
       defaultPath?: string;
     }) => ipcRenderer.invoke(IPC_CHANNELS.FILE.SELECT_FOLDER, options),
   },
+  window: {
+    minimize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.MINIMIZE),
+    maximize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.MAXIMIZE),
+    close: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.CLOSE),
+    getMaximized: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.GET_MAXIMIZED),
+  },
 });
 
 declare global {
@@ -84,6 +90,12 @@ declare global {
           path: string | null;
           error?: string;
         }>;
+      };
+      window: {
+        minimize: () => Promise<void>;
+        maximize: () => Promise<void>;
+        close: () => Promise<void>;
+        getMaximized: () => Promise<boolean>;
       };
     };
   }

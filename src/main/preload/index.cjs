@@ -20,6 +20,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectFolder: (options) => ipcRenderer.invoke('file:selectFolder', options),
   },
   
+  // 窗口控制API
+  window: {
+    drag: (delta) => ipcRenderer.send('window:drag', delta),
+    minimize: () => ipcRenderer.send('window:minimize'),
+    maximize: () => ipcRenderer.send('window:maximize'),
+    close: () => ipcRenderer.send('window:close'),
+  },
+  
   // 监听路径未配置通知
   onPathNotConfigured: (callback) => {
     const listener = () => callback();

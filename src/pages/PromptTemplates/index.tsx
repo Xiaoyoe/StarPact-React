@@ -825,7 +825,7 @@ export default function PromptTemplatesPage() {
   const hasFilters = searchQuery || filterCategory || filterTag;
 
   return (
-    <div className="min-h-screen no-select" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div className="h-full no-select flex flex-col" style={{ backgroundColor: 'var(--bg-primary)' }}>
       <Toast message={toastMsg} visible={toastVisible} />
 
       {/* 搜索与筛选栏 */}

@@ -9,6 +9,13 @@ interface VideoPlayerProps {
   filters?: VideoFilters;
   onEnded?: () => void;
   onVideoInfo?: (info: VideoInfo) => void;
+  onPlay?: () => void;
+  onPause?: () => void;
+  onPlayPrevious?: () => void;
+  onPlayNext?: () => void;
+  canPlayPrevious?: boolean;
+  canPlayNext?: boolean;
+  videoFit?: 'cover' | 'contain' | 'auto';
 }
 
 function formatTime(seconds: number): string {
@@ -29,7 +36,7 @@ function buildFilterCSS(f: VideoFilters): string {
   return parts.length > 0 ? parts.join(' ') : 'none';
 }
 
-export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEnded, onVideoInfo }: VideoPlayerProps) {
+export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEnded, onVideoInfo, onPlay, onPause, onPlayPrevious, onPlayNext, canPlayPrevious = true, canPlayNext = true, videoFit = 'auto' }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -51,6 +58,7 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
   const [screenshotFlash, setScreenshotFlash] = useState(false);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [videoAspectRatio, setVideoAspectRatio] = useState<number>(16 / 9);
 
   // Reset state on source change
   useEffect(() => {
@@ -77,10 +85,12 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
     if (!video || !src) return;
     if (video.paused) {
       video.play().catch(() => {});
+      onPlay?.();
     } else {
       video.pause();
+      onPause?.();
     }
-  }, [src]);
+  }, [src, onPlay, onPause]);
 
   const skip = useCallback((seconds: number) => {
     const video = videoRef.current;
@@ -282,15 +292,9 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
   return (
     <div
       ref={containerRef}
-      className={cn(
-        'relative w-full overflow-hidden group/player',
-        isFullscreen ? 'rounded-none' : 'rounded-2xl ring-1 shadow-2xl'
-      )}
+      className='relative w-full h-full overflow-hidden group/player'
       style={{
-        backgroundColor: 'var(--bg-primary)',
-        boxShadow: isFullscreen ? 'none' : `0 25px 50px -12px ${getComputedStyle(document.documentElement).getPropertyValue('--bg-primary')}/70`,
-        borderColor: 'var(--border-color)',
-        aspectRatio: isFullscreen ? undefined : '16/9'
+        backgroundColor: videoFit === 'auto' && videoAspectRatio < 1 ? '#000' : 'var(--bg-primary)'
       }}
       onMouseMove={resetHideTimer}
       onMouseLeave={() => { if (isPlaying) setShowControls(false); setHoverTime(null); }}
@@ -300,8 +304,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
         ref={videoRef}
         src={src}
         loop={loop}
-        className={cn('w-full h-full object-contain cursor-pointer', isFullscreen && 'h-screen')}
-        style={{ filter: filterCSS }}
+        className={cn('w-full h-full cursor-pointer')}
+        style={{ filter: filterCSS, objectFit: videoFit === 'auto' ? 'contain' : videoFit }}
         onTimeUpdate={() => {
           const v = videoRef.current;
           if (!v) return;
@@ -314,6 +318,7 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
           setDuration(v.duration);
           v.volume = volume;
           setIsLoading(false);
+          setVideoAspectRatio(v.videoWidth / v.videoHeight);
           onVideoInfo?.({ width: v.videoWidth, height: v.videoHeight });
         }}
         onWaiting={() => setIsLoading(true)}
@@ -342,15 +347,9 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
         </div>
       )}
 
-      {/* Big play button overlay */}
+      {/* Big play button overlay (only when paused) */}
       {!isPlaying && !isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center cursor-pointer z-10" style={{ backgroundColor: 'var(--bg-primary)/30' }} onClick={togglePlay}>
-          <div className="w-20 h-20 rounded-full backdrop-blur-xl flex items-center justify-center border shadow-2xl transition-transform duration-300 hover:scale-110 active:scale-95 group/play" style={{ backgroundColor: 'var(--bg-secondary)/12', borderColor: 'var(--text-secondary)/20' }}>
-            <svg className="w-9 h-9 ml-1 drop-shadow-lg" fill="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--text-primary)' }}>
-              <path d="M8 5v14l11-7z" />
-            </svg>
-          </div>
-        </div>
+        <div className="absolute inset-0 cursor-pointer z-10" onClick={togglePlay} />
       )}
 
       {/* Mini progress bar (visible when controls hidden) */}
@@ -409,50 +408,6 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
           <div className="flex items-center justify-between gap-2">
             {/* Left controls */}
             <div className="flex items-center gap-1">
-              {/* Play/Pause */}
-              <button
-                onClick={togglePlay}
-                className="p-2 rounded-full transition-colors"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                title={isPlaying ? '暂停 (K)' : '播放 (K)'}
-              >
-                {isPlaying ? (
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" /></svg>
-                ) : (
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z" /></svg>
-                )}
-              </button>
-
-              {/* Skip back */}
-              <button
-                onClick={() => skip(-10)}
-                className="p-2 rounded-full transition-colors"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                title="后退10秒 (J)"
-              >
-                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
-                </svg>
-              </button>
-
-              {/* Skip forward */}
-              <button
-                onClick={() => skip(10)}
-                className="p-2 rounded-full transition-colors"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                title="前进10秒 (L)"
-              >
-                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
-                </svg>
-              </button>
-
               {/* Volume */}
               <div className="flex items-center gap-1 ml-1 group/vol">
                 <button
@@ -491,8 +446,89 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               </span>
             </div>
 
+            {/* Center controls */}
+            <div className="flex items-center gap-3">
+              {/* Previous video button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); onPlayPrevious?.(); }}
+                disabled={!canPlayPrevious}
+                className="p-2 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                title="上一个视频"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* Play/Pause button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                title={isPlaying ? '暂停' : '播放'}
+              >
+                {isPlaying ? (
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z" />
+                  </svg>
+                ) : (
+                  <svg className="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                )}
+              </button>
+
+              {/* Next video button */}
+              <button
+                onClick={(e) => { e.stopPropagation(); onPlayNext?.(); }}
+                disabled={!canPlayNext}
+                className="p-2 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                title="下一个视频"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+
             {/* Right controls */}
             <div className="flex items-center gap-0.5">
+              {/* Skip back */}
+              <button
+                onClick={() => skip(-10)}
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                title="后退10秒 (J)"
+              >
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.333 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z" />
+                </svg>
+              </button>
+
+              {/* Skip forward */}
+              <button
+                onClick={() => skip(10)}
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                title="前进10秒 (L)"
+              >
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.933 12.8a1 1 0 000-1.6L6.6 7.2A1 1 0 005 8v8a1 1 0 001.6.8l5.333-4zM19.933 12.8a1 1 0 000-1.6l-5.333-4A1 1 0 0013 8v8a1 1 0 001.6.8l5.333-4z" />
+                </svg>
+              </button>
+
               {/* Screenshot */}
               <button
                 onClick={takeScreenshot}
@@ -505,6 +541,26 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+                </svg>
+              </button>
+
+              {/* PiP */}
+              <button
+                onClick={() => {
+                  const v = videoRef.current;
+                  if (!v) return;
+                  if (document.pictureInPictureElement) document.exitPictureInPicture();
+                  else v.requestPictureInPicture();
+                }}
+                className="p-2 rounded-full transition-colors"
+                style={{ color: 'var(--text-primary)' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                title="画中画"
+              >
+                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <rect x="2" y="3" width="20" height="14" rx="2" />
+                  <rect x="11" y="9" width="9" height="6" rx="1" className="fill-current opacity-30" />
                 </svg>
               </button>
 
@@ -553,26 +609,6 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
                   </div>
                 )}
               </div>
-
-              {/* PiP */}
-              <button
-                onClick={() => {
-                  const v = videoRef.current;
-                  if (!v) return;
-                  if (document.pictureInPictureElement) document.exitPictureInPicture();
-                  else v.requestPictureInPicture();
-                }}
-                className="p-2 rounded-full transition-colors"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                title="画中画"
-              >
-                <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <rect x="2" y="3" width="20" height="14" rx="2" />
-                  <rect x="11" y="9" width="9" height="6" rx="1" className="fill-current opacity-30" />
-                </svg>
-              </button>
 
               {/* Fullscreen */}
               <button

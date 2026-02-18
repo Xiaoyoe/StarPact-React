@@ -224,3 +224,33 @@ code, pre, .font-mono {
 .animate-slide-in-right {
   animation: slideInRight var(--transition-slow) ease forwards;
 }
+
+/* Custom Title Bar Styles */
+.custom-title-bar {
+  transition: background-color var(--transition-base), border-color var(--transition-base);
+}
+
+.title-bar-btn {
+  border-radius: 4px;
+}
+
+.title-bar-btn:hover {
+  background-color: var(--hover-bg-secondary);
+}
+
+.title-bar-btn:active {
+  transform: scale(0.95);
+  background-color: var(--bg-tertiary);
+}
+
+.title-bar-close:hover {
+  background-color: rgba(239, 68, 68, 0.8) !important;
+}
+
+.title-bar-close:hover span {
+  background-color: white !important;
+}
+
+.title-bar-close:active {
+  background-color: rgba(220, 38, 38, 0.9) !important;
+}

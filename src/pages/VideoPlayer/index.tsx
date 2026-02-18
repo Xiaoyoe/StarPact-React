@@ -25,6 +25,7 @@ function VideoPlayerPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [videoFit, setVideoFit] = useState<'cover' | 'contain' | 'auto'>('auto');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCountRef = useRef(0);
@@ -375,7 +376,7 @@ function VideoPlayerPage() {
   const openFilePicker = () => fileInputRef.current?.click();
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+    <div className="h-full flex flex-col overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -409,129 +410,152 @@ function VideoPlayerPage() {
         </div>
       )}
 
-      {/* Header */}
-      <header className="shrink-0 h-16 border-b flex items-center justify-between px-6 z-30" style={{ 
-        borderColor: 'var(--border-color)', 
-        backgroundColor: 'var(--bg-secondary)',
-        backdropFilter: 'blur(8px)'
-      }}>
-        {/* Left: Video info */}
-        <div className="flex items-center">
-          {currentVideo && (
-            <div className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-              {videoInfo ? `${videoInfo.width}×${videoInfo.height}` : '未知分辨率'} &nbsp;•&nbsp; {formatFileSize(currentVideo.size)} &nbsp;•&nbsp; {formatDuration(currentVideo.duration)}
-            </div>
-          )}
-        </div>
-
-        {/* Center: Video filename */}
-        <div className="flex-1 text-center mx-6">
-          {currentVideo ? (
-            <h1 className="text-lg font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-              {currentVideo.name.replace(/\.[^/.]+$/, '')}
-            </h1>
-          ) : (
-            <h1 className="text-lg font-medium" style={{ color: 'var(--text-tertiary)' }}>
-              暂无视频文件
-            </h1>
-          )}
-        </div>
-
-        {/* Right: Actions */}
-        <div className="flex items-center gap-3">
-          <button
-            onClick={openFilePicker}
-            className="flex items-center gap-2 px-5 py-2 rounded-full text-sm font-medium transition-all duration-300"
-            style={{ 
-              background: 'linear-gradient(to right, var(--primary-color), var(--primary-dark))',
-              color: 'white',
-              boxShadow: '0 4px 12px var(--primary-color)/25'
-            }}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-            </svg>
-            <span>选择视频</span>
-          </button>
-          <button
-            onClick={() => {
-              const newAutoPlay = !autoPlay;
-              setAutoPlay(newAutoPlay);
-              toast.success(newAutoPlay ? '自动播放已开启' : '自动播放已关闭');
-            }}
-            className="flex items-center justify-center w-10 h-10 rounded-full transition-colors"
-            style={{ 
-              backgroundColor: autoPlay ? 'var(--primary-light)' : 'var(--bg-tertiary)', 
-              color: autoPlay ? 'var(--primary-color)' : 'var(--text-primary)',
-              border: `1px solid ${autoPlay ? 'var(--primary-color)/30' : 'var(--border-color)'}`
-            }}
-            title={autoPlay ? '关闭自动播放' : '开启自动播放'}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <polygon points="23 7 16 12 23 17 23 7" />
-              <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setShowShortcuts(true)}
-            className="flex items-center justify-center w-10 h-10 rounded-full transition-colors"
-            style={{ 
-              backgroundColor: 'var(--bg-tertiary)', 
-              color: 'var(--text-primary)',
-              border: `1px solid var(--border-color)`
-            }}
-            title="快捷键"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
-            </svg>
-          </button>
-          <button
-            onClick={() => {
-              const newSidebarOpen = !sidebarOpen;
-              setSidebarOpen(newSidebarOpen);
-              setShowToolbar(newSidebarOpen);
-            }}
-            className="flex items-center justify-center w-10 h-10 rounded-full transition-colors"
-            style={{ 
-              backgroundColor: 'var(--bg-tertiary)', 
-              color: 'var(--text-primary)',
-              border: `1px solid var(--border-color)`
-            }}
-            title={sidebarOpen ? '隐藏侧边栏' : '显示侧边栏'}
-          >
-            {sidebarOpen ? (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M12 17.25h8.25" />
-              </svg>
-            ) : (
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-              </svg>
-            )}
-          </button>
-        </div>
-      </header>
-
       {/* Main content */}
       <main className="flex-1 flex flex-col lg:flex-row min-h-0 overflow-hidden">
         {/* Video area */}
         <div className="flex-1 min-w-0 flex flex-col min-h-0 relative">
           {/* Player */}
-          <div className="flex-1 min-w-0 flex items-center justify-center p-4 md:p-8" style={{ backgroundColor: 'var(--bg-primary)' }}>
-            <div className="w-full h-full flex items-center justify-center">
+          <div className="flex-1 min-w-0 relative" style={{ backgroundColor: 'var(--bg-primary)' }}>
+            <div className="w-full h-full">
               <div 
-                className="w-full max-w-6xl mx-auto transition-all duration-300 ease-in-out"
-                style={{
-                  aspectRatio: '16/9',
-                  maxHeight: '80vh'
-                }}
+                className="w-full h-full transition-all duration-300 ease-in-out"
               >
                 {currentVideo ? (
-                  <div className="relative w-full h-full rounded-xl overflow-hidden shadow-2xl border" style={{ 
-                    boxShadow: 'var(--shadow-lg)',
-                    borderColor: 'var(--border-color)'
-                  }}>
+                  <div className="relative w-full h-full">
+                    {/* Top toolbar overlay */}
+                    <header className="absolute top-0 left-0 right-0 z-30 flex items-center justify-between px-6 py-3" style={{ 
+                      background: 'transparent'
+                    }}>
+                      {/* Left: Video info */}
+                      <div className="flex items-center">
+                        {currentVideo && (
+                          <div className="text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                            {videoInfo ? `${videoInfo.width}×${videoInfo.height}` : '未知分辨率'} &nbsp;•&nbsp; {formatFileSize(currentVideo.size)} &nbsp;•&nbsp; {formatDuration(currentVideo.duration)}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Center: Video filename */}
+                      <div className="flex-1 text-center mx-6">
+                        {currentVideo ? (
+                          <h1 className="text-lg font-medium truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                            {currentVideo.name.replace(/\.[^/.]+$/, '')}
+                          </h1>
+                        ) : (
+                          <h1 className="text-lg font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                            暂无视频文件
+                          </h1>
+                        )}
+                      </div>
+
+                      {/* Right: Actions */}
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={openFilePicker}
+                          className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300"
+                          style={{ 
+                            background: 'rgba(0,0,0,0.3)',
+                            color: 'white',
+                            border: '1px solid rgba(255,255,255,0.2)'
+                          }}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                          </svg>
+                          <span>添加视频</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            const newAutoPlay = !autoPlay;
+                            setAutoPlay(newAutoPlay);
+                            toast.success(newAutoPlay ? '自动播放已开启' : '自动播放已关闭');
+                          }}
+                          className="flex items-center justify-center w-9 h-9 rounded-full transition-colors"
+                          style={{ 
+                            backgroundColor: 'rgba(0,0,0,0.3)', 
+                            color: 'white',
+                            border: '1px solid rgba(255,255,255,0.2)'
+                          }}
+                          title={autoPlay ? '关闭自动播放' : '开启自动播放'}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <polygon points="23 7 16 12 23 17 23 7" />
+                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => setShowShortcuts(true)}
+                          className="flex items-center justify-center w-9 h-9 rounded-full transition-colors"
+                          style={{ 
+                            backgroundColor: 'rgba(0,0,0,0.3)', 
+                            color: 'white',
+                            border: '1px solid rgba(255,255,255,0.2)'
+                          }}
+                          title="快捷键"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setVideoFit(prev => {
+                              if (prev === 'auto') return 'cover';
+                              if (prev === 'cover') return 'contain';
+                              return 'auto';
+                            });
+                          }}
+                          className="flex items-center justify-center w-9 h-9 rounded-full transition-colors"
+                          style={{ 
+                            backgroundColor: 'rgba(0,0,0,0.3)', 
+                            color: 'white',
+                            border: '1px solid rgba(255,255,255,0.2)'
+                          }}
+                          title={videoFit === 'auto' ? '自适应模式' : videoFit === 'cover' ? '填满区域' : '完整显示'}
+                        >
+                          {videoFit === 'auto' ? (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                          ) : videoFit === 'cover' ? (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v16H4z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 9h16M4 15h16M9 4v16M15 4v16" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <rect x="3" y="3" width="18" height="18" rx="2" />
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
+                            </svg>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => {
+                            const newSidebarOpen = !sidebarOpen;
+                            setSidebarOpen(newSidebarOpen);
+                            setShowToolbar(newSidebarOpen);
+                          }}
+                          className="flex items-center justify-center w-9 h-9 rounded-full transition-colors"
+                          style={{ 
+                            backgroundColor: 'rgba(0,0,0,0.3)', 
+                            color: 'white',
+                            border: '1px solid rgba(255,255,255,0.2)'
+                          }}
+                          title={sidebarOpen ? '隐藏侧边栏' : '显示侧边栏'}
+                        >
+                          {sidebarOpen ? (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M12 17.25h8.25" />
+                            </svg>
+                          ) : (
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                            </svg>
+                          )}
+                        </button>
+                      </div>
+                    </header>
+
                     <VideoPlayer
                       key={currentVideo.id}
                       src={currentVideo.url}
@@ -541,15 +565,17 @@ function VideoPlayerPage() {
                       onVideoInfo={setVideoInfo}
                       onPlay={() => setIsPlaying(true)}
                       onPause={() => setIsPlaying(false)}
-                      onTimeUpdate={(time) => setCurrentTime(time)}
-                      onDuration={(dur) => setDuration(dur)}
+                      onPlayPrevious={playPrevious}
+                      onPlayNext={playNext}
+                      canPlayPrevious={currentIndex > 0 || repeatMode === 'all'}
+                      canPlayNext={currentIndex < playlist.length - 1 || repeatMode === 'all'}
+                      videoFit={videoFit}
                     />
 
                   </div>
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center rounded-xl border-2 border-dashed" style={{ 
-                    borderColor: 'var(--border-color)',
-                    backgroundColor: 'var(--bg-secondary)'
+                  <div className="w-full h-full flex flex-col items-center justify-center" style={{ 
+                    backgroundColor: 'var(--bg-primary)'
                   }}>
                     <div className="mb-6">
                       <svg className="w-20 h-20" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24" style={{ color: 'var(--text-tertiary)' }}>
@@ -570,7 +596,7 @@ function VideoPlayerPage() {
                         boxShadow: '0 4px 12px var(--primary-color)/25'
                       }}
                     >
-                      选择视频文件
+                      添加视频文件
                     </button>
                   </div>
                 )}
@@ -578,89 +604,6 @@ function VideoPlayerPage() {
             </div>
           </div>
 
-          {/* Bottom controls */}
-          <div 
-            style={{ 
-              shrink: 0,
-              borderTop: `1px solid var(--border-color)`,
-              padding: '16px 24px',
-              backgroundColor: 'var(--bg-secondary)',
-              backdropFilter: 'blur(8px)',
-              boxShadow: '0 -2px 10px rgba(0, 0, 0, 0.1)',
-              transition: 'all 0.4s ease-in-out',
-              transform: showToolbar ? 'translateY(0)' : 'translateY(100%)',
-              opacity: showToolbar ? 1 : 0,
-              pointerEvents: showToolbar ? 'auto' : 'none'
-            }}
-          >
-            <div className="flex items-center justify-between gap-4">
-              {/* Playback controls */}
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={playPrevious}
-                  disabled={currentIndex <= 0 && repeatMode !== 'all'}
-                  className="flex items-center justify-center w-10 h-10 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ 
-                    backgroundColor: 'var(--bg-tertiary)', 
-                    color: 'var(--text-primary)',
-                    border: `1px solid var(--border-color)`
-                  }}
-                  title="上一个"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                
-                {/* Play/pause button would go here if we had direct control */}
-                
-                <button
-                  onClick={playNext}
-                  disabled={currentIndex >= playlist.length - 1 && repeatMode !== 'all'}
-                  className="flex items-center justify-center w-10 h-10 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  style={{ 
-                    backgroundColor: 'var(--bg-tertiary)', 
-                    color: 'var(--text-primary)',
-                    border: `1px solid var(--border-color)`
-                  }}
-                  title="下一个"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* Repeat mode */}
-              <div className="flex items-center gap-2">
-                <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>重复:</span>
-                <div className="flex items-center gap-1 rounded-lg p-1" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-                  {(['off', 'all', 'one'] as RepeatMode[]).map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => setRepeatMode(mode)}
-                      className="px-3 py-1 rounded-md text-xs font-medium transition-all"
-                      style={{
-                        backgroundColor: repeatMode === mode ? 'var(--primary-color)' : 'transparent',
-                        color: repeatMode === mode ? 'white' : 'var(--text-secondary)'
-                      }}
-                    >
-                      {mode === 'off' ? '关闭' : mode === 'all' ? '列表' : '单曲'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Playlist info */}
-              <div className="flex items-center gap-3 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                {playlist.length > 0 && (
-                  <span>
-                    {currentIndex + 1} / {playlist.length}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Sidebar */}
@@ -677,37 +620,43 @@ function VideoPlayerPage() {
           <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--bg-secondary)' }}>
             {/* Sidebar header */}
             <div className="shrink-0 border-b p-4" style={{ borderColor: 'var(--border-color)' }}>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>播放列表</h3>
-                <div className="flex items-center gap-2">
-                  <span className="px-2 py-1 rounded-full text-xs font-medium" style={{ 
-                    backgroundColor: 'var(--primary-light)', 
-                    color: 'var(--primary-color)',
-                    border: `1px solid var(--primary-color)/30`
-                  }}>
-                    {playlist.length}
-                  </span>
-                  <button
-                    onClick={clearPlaylist}
-                    className="flex items-center justify-center w-8 h-8 rounded-full transition-colors"
-                    style={{ 
-                      backgroundColor: 'var(--bg-tertiary)', 
-                      color: 'var(--text-primary)',
-                      border: `1px solid var(--border-color)`
-                    }}
-                    title="清空列表"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </button>
+                <span className="px-2 py-1 rounded-full text-xs font-medium" style={{ 
+                  backgroundColor: 'var(--primary-light)', 
+                  color: 'var(--primary-color)',
+                  border: `1px solid var(--primary-color)/30`
+                }}>
+                  {playlist.length}
+                </span>
+              </div>
+
+              {/* Playlist controls */}
+              <div className="space-y-3">
+                {/* Repeat mode */}
+                <div>
+                  <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-tertiary)' }}>播放模式</div>
+                  <div className="flex items-center gap-1 rounded-lg p-1" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                    {(['off', 'all'] as RepeatMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setRepeatMode(mode)}
+                        className="flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all"
+                        style={{
+                          backgroundColor: repeatMode === mode ? 'var(--primary-color)' : 'transparent',
+                          color: repeatMode === mode ? 'white' : 'var(--text-secondary)'
+                        }}
+                      >
+                        {mode === 'off' ? '循环' : '列表'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Playlist items */}
-            <div className="flex-1 overflow-y-auto p-3" style={{ maxHeight: 'calc(100vh - 200px)' }}>
+            <div className="flex-1 overflow-y-auto p-3">
               {playlist.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center p-8">
                   <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24" style={{ color: 'var(--text-tertiary)' }}>
@@ -724,7 +673,7 @@ function VideoPlayerPage() {
                       color: 'white'
                     }}
                   >
-                    选择视频文件
+                    添加视频文件
                   </button>
                 </div>
               ) : (
@@ -812,7 +761,7 @@ function VideoPlayerPage() {
                 {/* Quick actions */}
                 <div>
                   <h4 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>快速操作</h4>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-2">
                     <button
                       onClick={openFilePicker}
                       className="w-full px-4 py-2 rounded-lg text-sm font-medium transition-all"

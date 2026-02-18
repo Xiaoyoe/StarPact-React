@@ -3,8 +3,9 @@ import path from 'path';
 import { registerOllamaHandlers } from './ipc/ollamaHandlers';
 import { registerFileHandlers } from './ipc/fileHandlers';
 import { registerStorageHandlers } from './ipc/storageHandlers';
+import { registerWindowHandlers } from './ipc/windowHandlers';
 
-let mainWindow: BrowserWindow | null = null;
+export let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -36,6 +37,7 @@ app.whenReady().then(() => {
   registerOllamaHandlers();
   registerFileHandlers();
   registerStorageHandlers();
+  registerWindowHandlers();
   createWindow();
 });
 

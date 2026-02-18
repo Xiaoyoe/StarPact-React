@@ -614,7 +614,7 @@ export function ComparePage() {
   return (
     <div style={{
       width: '100%',
-      height: '100vh',
+      height: '100%',
       display: 'flex',
       flexDirection: 'column',
       background: 'var(--bg-primary)',
@@ -720,7 +720,6 @@ export function ComparePage() {
       {toolbarVisible && (
         <div style={{
           background: 'var(--bg-secondary)',
-          borderTop: '1px solid var(--border-primary)',
           padding: '0 12px',
         }}>
           {/* Toolbar row */}

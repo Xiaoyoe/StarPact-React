@@ -15,6 +15,7 @@ import { OllamaModal } from '@/components/OllamaModal';
 import { WebShortcutPopup } from '@/components/WebShortcutPopup';
 import { DataManager } from '@/components/DataManager';
 import { ToastProvider } from '@/components/Toast';
+import CustomTitleBar from '@/components/CustomTitleBar';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function PageContent() {
@@ -28,7 +29,7 @@ function PageContent() {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.15 }}
-        className="h-full"
+        className="flex-1 min-h-0 overflow-hidden"
       >
         {activePage === 'chat' && <ChatPage />}
         {activePage === 'models' && <ModelsPage />}
@@ -100,7 +101,8 @@ export function App() {
     <ToastProvider>
       <div className="flex h-screen overflow-hidden no-select" style={{ backgroundColor: 'var(--bg-primary)' }}>
         <Sidebar />
-        <main className="min-w-0 flex-1 no-select">
+        <main className="min-w-0 flex-1 no-select flex flex-col">
+          <CustomTitleBar title="AI Model WebUI" />
           <PageContent />
         </main>
         <LogsPanel />

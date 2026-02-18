@@ -417,7 +417,7 @@ export function ImageGrid({
   if (viewMode === 'list') {
     return (
       <div className="space-y-1 p-4">
-        <div className="grid grid-cols-[auto_1fr_100px_100px_120px_80px] gap-4 items-center px-4 py-2 text-xs text-slate-500 border-b border-slate-800">
+        <div className="grid grid-cols-[auto_1fr_100px_100px_120px_80px] gap-4 items-center px-4 py-2 text-xs text-slate-500">
           <div className="w-5" />
           <div>文件名</div>
           <div>尺寸</div>
@@ -1114,7 +1114,7 @@ export function GalleryToolbar({
   ];
 
   return (
-    <div className="h-14 flex items-center justify-between px-4 flex-shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', backdropFilter: 'blur(8px)', borderBottom: '1px solid var(--border-color)' }}>
+    <div className="h-16 flex items-center justify-between px-4 flex-shrink-0">
       <div className="flex items-center gap-3">
         <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{folderName}</h2>
         <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}>

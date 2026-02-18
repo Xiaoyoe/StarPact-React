@@ -199,8 +199,6 @@ export function NovelEditor({
         height: '100%',
         overflow: 'hidden',
         background: 'var(--bg-editor)',
-        borderRadius: 8,
-        border: '1px solid var(--border-primary)',
       }}
     >
       {label && (
