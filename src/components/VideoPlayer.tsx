@@ -15,7 +15,6 @@ interface VideoPlayerProps {
   onPlayNext?: () => void;
   canPlayPrevious?: boolean;
   canPlayNext?: boolean;
-  videoFit?: 'cover' | 'contain' | 'auto';
 }
 
 function formatTime(seconds: number): string {
@@ -36,7 +35,7 @@ function buildFilterCSS(f: VideoFilters): string {
   return parts.length > 0 ? parts.join(' ') : 'none';
 }
 
-export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEnded, onVideoInfo, onPlay, onPause, onPlayPrevious, onPlayNext, canPlayPrevious = true, canPlayNext = true, videoFit = 'auto' }: VideoPlayerProps) {
+export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEnded, onVideoInfo, onPlay, onPause, onPlayPrevious, onPlayNext, canPlayPrevious = true, canPlayNext = true }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -58,7 +57,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
   const [screenshotFlash, setScreenshotFlash] = useState(false);
   const [isDraggingProgress, setIsDraggingProgress] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [videoAspectRatio, setVideoAspectRatio] = useState<number>(16 / 9);
+  const [videoDimensions, setVideoDimensions] = useState({ width: 0, height: 0 });
+  const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
 
   // Reset state on source change
   useEffect(() => {
@@ -70,15 +70,33 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
     setShowControls(true);
     setIsPlaying(false);
     setIsLoading(true);
+    setVideoDimensions({ width: 0, height: 0 });
     const video = videoRef.current;
     if (video) {
       video.playbackRate = 1;
-      // 当src变化时，确保视频会自动播放
       video.onloadeddata = () => {
         video.play().catch(() => {});
       };
     }
   }, [src]);
+
+  // 监听容器尺寸变化
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const updateContainerDimensions = () => {
+      const rect = container.getBoundingClientRect();
+      setContainerDimensions({ width: rect.width, height: rect.height });
+    };
+
+    updateContainerDimensions();
+
+    const resizeObserver = new ResizeObserver(updateContainerDimensions);
+    resizeObserver.observe(container);
+
+    return () => resizeObserver.disconnect();
+  }, []);
 
   const togglePlay = useCallback(() => {
     const video = videoRef.current;
@@ -276,6 +294,15 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
 
   useEffect(() => { resetHideTimer(); }, [isPlaying, resetHideTimer]);
 
+  // 监听窗口resize事件
+  useEffect(() => {
+    const handleResize = () => {
+      // 窗口变化时自动触发重新渲染
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange', handleFsChange);
@@ -287,6 +314,32 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
   const volumePercent = isMuted ? 0 : volume * 100;
   const filterCSS = buildFilterCSS(filters);
 
+  const getVideoStyle = () => {
+    if (videoDimensions.width === 0 || containerDimensions.width === 0) {
+      return { filter: filterCSS };
+    }
+
+    const maxHeight = containerDimensions.height;
+    const maxWidth = containerDimensions.width;
+    const videoHeight = videoDimensions.height;
+    const videoWidth = videoDimensions.width;
+
+    const heightRatio = maxHeight / videoHeight;
+    const widthRatio = maxWidth / videoWidth;
+    const scale = Math.min(heightRatio, widthRatio);
+
+    const displayHeight = videoHeight * scale;
+    const displayWidth = videoWidth * scale;
+
+    return {
+      filter: filterCSS,
+      width: `${displayWidth}px`,
+      height: `${displayHeight}px`,
+      maxWidth: '100%',
+      maxHeight: '100%',
+    };
+  };
+
   if (!src) return null;
 
   return (
@@ -294,43 +347,45 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
       ref={containerRef}
       className='relative w-full h-full overflow-hidden group/player'
       style={{
-        backgroundColor: videoFit === 'auto' && videoAspectRatio < 1 ? '#000' : 'var(--bg-primary)'
+        backgroundColor: '#000'
       }}
       onMouseMove={resetHideTimer}
       onMouseLeave={() => { if (isPlaying) setShowControls(false); setHoverTime(null); }}
     >
       {/* Video element */}
-      <video
-        ref={videoRef}
-        src={src}
-        loop={loop}
-        className={cn('w-full h-full cursor-pointer')}
-        style={{ filter: filterCSS, objectFit: videoFit === 'auto' ? 'contain' : videoFit }}
-        onTimeUpdate={() => {
-          const v = videoRef.current;
-          if (!v) return;
-          setCurrentTime(v.currentTime);
-          if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
-        }}
-        onLoadedMetadata={() => {
-          const v = videoRef.current;
-          if (!v) return;
-          setDuration(v.duration);
-          v.volume = volume;
-          setIsLoading(false);
-          setVideoAspectRatio(v.videoWidth / v.videoHeight);
-          onVideoInfo?.({ width: v.videoWidth, height: v.videoHeight });
-        }}
-        onWaiting={() => setIsLoading(true)}
-        onCanPlay={() => setIsLoading(false)}
-        onClick={togglePlay}
-        onDoubleClick={(e) => { e.preventDefault(); toggleFullscreen(); }}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
+      <div className={cn('w-full h-full flex items-center justify-center')}>
+        <video
+          ref={videoRef}
+          src={src}
+          loop={loop}
+          className={cn('cursor-pointer')}
+          style={getVideoStyle()}
+          onTimeUpdate={() => {
+            const v = videoRef.current;
+            if (!v) return;
+            setCurrentTime(v.currentTime);
+            if (v.buffered.length > 0) setBuffered(v.buffered.end(v.buffered.length - 1));
+          }}
+          onLoadedMetadata={() => {
+            const v = videoRef.current;
+            if (!v) return;
+            setDuration(v.duration);
+            setVideoDimensions({ width: v.videoWidth, height: v.videoHeight });
+            v.volume = volume;
+            setIsLoading(false);
+            onVideoInfo?.({ width: v.videoWidth, height: v.videoHeight });
+          }}
+          onWaiting={() => setIsLoading(true)}
+          onCanPlay={() => setIsLoading(false)}
+          onClick={togglePlay}
+          onDoubleClick={(e) => { e.preventDefault(); toggleFullscreen(); }}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
         onEnded={onEnded}
-        autoPlay
-        preload="auto"
-      />
+          autoPlay
+          preload="auto"
+        />
+      </div>
 
       {/* Screenshot flash overlay */}
       {screenshotFlash && (

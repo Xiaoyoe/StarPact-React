@@ -25,7 +25,6 @@ function VideoPlayerPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [videoFit, setVideoFit] = useState<'cover' | 'contain' | 'auto'>('auto');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dragCountRef = useRef(0);
@@ -499,38 +498,6 @@ function VideoPlayerPage() {
                         </button>
                         <button
                           onClick={() => {
-                            setVideoFit(prev => {
-                              if (prev === 'auto') return 'cover';
-                              if (prev === 'cover') return 'contain';
-                              return 'auto';
-                            });
-                          }}
-                          className="flex items-center justify-center w-9 h-9 rounded-full transition-colors"
-                          style={{ 
-                            backgroundColor: 'rgba(0,0,0,0.3)', 
-                            color: 'white',
-                            border: '1px solid rgba(255,255,255,0.2)'
-                          }}
-                          title={videoFit === 'auto' ? '自适应模式' : videoFit === 'cover' ? '填满区域' : '完整显示'}
-                        >
-                          {videoFit === 'auto' ? (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                            </svg>
-                          ) : videoFit === 'cover' ? (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 4h16v16H4z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 9h16M4 15h16M9 4v16M15 4v16" />
-                            </svg>
-                          ) : (
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                              <rect x="3" y="3" width="18" height="18" rx="2" />
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M4 8h16M4 16h16" />
-                            </svg>
-                          )}
-                        </button>
-                        <button
-                          onClick={() => {
                             const newSidebarOpen = !sidebarOpen;
                             setSidebarOpen(newSidebarOpen);
                             setShowToolbar(newSidebarOpen);
@@ -569,7 +536,6 @@ function VideoPlayerPage() {
                       onPlayNext={playNext}
                       canPlayPrevious={currentIndex > 0 || repeatMode === 'all'}
                       canPlayNext={currentIndex < playlist.length - 1 || repeatMode === 'all'}
-                      videoFit={videoFit}
                     />
 
                   </div>
