@@ -5,17 +5,17 @@ import { IndexedDBStorage } from './IndexedDBStorage';
  * 应用配置接口
  */
 export interface AppConfig {
-  // 主题设置
   theme: string;
-  // 字体大小
   fontSize: number;
-  // 布局模式
   layoutMode: 'compact' | 'comfortable' | 'wide';
-  // Enter发送
   sendOnEnter: boolean;
-  // 存储路径（保留字段，兼容旧配置）
   storagePath: string;
-  // 其他配置项
+  dailyQuote: {
+    enabled: boolean;
+    interval: 10 | 3600 | 86400;
+  };
+  videoAutoPlay: boolean;
+  closeConfirm: boolean;
   [key: string]: any;
 }
 
@@ -26,35 +26,32 @@ export class ConfigStorage {
   private static instance: ConfigStorage;
   private dbStorage: IndexedDBStorage;
   private configCache: AppConfig;
+  private loadPromise: Promise<void>;
 
-  /**
-   * 私有构造函数
-   */
   private constructor() {
     this.dbStorage = IndexedDBStorage.getInstance();
     this.configCache = this.getDefaultConfig();
-    this.loadConfig();
+    this.loadPromise = this.loadConfig();
   }
 
-  /**
-   * 获取默认配置
-   */
   private getDefaultConfig(): AppConfig {
     return {
       theme: 'light',
       fontSize: 14,
       layoutMode: 'comfortable',
       sendOnEnter: true,
-      storagePath: 'indexeddb' // 使用索引数据库
+      storagePath: 'indexeddb',
+      dailyQuote: {
+        enabled: false,
+        interval: 10
+      },
+      videoAutoPlay: true,
+      closeConfirm: true
     };
   }
 
-  /**
-   * 加载配置
-   */
   private async loadConfig(): Promise<void> {
     try {
-      // 延迟加载，确保 IndexedDB 初始化完成
       await new Promise(resolve => setTimeout(resolve, 500));
       const storedConfig = await this.dbStorage.get<{ data: AppConfig }>('config', 'app-config');
       if (storedConfig && storedConfig.data) {
@@ -62,9 +59,12 @@ export class ConfigStorage {
       }
     } catch (error) {
       console.error('加载配置失败:', error);
-      // 加载失败时使用默认配置
       this.configCache = this.getDefaultConfig();
     }
+  }
+
+  async ready(): Promise<void> {
+    await this.loadPromise;
   }
 
   /**

@@ -805,44 +805,6 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
           <p className="text-xs text-black/50">{index + 1} / {images.length}</p>
         </div>
         <div className="flex items-center gap-1">
-          {isLong && (
-            <button
-              onClick={() => { setLongImageMode(!longImageMode); setZoom(1); setPosition({ x: 0, y: 0 }); }}
-              className={cn(
-                "p-2 rounded-lg transition-colors",
-                longImageMode ? "bg-violet-600 text-white" : "hover:bg-black/10 text-black/80 hover:text-black"
-              )}
-              title="长图模式"
-            >
-              <ArrowUpDownIcon size={18} />
-            </button>
-          )}
-          <button
-            onClick={() => setShowThumbnails(true)}
-            className="p-2 rounded-lg transition-colors hover:bg-black/10 text-black/80 hover:text-black"
-            title="显示缩略图"
-          >
-            <Images size={18} />
-          </button>
-          <button
-            onClick={() => onToggleFavorite(image.id)}
-            className={cn("p-2 rounded-lg transition-colors", image.favorite ? "text-red-400" : "hover:bg-black/10 text-black/80 hover:text-black")}
-            title="收藏"
-          >
-            <Heart size={18} fill={image.favorite ? 'currentColor' : 'none'} />
-          </button>
-          <button onClick={() => setZoom(z => Math.min(z + 0.25, 5))} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="放大">
-            <ZoomIn size={18} />
-          </button>
-          <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.25))} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="缩小">
-            <ZoomOut size={18} />
-          </button>
-          <button onClick={() => setRotation(r => r + 90)} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="旋转">
-            <RotateCw size={18} />
-          </button>
-          <button onClick={resetView} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="适应窗口">
-            <Maximize2 size={18} />
-          </button>
           <button
             onClick={() => setShowInfo(!showInfo)}
             className={cn("p-2 rounded-lg transition-colors", showInfo ? "bg-black/20 text-black" : "hover:bg-black/10 text-black/80 hover:text-black")}
@@ -934,13 +896,57 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
         </div>
       )}
 
+      {/* 右下角垂直工具栏 */}
+      <div className="absolute right-4 bottom-18 z-20 flex flex-col gap-1.5">
+        <div className="bg-white/90 backdrop-blur-sm rounded-xl border border-gray-200 p-1.5 flex flex-col gap-1">
+          {isLong && (
+            <button
+              onClick={() => { setLongImageMode(!longImageMode); setZoom(1); setPosition({ x: 0, y: 0 }); }}
+              className={cn(
+                "p-2 rounded-lg transition-colors",
+                longImageMode ? "bg-violet-600 text-white" : "hover:bg-black/10 text-black/80 hover:text-black"
+              )}
+              title="长图模式"
+            >
+              <ArrowUpDownIcon size={18} />
+            </button>
+          )}
+          <button
+            onClick={() => setShowThumbnails(true)}
+            className="p-2 rounded-lg transition-colors hover:bg-black/10 text-black/80 hover:text-black"
+            title="显示缩略图"
+          >
+            <Images size={18} />
+          </button>
+          <button
+            onClick={() => onToggleFavorite(image.id)}
+            className={cn("p-2 rounded-lg transition-colors", image.favorite ? "text-red-400" : "hover:bg-black/10 text-black/80 hover:text-black")}
+            title="收藏"
+          >
+            <Heart size={18} fill={image.favorite ? 'currentColor' : 'none'} />
+          </button>
+          <div className="h-px bg-gray-200 my-0.5" />
+          <button onClick={() => setZoom(z => Math.min(z + 0.25, 5))} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="放大">
+            <ZoomIn size={18} />
+          </button>
+          <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.25))} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="缩小">
+            <ZoomOut size={18} />
+          </button>
+          <button onClick={() => setRotation(r => r + 90)} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="旋转">
+            <RotateCw size={18} />
+          </button>
+          <button onClick={resetView} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="适应窗口">
+            <Maximize2 size={18} />
+          </button>
+        </div>
+      </div>
+
       {/* 独立的缩略图区域 */}
       {images.length > 1 && showThumbnails && (
         <div className="absolute bottom-0 left-0 right-0 h-16 bg-white/90 border-t border-gray-200 z-20 flex items-center px-4 transition-transform duration-300 ease-in-out">
           <div 
             className="flex items-center justify-center gap-1.5 overflow-x-auto max-w-full py-1 flex-1"
             onWheel={(e) => {
-              // 处理滚轮切换图片
               if (e.deltaY > 0) {
                 navigate(1);
               } else if (e.deltaY < 0) {

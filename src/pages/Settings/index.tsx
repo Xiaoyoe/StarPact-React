@@ -1,18 +1,24 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield
+  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield, MessageSquareQuote, LogOut
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { ThemeType } from '@/store';
 import { motion } from 'framer-motion';
 import { StorageManager } from '@/services/storage/StorageManager';
-import { configStorage } from '@/services/storage/ConfigStorage';
+import { configStorage, type AppConfig } from '@/services/storage/ConfigStorage';
 import { PromptTemplateStorage } from '@/services/storage/PromptTemplateStorage';
 import { VideoPlaylistStorage } from '@/services/storage/VideoPlaylistStorage';
 import { VideoPlaylistStorageSync } from '@/services/storage/VideoPlaylistStorage';
 import { useToast } from '@/components/Toast';
 import { AboutSection } from './about';
 import { PathPage } from './path';
+
+const QUOTE_INTERVAL_OPTIONS = [
+  { value: 10, label: '10 秒' },
+  { value: 3600, label: '1 小时' },
+  { value: 86400, label: '24 小时' },
+] as const;
 
 export function SettingsPage() {
   const {
@@ -25,6 +31,9 @@ export function SettingsPage() {
   const [activeTab, setActiveTab] = useState<'appearance' | 'wallpaper' | 'general' | 'path' | 'about'>('appearance');
   const [templateStoragePath, setTemplateStoragePath] = useState('');
   const [videoPlaylistStoragePath, setVideoPlaylistStoragePath] = useState('');
+  const [dailyQuoteEnabled, setDailyQuoteEnabled] = useState(false);
+  const [dailyQuoteInterval, setDailyQuoteInterval] = useState<10 | 3600 | 86400>(10);
+  const [closeConfirm, setCloseConfirm] = useState(true);
   const toast = useToast();
   
 
@@ -70,13 +79,24 @@ export function SettingsPage() {
 
   // 从配置存储加载设置
   useEffect(() => {
-    const savedTheme = configStorage.get('theme');
-    const savedSendOnEnter = configStorage.get('sendOnEnter');
-    const savedStoragePath = configStorage.get('storagePath');
+    const loadSettings = async () => {
+      await configStorage.ready();
+      const savedTheme = configStorage.get('theme');
+      const savedSendOnEnter = configStorage.get('sendOnEnter');
+      const savedStoragePath = configStorage.get('storagePath');
+      const savedDailyQuote = configStorage.get('dailyQuote');
+      const savedCloseConfirm = configStorage.get('closeConfirm');
 
-    if (savedTheme) setTheme(savedTheme);
-    if (savedSendOnEnter !== undefined) setSendOnEnter(savedSendOnEnter);
-    if (savedStoragePath) setStoragePath(savedStoragePath);
+      if (savedTheme) setTheme(savedTheme);
+      if (savedSendOnEnter !== undefined) setSendOnEnter(savedSendOnEnter);
+      if (savedStoragePath) setStoragePath(savedStoragePath);
+      if (savedDailyQuote) {
+        setDailyQuoteEnabled(savedDailyQuote.enabled ?? true);
+        setDailyQuoteInterval(savedDailyQuote.interval ?? 10);
+      }
+      if (savedCloseConfirm !== undefined) setCloseConfirm(savedCloseConfirm);
+    };
+    loadSettings();
   }, []);
 
   // 保存设置到配置存储
@@ -95,6 +115,17 @@ export function SettingsPage() {
   useEffect(() => {
     configStorage.set('storagePath', storagePath);
   }, [storagePath]);
+
+  useEffect(() => {
+    configStorage.set('dailyQuote', {
+      enabled: dailyQuoteEnabled,
+      interval: dailyQuoteInterval
+    });
+  }, [dailyQuoteEnabled, dailyQuoteInterval]);
+
+  useEffect(() => {
+    configStorage.set('closeConfirm', closeConfirm);
+  }, [closeConfirm]);
 
   const themeCategories = {
     light: {
@@ -385,6 +416,79 @@ export function SettingsPage() {
               <h2 className="mb-4 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
                 通用设置
               </h2>
+
+              {/* Daily Quote Settings */}
+              <div
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <MessageSquareQuote className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>每日一言</div>
+                  </div>
+                  <button
+                    onClick={() => setDailyQuoteEnabled(!dailyQuoteEnabled)}
+                    className="relative h-6 w-11 rounded-full transition-colors"
+                    style={{ backgroundColor: dailyQuoteEnabled ? 'var(--primary-color)' : 'var(--bg-tertiary)' }}
+                  >
+                    <motion.div
+                      animate={{ x: dailyQuoteEnabled ? 22 : 2 }}
+                      className="absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm"
+                    />
+                  </button>
+                </div>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                  在标题栏显示励志名言，定时切换
+                </p>
+                {dailyQuoteEnabled && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>切换间隔：</span>
+                    <div className="flex gap-1">
+                      {QUOTE_INTERVAL_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => setDailyQuoteInterval(option.value)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                          style={{
+                            backgroundColor: dailyQuoteInterval === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                            color: dailyQuoteInterval === option.value ? 'white' : 'var(--text-secondary)',
+                            border: `1px solid ${dailyQuoteInterval === option.value ? 'var(--primary-color)' : 'var(--border-color)'}`
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Close Confirm Settings */}
+              <div
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <LogOut className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>关闭确认</div>
+                  </div>
+                  <button
+                    onClick={() => setCloseConfirm(!closeConfirm)}
+                    className="relative h-6 w-11 rounded-full transition-colors"
+                    style={{ backgroundColor: closeConfirm ? 'var(--primary-color)' : 'var(--bg-tertiary)' }}
+                  >
+                    <motion.div
+                      animate={{ x: closeConfirm ? 22 : 2 }}
+                      className="absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm"
+                    />
+                  </button>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  关闭应用程序时显示确认弹窗，防止误操作
+                </p>
+              </div>
 
               {/* Send on Enter */}
               <div

@@ -1,0 +1,13 @@
+.is-scrolling {
+  display: inline-block !important;
+  animation: scrollTitle var(--scroll-duration, 5s) linear infinite;
+}
+
+@keyframes scrollTitle {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(var(--scroll-distance, -100px));
+  }
+}

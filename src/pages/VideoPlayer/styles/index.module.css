@@ -238,3 +238,26 @@
     align-self: flex-end;
   }
 }
+
+.videoTitleScroll {
+  display: inline-block;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.videoTitleScroll:hover {
+  animation: marquee 10s linear infinite;
+  text-overflow: clip;
+}
+
+@keyframes marquee {
+  0%, 20% {
+    transform: translateX(0);
+  }
+  80%, 100% {
+    transform: translateX(calc(-100% + 400px));
+  }
+}

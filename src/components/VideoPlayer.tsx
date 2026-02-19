@@ -7,6 +7,7 @@ interface VideoPlayerProps {
   src: string | null;
   loop?: boolean;
   filters?: VideoFilters;
+  autoPlay?: boolean;
   onEnded?: () => void;
   onVideoInfo?: (info: VideoInfo) => void;
   onPlay?: () => void;
@@ -35,7 +36,7 @@ function buildFilterCSS(f: VideoFilters): string {
   return parts.length > 0 ? parts.join(' ') : 'none';
 }
 
-export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEnded, onVideoInfo, onPlay, onPause, onPlayPrevious, onPlayNext, canPlayPrevious = true, canPlayNext = true }: VideoPlayerProps) {
+export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, autoPlay = false, onEnded, onVideoInfo, onPlay, onPause, onPlayPrevious, onPlayNext, canPlayPrevious = true, canPlayNext = true }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -74,11 +75,12 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
     const video = videoRef.current;
     if (video) {
       video.playbackRate = 1;
-      video.onloadeddata = () => {
+      video.currentTime = 0;
+      if (autoPlay) {
         video.play().catch(() => {});
-      };
+      }
     }
-  }, [src]);
+  }, [src, autoPlay]);
 
   // 监听容器尺寸变化
   useEffect(() => {
@@ -353,12 +355,12 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
       onMouseLeave={() => { if (isPlaying) setShowControls(false); setHoverTime(null); }}
     >
       {/* Video element */}
-      <div className={cn('w-full h-full flex items-center justify-center')}>
+      <div className={cn('w-full h-full flex items-center justify-center pointer-events-none')}>
         <video
           ref={videoRef}
           src={src}
           loop={loop}
-          className={cn('cursor-pointer')}
+          className={cn('cursor-pointer pointer-events-auto')}
           style={getVideoStyle()}
           onTimeUpdate={() => {
             const v = videoRef.current;
@@ -381,8 +383,7 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
           onDoubleClick={(e) => { e.preventDefault(); toggleFullscreen(); }}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
-        onEnded={onEnded}
-          autoPlay
+          onEnded={onEnded}
           preload="auto"
         />
       </div>
@@ -398,7 +399,7 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
       {/* Loading spinner */}
       {isLoading && isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-          <div className="w-12 h-12 border-3 rounded-full animate-spin" style={{ borderColor: 'var(--text-secondary)/20', borderTopColor: 'var(--primary-color)' }} />
+          <div className="w-12 h-12 border-3 rounded-full animate-spin border-white/20 border-t-[var(--primary-color)]" />
         </div>
       )}
 
@@ -412,7 +413,7 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
         'absolute bottom-0 left-0 right-0 h-[3px] z-10 transition-opacity duration-300',
         showControls ? 'opacity-0' : 'opacity-100'
       )}>
-        <div className="h-full" style={{ backgroundColor: 'var(--primary-color)', width: `${progress}%` }} />
+        <div className="h-full bg-[var(--primary-color)]" style={{ width: `${progress}%` }} />
       </div>
 
       {/* Controls overlay */}
@@ -421,38 +422,33 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
         showControls ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-3 pointer-events-none'
       )}>
         {/* Gradient background */}
-        <div className="absolute inset-0 bg-gradient-to-t pointer-events-none" style={{ backgroundImage: `linear-gradient(to top, var(--bg-primary)/95, var(--bg-primary)/60, transparent)` }} />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/70 to-black/40 pointer-events-none" style={{ backdropFilter: 'blur(8px)' }} />
 
-        <div className="relative px-4 pb-3.5 pt-16">
+        <div className="relative px-4 pb-3.5 pt-4">
           {/* Progress bar */}
           <div
             ref={progressRef}
-            className="group/prog relative h-[6px] w-full cursor-pointer rounded-full mb-3.5 hover:h-[8px] transition-all duration-300"
-            style={{ backgroundColor: 'var(--text-secondary)/12' }}
+            className="group/prog relative h-[6px] w-full cursor-pointer rounded-full mb-3.5 hover:h-[8px] transition-all duration-300 bg-white/30"
             onClick={handleProgressClick}
             onMouseDown={() => setIsDraggingProgress(true)}
             onMouseMove={handleProgressHover}
             onMouseLeave={() => setHoverTime(null)}
           >
             {/* Timeline line */}
-            <div className="absolute left-0 right-0 h-[1px] bottom-[2px] opacity-60 transition-all duration-300 group-hover/prog:opacity-80" style={{ backgroundColor: 'var(--text-secondary)' }} />
+            <div className="absolute left-0 right-0 h-[1px] bottom-[2px] opacity-70 transition-all duration-300 group-hover/prog:opacity-90 bg-white/70" />
             {/* Buffered */}
-            <div className="absolute h-full rounded-full" style={{ backgroundColor: 'var(--text-secondary)/20', width: `${bufferedPercent}%` }} />
+            <div className="absolute h-full rounded-full bg-white/40" style={{ width: `${bufferedPercent}%` }} />
             {/* Progress */}
-            <div className="relative h-full rounded-full transition-all duration-300" style={{ backgroundColor: 'var(--primary-color)', boxShadow: `0 0 10px var(--primary-color)/50`, width: `${progress}%` }}>
+            <div className="relative h-full rounded-full transition-all duration-300" style={{ backgroundColor: 'var(--primary-color)', boxShadow: `0 0 10px var(--primary-color)`, width: `${progress}%` }}>
               {/* Thumb */}
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full shadow-lg opacity-0 group-hover/prog:opacity-100 scale-75 group-hover/prog:scale-100 transition-all duration-300 ring-2" style={{ backgroundColor: 'var(--text-primary)', boxShadow: `0 0 10px var(--primary-color)/50`, ringColor: 'var(--primary-color)/50' }} />
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full shadow-lg opacity-0 group-hover/prog:opacity-100 scale-75 group-hover/prog:scale-100 transition-all duration-300 ring-2 ring-white/50" style={{ backgroundColor: 'white', boxShadow: `0 0 10px var(--primary-color)` }} />
             </div>
             {/* Hover time tooltip */}
             {hoverTime !== null && (
               <div
-                className="absolute -top-12 -translate-x-1/2 px-3 py-1.5 rounded-lg border text-[11px] tabular-nums pointer-events-none shadow-lg backdrop-blur-sm transition-all duration-300"
+                className="absolute -top-12 -translate-x-1/2 px-3 py-1.5 rounded-lg border border-white/20 text-[11px] tabular-nums pointer-events-none shadow-lg backdrop-blur-sm transition-all duration-300 bg-black/80 text-white"
                 style={{ 
                   left: Math.max(24, Math.min(hoverX, (progressRef.current?.clientWidth ?? 0) - 24)),
-                  backgroundColor: 'var(--bg-secondary)/95',
-                  borderColor: 'var(--text-secondary)/20',
-                  color: 'var(--text-primary)',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
                 }}
               >
                 {formatTime(hoverTime)}
@@ -467,10 +463,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               <div className="flex items-center gap-1 ml-1 group/vol">
                 <button
                   onClick={toggleMute}
-                  className="p-2 rounded-full transition-colors"
-                  style={{ color: 'var(--text-primary)' }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                  className="p-2 rounded-full transition-colors hover:bg-white/10"
+                  style={{ color: 'white' }}
                   title={isMuted ? '取消静音 (M)' : '静音 (M)'}
                 >
                   {isMuted || volume === 0 ? (
@@ -483,19 +477,18 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
                 </button>
                 <div
                   ref={volumeRef}
-                  className="w-0 overflow-hidden group-hover/vol:w-20 transition-all duration-300 h-[5px] rounded-full cursor-pointer"
-                  style={{ backgroundColor: 'var(--text-secondary)/12' }}
+                  className="w-0 overflow-hidden group-hover/vol:w-20 transition-all duration-300 h-[5px] rounded-full cursor-pointer bg-white/30"
                   onClick={handleVolumeClick}
                 >
-                  <div className="h-full rounded-full relative transition-all" style={{ backgroundColor: 'var(--text-primary)', width: `${volumePercent}%` }}>
-                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full shadow-md" style={{ backgroundColor: 'var(--text-primary)' }} />
+                  <div className="h-full rounded-full relative transition-all bg-white" style={{ width: `${volumePercent}%` }}>
+                    <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 rounded-full shadow-md bg-white" />
                   </div>
                 </div>
               </div>
 
               {/* Time */}
-              <span className="text-[12px] ml-2 tabular-nums whitespace-nowrap font-mono" style={{ color: 'var(--text-secondary)/40' }}>
-                <span style={{ color: 'var(--text-secondary)/70' }}>{formatTime(currentTime)}</span>
+              <span className="text-[12px] ml-2 tabular-nums whitespace-nowrap font-mono text-white/60">
+                <span className="text-white/90">{formatTime(currentTime)}</span>
                 <span className="mx-1">/</span>
                 {formatTime(duration)}
               </span>
@@ -507,10 +500,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               <button
                 onClick={(e) => { e.stopPropagation(); onPlayPrevious?.(); }}
                 disabled={!canPlayPrevious}
-                className="p-2 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                className="p-2 rounded-full transition-colors hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ color: 'white' }}
                 title="上一个视频"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
@@ -521,10 +512,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               {/* Play/Pause button */}
               <button
                 onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-                className="p-2 rounded-full transition-colors"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                style={{ color: 'white' }}
                 title={isPlaying ? '暂停' : '播放'}
               >
                 {isPlaying ? (
@@ -542,10 +531,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               <button
                 onClick={(e) => { e.stopPropagation(); onPlayNext?.(); }}
                 disabled={!canPlayNext}
-                className="p-2 rounded-full transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                className="p-2 rounded-full transition-colors hover:bg-white/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                style={{ color: 'white' }}
                 title="下一个视频"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
@@ -559,10 +546,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               {/* Skip back */}
               <button
                 onClick={() => skip(-10)}
-                className="p-2 rounded-full transition-colors"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                style={{ color: 'white' }}
                 title="后退10秒 (J)"
               >
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -573,10 +558,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               {/* Skip forward */}
               <button
                 onClick={() => skip(10)}
-                className="p-2 rounded-full transition-colors"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                style={{ color: 'white' }}
                 title="前进10秒 (L)"
               >
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -587,10 +570,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               {/* Screenshot */}
               <button
                 onClick={takeScreenshot}
-                className="p-2 rounded-full transition-colors"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                style={{ color: 'white' }}
                 title="截图 (Ctrl+S)"
               >
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -607,10 +588,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
                   if (document.pictureInPictureElement) document.exitPictureInPicture();
                   else v.requestPictureInPicture();
                 }}
-                className="p-2 rounded-full transition-colors"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                style={{ color: 'white' }}
                 title="画中画"
               >
                 <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -624,36 +603,25 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
                 <button
                   onClick={() => setShowSpeedMenu(!showSpeedMenu)}
                   className={cn(
-                    'text-[12px] px-2.5 py-1.5 rounded-xl transition-all cursor-pointer font-mono tabular-nums'
+                    'text-[12px] px-2.5 py-1.5 rounded-xl transition-all cursor-pointer font-mono tabular-nums',
+                    playbackRate !== 1 ? 'bg-[var(--primary-light)] text-[var(--primary-color)] border border-[var(--primary-color)]/30' : 'bg-white/20 text-white/90 border border-white/30'
                   )}
-                  style={{
-                    backgroundColor: playbackRate !== 1 ? 'var(--primary-light)' : 'var(--bg-tertiary)',
-                    color: playbackRate !== 1 ? 'var(--primary-color)' : 'var(--text-secondary)',
-                    border: `1px solid ${playbackRate !== 1 ? 'var(--primary-color)/30' : 'var(--border-color)'}`
-                  }}
                   title="播放速度"
                 >
                   {playbackRate === 1 ? '倍速' : `${playbackRate}x`}
                 </button>
                 {showSpeedMenu && (
                   <div
-                    className="absolute bottom-full right-0 mb-2 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden py-1.5 min-w-[120px]"
-                    style={{ 
-                      animation: 'fade-in 0.15s ease-out',
-                      backgroundColor: 'var(--bg-secondary)',
-                      border: `1px solid var(--border-color)`
-                    }}
+                    className="absolute bottom-full right-0 mb-2 backdrop-blur-xl rounded-xl shadow-2xl overflow-hidden py-1.5 min-w-[120px] bg-black/95 border border-white/30 animate-in fade-in duration-150"
                   >
                     {[0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 3].map((rate) => (
                       <button
                         key={rate}
                         onClick={() => changeSpeed(rate)}
-                        className="flex items-center justify-between w-full px-4 py-1.5 text-[12px] transition-colors cursor-pointer"
-                        style={{
-                          backgroundColor: rate === playbackRate ? 'var(--primary-light)' : 'transparent',
-                          color: rate === playbackRate ? 'var(--primary-color)' : 'var(--text-secondary)',
-                          border: `1px solid ${rate === playbackRate ? 'var(--primary-color)/30' : 'transparent'}`
-                        }}
+                        className={cn(
+                          "flex items-center justify-between w-full px-4 py-1.5 text-[12px] transition-colors cursor-pointer",
+                          rate === playbackRate ? 'bg-[var(--primary-light)] text-[var(--primary-color)]' : 'text-white/90 hover:bg-white/15'
+                        )}
                       >
                         <span>{rate === 1 ? '正常' : `${rate}x`}</span>
                         {rate === playbackRate && (
@@ -668,10 +636,8 @@ export function VideoPlayer({ src, loop = false, filters = DEFAULT_FILTERS, onEn
               {/* Fullscreen */}
               <button
                 onClick={toggleFullscreen}
-                className="p-2 rounded-full transition-colors"
-                style={{ color: 'var(--text-primary)' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--text-secondary)/10'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                className="p-2 rounded-full transition-colors hover:bg-white/10"
+                style={{ color: 'white' }}
                 title={isFullscreen ? '退出全屏 (F)' : '全屏 (F)'}
               >
                 {isFullscreen ? (

@@ -102,7 +102,7 @@ export function App() {
       <div className="flex h-screen overflow-hidden no-select" style={{ backgroundColor: 'var(--bg-primary)' }}>
         <Sidebar />
         <main className="min-w-0 flex-1 no-select flex flex-col">
-          <CustomTitleBar title="AI Model WebUI" />
+          <CustomTitleBar />
           <PageContent />
         </main>
         <LogsPanel />

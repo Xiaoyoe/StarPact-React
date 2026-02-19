@@ -6,6 +6,8 @@ import { cn } from '@/utils/cn';
 import { useStore } from '@/store';
 import { VideoPlaylistStorage, VideoPlaylist } from '@/services/storage/VideoPlaylistStorage';
 import { formatFileSize, formatDuration, generateId } from '@/utils/formatters';
+import { configStorage } from '@/services/storage/ConfigStorage';
+import './styles/scroll-title.css';
 
 const ACCEPTED_EXTENSIONS = /\.(mp4|webm|mkv|avi|mov|flv|wmv|m4v|ogg|ogv|3gp|ts|mpeg|mpg)$/i;
 
@@ -19,7 +21,7 @@ function VideoPlayerPage() {
   const [showToolbar, setShowToolbar] = useState(true);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [autoPlay, setAutoPlay] = useState(true);
-  const [repeatMode, setRepeatMode] = useState<RepeatMode>('off');
+  const [repeatMode, setRepeatMode] = useState<RepeatMode>('all');
   const [filters, setFilters] = useState<VideoFilters>(DEFAULT_FILTERS);
   const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -43,6 +45,18 @@ function VideoPlayerPage() {
 
   const currentVideo = currentIndex >= 0 && currentIndex < playlist.length ? playlist[currentIndex] : null;
 
+  // 从配置加载自动播放设置
+  useEffect(() => {
+    const loadAutoPlayConfig = async () => {
+      await configStorage.ready();
+      const savedAutoPlay = configStorage.get('videoAutoPlay');
+      if (savedAutoPlay !== undefined) {
+        setAutoPlay(savedAutoPlay);
+      }
+    };
+    loadAutoPlayConfig();
+  }, []);
+
   // 从存储加载播放列表
   useEffect(() => {
     const loadPlaylists = async () => {
@@ -52,10 +66,7 @@ function VideoPlayerPage() {
           if (playlists.length > 0) {
             const latestPlaylist = playlists[0];
             setPlaylist(latestPlaylist.videos);
-            // 读取自动播放设置，如果没有则默认为true
-            setAutoPlay(latestPlaylist.autoPlay !== false);
-            // 只有在自动播放开启时才自动选择第一个视频
-            if (latestPlaylist.autoPlay !== false) {
+            if (latestPlaylist.videos.length > 0) {
               setCurrentIndex(0);
             }
           }
@@ -77,11 +88,10 @@ function VideoPlayerPage() {
             id: 'default-playlist',
             name: '默认播放列表',
             videos: playlist,
-            autoPlay: autoPlay,
             createdAt: Date.now(),
             updatedAt: Date.now()
           };
-          const success = await VideoPlaylistStorage.savePlaylist(storagePath, currentPlaylist);
+          await VideoPlaylistStorage.savePlaylist(storagePath, currentPlaylist);
         } catch (error) {
           console.error('保存播放列表失败:', error);
           toast.error('保存播放列表失败');
@@ -89,7 +99,7 @@ function VideoPlayerPage() {
       }
     };
     savePlaylist();
-  }, [playlist, autoPlay, storagePath]);
+  }, [playlist, storagePath]);
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
     const files = Array.from(fileList).filter(f =>
@@ -314,14 +324,14 @@ function VideoPlayerPage() {
     }
     if (currentIndex < playlist.length - 1) {
       setCurrentIndex(ci => ci + 1);
-      setIsPlaying(true);
+      if (autoPlay) setIsPlaying(true);
     } else if (repeatMode === 'all' && playlist.length > 0) {
       setCurrentIndex(0);
-      setIsPlaying(true);
+      if (autoPlay) setIsPlaying(true);
     } else {
       setIsPlaying(false);
     }
-  }, [currentIndex, playlist.length, repeatMode]);
+  }, [currentIndex, playlist.length, repeatMode, autoPlay]);
 
   const playPrevious = useCallback(() => {
     setCurrentIndex(ci => {
@@ -329,8 +339,8 @@ function VideoPlayerPage() {
       if (repeatMode === 'all' && playlist.length > 0) return playlist.length - 1;
       return ci;
     });
-    setIsPlaying(true);
-  }, [repeatMode, playlist.length]);
+    if (autoPlay) setIsPlaying(true);
+  }, [repeatMode, playlist.length, autoPlay]);
 
   const playNext = useCallback(() => {
     setCurrentIndex(ci => {
@@ -338,8 +348,8 @@ function VideoPlayerPage() {
       if (repeatMode === 'all' && playlist.length > 0) return 0;
       return ci;
     });
-    setIsPlaying(true);
-  }, [repeatMode, playlist.length]);
+    if (autoPlay) setIsPlaying(true);
+  }, [repeatMode, playlist.length, autoPlay]);
 
   // Global drag & drop
   useEffect(() => {
@@ -390,13 +400,9 @@ function VideoPlayerPage() {
       {isDragging && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-xl" style={{ backgroundColor: 'var(--bg-modal-overlay)' }}>
           <div
-            className="flex flex-col items-center gap-8 p-12 rounded-3xl border-2 border-dashed" 
-            style={{ 
-              borderColor: 'var(--primary-color)/50', 
-              backgroundColor: 'var(--primary-light)' 
-            }}
+            className="flex flex-col items-center gap-8 p-12 rounded-3xl border-2 border-dashed border-[var(--primary-color)]/50 bg-[var(--primary-light)]"
           >
-            <div className="w-24 h-24 rounded-full flex items-center justify-center border" style={{ borderColor: 'var(--primary-color)/50', backgroundColor: 'var(--primary-light)' }}>
+            <div className="w-24 h-24 rounded-full flex items-center justify-center border border-[var(--primary-color)]/50 bg-[var(--primary-light)]">
               <svg className="w-12 h-12" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" style={{ color: 'var(--primary-color)' }}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
               </svg>
@@ -435,11 +441,39 @@ function VideoPlayerPage() {
                       </div>
 
                       {/* Center: Video filename */}
-                      <div className="flex-1 text-center mx-6">
+                      <div className="flex-1 flex justify-center mx-6">
                         {currentVideo ? (
-                          <h1 className="text-lg font-medium truncate" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                            {currentVideo.name.replace(/\.[^/.]+$/, '')}
-                          </h1>
+                          <div 
+                            className="max-w-[400px] overflow-hidden"
+                            ref={(container) => {
+                              if (container) {
+                                const textEl = container.querySelector('span');
+                                if (textEl) {
+                                  const handleMouseEnter = () => {
+                                    if (textEl.scrollWidth > container.clientWidth) {
+                                      const scrollDistance = textEl.scrollWidth - container.clientWidth;
+                                      const duration = Math.max(2, scrollDistance / 60);
+                                      textEl.style.setProperty('--scroll-distance', `-${scrollDistance}px`);
+                                      textEl.style.setProperty('--scroll-duration', `${duration}s`);
+                                      textEl.classList.add('is-scrolling');
+                                    }
+                                  };
+                                  const handleMouseLeave = () => {
+                                    textEl.classList.remove('is-scrolling');
+                                  };
+                                  container.onmouseenter = handleMouseEnter;
+                                  container.onmouseleave = handleMouseLeave;
+                                }
+                              }
+                            }}
+                          >
+                            <span 
+                              className="text-lg font-medium whitespace-nowrap inline-block"
+                              style={{ color: 'rgba(255,255,255,0.9)' }}
+                            >
+                              {currentVideo.name.replace(/\.[^/.]+$/, '')}
+                            </span>
+                          </div>
                         ) : (
                           <h1 className="text-lg font-medium" style={{ color: 'rgba(255,255,255,0.5)' }}>
                             暂无视频文件
@@ -467,13 +501,14 @@ function VideoPlayerPage() {
                           onClick={() => {
                             const newAutoPlay = !autoPlay;
                             setAutoPlay(newAutoPlay);
+                            configStorage.set('videoAutoPlay', newAutoPlay);
                             toast.success(newAutoPlay ? '自动播放已开启' : '自动播放已关闭');
                           }}
                           className="flex items-center justify-center w-9 h-9 rounded-full transition-colors"
                           style={{ 
-                            backgroundColor: 'rgba(0,0,0,0.3)', 
+                            backgroundColor: autoPlay ? 'var(--primary-color)' : 'rgba(0,0,0,0.3)', 
                             color: 'white',
-                            border: '1px solid rgba(255,255,255,0.2)'
+                            border: autoPlay ? '1px solid var(--primary-color)' : '1px solid rgba(255,255,255,0.2)'
                           }}
                           title={autoPlay ? '关闭自动播放' : '开启自动播放'}
                         >
@@ -524,9 +559,9 @@ function VideoPlayerPage() {
                     </header>
 
                     <VideoPlayer
-                      key={currentVideo.id}
                       src={currentVideo.url}
                       loop={repeatMode === 'one'}
+                      autoPlay={autoPlay}
                       filters={filters}
                       onEnded={handleVideoEnded}
                       onVideoInfo={setVideoInfo}
@@ -555,11 +590,10 @@ function VideoPlayerPage() {
                     </p>
                     <button
                       onClick={openFilePicker}
-                      className="px-6 py-3 rounded-full font-medium transition-all duration-300"
+                      className="px-6 py-3 rounded-full font-medium transition-all duration-300 shadow-lg shadow-[var(--primary-color)]/25"
                       style={{ 
                         background: 'linear-gradient(to right, var(--primary-color), var(--primary-dark))',
-                        color: 'white',
-                        boxShadow: '0 4px 12px var(--primary-color)/25'
+                        color: 'white'
                       }}
                     >
                       添加视频文件
@@ -586,37 +620,22 @@ function VideoPlayerPage() {
           <div className="h-full flex flex-col" style={{ backgroundColor: 'var(--bg-secondary)' }}>
             {/* Sidebar header */}
             <div className="shrink-0 border-b p-4" style={{ borderColor: 'var(--border-color)' }}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>播放列表</h3>
-                <span className="px-2 py-1 rounded-full text-xs font-medium" style={{ 
-                  backgroundColor: 'var(--primary-light)', 
-                  color: 'var(--primary-color)',
-                  border: `1px solid var(--primary-color)/30`
-                }}>
-                  {playlist.length}
-                </span>
-              </div>
-
-              {/* Playlist controls */}
-              <div className="space-y-3">
-                {/* Repeat mode */}
-                <div>
-                  <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--text-tertiary)' }}>播放模式</div>
-                  <div className="flex items-center gap-1 rounded-lg p-1" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-                    {(['off', 'all'] as RepeatMode[]).map((mode) => (
-                      <button
-                        key={mode}
-                        onClick={() => setRepeatMode(mode)}
-                        className="flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all"
-                        style={{
-                          backgroundColor: repeatMode === mode ? 'var(--primary-color)' : 'transparent',
-                          color: repeatMode === mode ? 'white' : 'var(--text-secondary)'
-                        }}
-                      >
-                        {mode === 'off' ? '循环' : '列表'}
-                      </button>
-                    ))}
-                  </div>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setSidebarOpen(false)}
+                  className="flex items-center gap-2 transition-opacity hover:opacity-70"
+                  title="隐藏侧边栏"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ color: 'var(--primary-color)' }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                  </svg>
+                  <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>播放列表</h3>
+                </button>
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--primary-color)' }} />
+                  <span className="text-xs font-medium tabular-nums" style={{ color: 'var(--text-secondary)' }}>
+                    {playlist.length} 个视频
+                  </span>
                 </div>
               </div>
             </div>
@@ -647,22 +666,16 @@ function VideoPlayerPage() {
                   <div
                     key={video.id}
                     className={cn(
-                      'flex items-center justify-between p-3 rounded-lg mb-2 transition-all cursor-pointer',
+                      'flex items-center justify-between p-3 rounded-lg mb-2 transition-all cursor-pointer group/item',
                       currentIndex === index
-                        ? ''
-                        : 'hover:bg-[var(--bg-tertiary)]'
+                        ? 'bg-[var(--primary-light)] border border-[var(--primary-color)]/30'
+                        : 'bg-[var(--bg-tertiary)] border border-[var(--border-color)] hover:bg-[var(--primary-light)]/50 hover:border-[var(--primary-color)]/50'
                     )}
-                    style={{
-                      backgroundColor: currentIndex === index ? 'var(--primary-light)' : 
-                                    hoveredItemId === video.id ? 'var(--primary-light)/50' : 'var(--bg-tertiary)',
-                      border: `1px solid ${currentIndex === index ? 'var(--primary-color)/30' : 
-                                    hoveredItemId === video.id ? 'var(--primary-color)/50' : 'var(--border-color)'}`,
-                      boxShadow: hoveredItemId === video.id ? '0 2px 8px var(--primary-color)/20' : 'none',
-                      transition: 'all 0.2s ease-in-out'
-                    }}
                     onClick={() => {
                       setCurrentIndex(index);
-                      setIsPlaying(true);
+                      if (autoPlay) {
+                        setIsPlaying(true);
+                      }
                     }}
                     draggable
                     onDragStart={(e) => handleDragStart(e, video.id)}
@@ -673,10 +686,10 @@ function VideoPlayerPage() {
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded flex items-center justify-center" style={{ 
-                          backgroundColor: currentIndex === index ? 'var(--primary-color)/30' : 'var(--bg-primary)',
-                          color: currentIndex === index ? 'var(--primary-color)' : 'var(--text-secondary)'
-                        }}>
+                        <div className={cn(
+                          'w-8 h-8 rounded flex items-center justify-center',
+                          currentIndex === index ? 'bg-[var(--primary-color)]/30 text-[var(--primary-color)]' : 'bg-[var(--bg-primary)] text-[var(--text-secondary)]'
+                        )}>
                           {currentIndex === index && isPlaying ? (
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3"/>
@@ -686,12 +699,13 @@ function VideoPlayerPage() {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <h4 className="font-medium truncate" style={{ 
-                            color: currentIndex === index ? 'var(--text-primary)' : 'var(--text-secondary)'
-                          }}>
+                          <h4 className={cn(
+                            'font-medium truncate',
+                            currentIndex === index ? 'text-[var(--text-primary)]' : 'text-[var(--text-secondary)]'
+                          )}>
                             {video.name}
                           </h4>
-                          <div className="flex items-center gap-2 text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                          <div className="flex items-center gap-2 text-xs mt-1 text-[var(--text-tertiary)]">
                             <span>{formatDuration(video.duration)}</span>
                             <span>{formatFileSize(video.size)}</span>
                           </div>
@@ -703,12 +717,7 @@ function VideoPlayerPage() {
                         e.stopPropagation();
                         removeFile(video.id);
                       }}
-                      className="flex items-center justify-center w-8 h-8 rounded-full transition-colors"
-                      style={{ 
-                        backgroundColor: 'var(--bg-primary)', 
-                        color: 'var(--text-secondary)',
-                        border: `1px solid var(--border-color)`
-                      }}
+                      className="flex items-center justify-center w-8 h-8 rounded-full transition-colors bg-[var(--bg-primary)] text-[var(--text-secondary)] border border-[var(--border-color)] hover:bg-red-500/20 hover:text-red-500 hover:border-red-500/30"
                       title="删除"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -723,33 +732,47 @@ function VideoPlayerPage() {
 
             {/* Sidebar footer */}
             <div className="shrink-0 border-t p-4" style={{ borderColor: 'var(--border-color)' }}>
-              <div className="space-y-4">
-                {/* Quick actions */}
-                <div>
-                  <h4 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>快速操作</h4>
-                  <div className="space-y-2">
+              <div className="space-y-3">
+                {/* Action buttons - two columns */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={openFilePicker}
+                    className="px-2 py-1.5 rounded-md text-xs font-medium transition-all"
+                    style={{
+                      backgroundColor: 'var(--primary-color)',
+                      color: 'white'
+                    }}
+                  >
+                    添加视频
+                  </button>
+                  <button
+                    onClick={clearPlaylist}
+                    className="px-2 py-1.5 rounded-md text-xs font-medium transition-all"
+                    style={{
+                      backgroundColor: 'var(--bg-tertiary)',
+                      color: 'var(--text-secondary)',
+                      border: '1px solid var(--border-color)'
+                    }}
+                  >
+                    清空列表
+                  </button>
+                </div>
+
+                {/* Repeat mode */}
+                <div className="flex items-center gap-1 rounded-lg p-1" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                  {(['one', 'all'] as RepeatMode[]).map((mode) => (
                     <button
-                      onClick={openFilePicker}
-                      className="w-full px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                      style={{ 
-                        background: 'linear-gradient(to right, var(--primary-color), var(--primary-dark))',
-                        color: 'white'
+                      key={mode}
+                      onClick={() => setRepeatMode(mode)}
+                      className="flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all"
+                      style={{
+                        backgroundColor: repeatMode === mode ? 'var(--primary-color)' : 'transparent',
+                        color: repeatMode === mode ? 'white' : 'var(--text-secondary)'
                       }}
                     >
-                      添加视频
+                      {mode === 'one' ? '单视频循环' : '列表循环'}
                     </button>
-                    <button
-                      onClick={clearPlaylist}
-                      className="w-full px-4 py-2 rounded-lg text-sm font-medium transition-all"
-                      style={{ 
-                        backgroundColor: 'var(--bg-tertiary)', 
-                        color: 'var(--text-secondary)',
-                        border: `1px solid var(--border-color)`
-                      }}
-                    >
-                      清空列表
-                    </button>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
@@ -797,16 +820,9 @@ function VideoPlayerPage() {
                   { key: 'S', desc: '显示/隐藏侧边栏' },
                   { key: 'T', desc: '显示/隐藏工具栏' }
                 ].map((item, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 rounded-lg border" style={{ 
-                    backgroundColor: 'var(--bg-tertiary)',
-                    borderColor: 'var(--border-color)'
-                  }}>
-                    <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>{item.desc}</span>
-                    <span className="px-3 py-1 rounded-md font-mono text-sm" style={{ 
-                      backgroundColor: 'var(--primary-light)', 
-                      color: 'var(--primary-color)',
-                      border: `1px solid var(--primary-color)/30`
-                    }}>
+                  <div key={index} className="flex items-center justify-between p-3 rounded-lg border bg-[var(--bg-tertiary)] border-[var(--border-color)]">
+                    <span className="text-sm text-[var(--text-secondary)]">{item.desc}</span>
+                    <span className="px-3 py-1 rounded-md font-mono text-sm bg-[var(--primary-light)] text-[var(--primary-color)] border border-[var(--primary-color)]/30">
                       {item.key}
                     </span>
                   </div>
