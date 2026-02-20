@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/Toast';
 import { VideoPlayer } from '@/components/VideoPlayer';
-import { VideoFile, VideoFilters, VideoInfo, RepeatMode, DEFAULT_FILTERS } from '@/types/video';
+import { VideoFilters, VideoInfo, RepeatMode, DEFAULT_FILTERS } from '@/types/video';
 import { cn } from '@/utils/cn';
 import { useStore } from '@/store';
-import { VideoPlaylistStorage, VideoPlaylist } from '@/services/storage/VideoPlaylistStorage';
+import { VideoPlaylistStorage, VideoPlaylist, VideoFile } from '@/services/storage/VideoPlaylistStorage';
 import { formatFileSize, formatDuration, generateId } from '@/utils/formatters';
 import { configStorage } from '@/services/storage/ConfigStorage';
 import './styles/scroll-title.css';
@@ -12,7 +12,7 @@ import './styles/scroll-title.css';
 const ACCEPTED_EXTENSIONS = /\.(mp4|webm|mkv|avi|mov|flv|wmv|m4v|ogg|ogv|3gp|ts|mpeg|mpg)$/i;
 
 function VideoPlayerPage() {
-  const { theme, storagePath } = useStore();
+  const { theme } = useStore();
   const toast = useToast();
   const [playlist, setPlaylist] = useState<VideoFile[]>([]);
   const [currentIndex, setCurrentIndex] = useState(-1);
@@ -60,29 +60,27 @@ function VideoPlayerPage() {
   // 从存储加载播放列表
   useEffect(() => {
     const loadPlaylists = async () => {
-      if (storagePath) {
-        try {
-          const playlists = await VideoPlaylistStorage.getAllPlaylists(storagePath);
-          if (playlists.length > 0) {
-            const latestPlaylist = playlists[0];
-            setPlaylist(latestPlaylist.videos);
-            if (latestPlaylist.videos.length > 0) {
-              setCurrentIndex(0);
-            }
+      try {
+        const playlists = await VideoPlaylistStorage.getAllPlaylists('');
+        if (playlists.length > 0) {
+          const latestPlaylist = playlists[0];
+          setPlaylist(latestPlaylist.videos);
+          if (latestPlaylist.videos.length > 0) {
+            setCurrentIndex(0);
           }
-        } catch (error) {
-          console.error('加载播放列表失败:', error);
-          toast.error('加载播放列表失败');
         }
+      } catch (error) {
+        console.error('加载播放列表失败:', error);
+        toast.error('加载播放列表失败');
       }
     };
     loadPlaylists();
-  }, [storagePath]);
+  }, []);
 
   // 保存播放列表到存储
   useEffect(() => {
     const savePlaylist = async () => {
-      if (storagePath && playlist.length > 0) {
+      if (playlist.length > 0) {
         try {
           const currentPlaylist: VideoPlaylist = {
             id: 'default-playlist',
@@ -91,7 +89,7 @@ function VideoPlayerPage() {
             createdAt: Date.now(),
             updatedAt: Date.now()
           };
-          await VideoPlaylistStorage.savePlaylist(storagePath, currentPlaylist);
+          await VideoPlaylistStorage.savePlaylist('', currentPlaylist);
         } catch (error) {
           console.error('保存播放列表失败:', error);
           toast.error('保存播放列表失败');
@@ -99,7 +97,7 @@ function VideoPlayerPage() {
       }
     };
     savePlaylist();
-  }, [playlist, storagePath]);
+  }, [playlist]);
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
     const files = Array.from(fileList).filter(f =>
@@ -122,7 +120,7 @@ function VideoPlayerPage() {
         };
         
         // 处理视频文件，存储到IndexedDB并生成Blob URL
-        const processedVideo = await VideoPlaylistStorage.processVideoFile(storagePath, tempVideo);
+        const processedVideo = await VideoPlaylistStorage.processVideoFile('', tempVideo);
         
         // 提取视频时长
         if (processedVideo.url) {
@@ -149,17 +147,14 @@ function VideoPlayerPage() {
       if (isFirstAdd) setCurrentIndex(0);
       return updated;
     });
-  }, [storagePath]);
+  }, []);
 
   const removeFile = useCallback(async (id: string) => {
-    // 查找要删除的视频
     const videoToRemove = playlist.find(v => v.id === id);
     if (!videoToRemove) return;
     
-    // 释放Blob URL
     URL.revokeObjectURL(videoToRemove.url);
     
-    // 更新本地状态
     setPlaylist(prev => {
       const index = prev.findIndex(v => v.id === id);
       if (index === -1) return prev;
@@ -173,44 +168,37 @@ function VideoPlayerPage() {
       return updated;
     });
     
-    // 同步更新到IndexedDB
-    if (storagePath) {
-      try {
-        // 删除视频文件
-        await VideoPlaylistStorage.deleteVideoFile(id);
-        console.log('删除视频文件成功:', id);
-        
-        // 更新播放列表
-        const updatedPlaylist = playlist.filter(v => v.id !== id);
-        if (updatedPlaylist.length === 0) {
-          await VideoPlaylistStorage.clearAllPlaylists(storagePath);
-        } else {
-          const currentPlaylist: VideoPlaylist = {
-            id: 'default-playlist',
-            name: '默认播放列表',
-            videos: updatedPlaylist,
-            createdAt: Date.now(),
-            updatedAt: Date.now()
-          };
-          await VideoPlaylistStorage.savePlaylist(storagePath, currentPlaylist);
-        }
-        console.log('更新播放列表成功');
-        toast.success('视频删除成功');
-      } catch (error) {
-        console.error('更新IndexedDB数据失败:', error);
-        toast.error('删除视频文件失败');
+    try {
+      await VideoPlaylistStorage.deleteVideoFile(id);
+      console.log('删除视频文件成功:', id);
+      
+      const updatedPlaylist = playlist.filter(v => v.id !== id);
+      if (updatedPlaylist.length === 0) {
+        await VideoPlaylistStorage.clearAllPlaylists('');
+      } else {
+        const currentPlaylist: VideoPlaylist = {
+          id: 'default-playlist',
+          name: '默认播放列表',
+          videos: updatedPlaylist,
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+        await VideoPlaylistStorage.savePlaylist('', currentPlaylist);
       }
+      console.log('更新播放列表成功');
+      toast.success('视频删除成功');
+    } catch (error) {
+      console.error('更新IndexedDB数据失败:', error);
+      toast.error('删除视频文件失败');
     }
-  }, [playlist, storagePath]);
+  }, [playlist]);
 
   const clearPlaylist = useCallback(async () => {
-    // 收集视频ID并释放Blob URL
     const videoIds = playlist.map(v => {
       URL.revokeObjectURL(v.url);
       return v.id;
     });
     
-    // 清空本地状态
     setPlaylist([]);
     setCurrentIndex(-1);
     setVideoInfo(null);
@@ -219,25 +207,20 @@ function VideoPlayerPage() {
     setCurrentTime(0);
     setDuration(0);
     
-    // 清空IndexedDB中的数据
-    if (storagePath) {
-      try {
-        // 批量删除视频文件
-        if (videoIds.length > 0) {
-          await VideoPlaylistStorage.deleteVideoFiles(videoIds);
-          console.log('删除视频文件成功，数量:', videoIds.length);
-        }
-        
-        // 清空播放列表
-        await VideoPlaylistStorage.clearAllPlaylists(storagePath);
-        console.log('清空播放列表成功');
-        toast.success('播放列表已清空');
-      } catch (error) {
-        console.error('清空IndexedDB数据失败:', error);
-        toast.error('清空播放列表失败');
+    try {
+      if (videoIds.length > 0) {
+        await VideoPlaylistStorage.deleteVideoFiles(videoIds);
+        console.log('删除视频文件成功，数量:', videoIds.length);
       }
+      
+      await VideoPlaylistStorage.clearAllPlaylists('');
+      console.log('清空播放列表成功');
+      toast.success('播放列表已清空');
+    } catch (error) {
+      console.error('清空IndexedDB数据失败:', error);
+      toast.error('清空播放列表失败');
     }
-  }, [playlist, storagePath]);
+  }, [playlist]);
 
 
 

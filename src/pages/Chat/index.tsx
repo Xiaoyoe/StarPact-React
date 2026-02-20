@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
-  Star, ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight
+  Star, ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -327,7 +327,7 @@ export function ChatPage() {
   const {
     conversations, activeConversationId,
     models, activeModelId, setActiveModel,
-    addMessage, updateMessage, addConversation,
+    addMessage, updateMessage, addConversation, updateConversation,
     addLog,
     chatWallpaper, setChatWallpaper,
     compactMode, setCompactMode,
@@ -343,8 +343,11 @@ export function ChatPage() {
   const [hoveredMessage, setHoveredMessage] = useState<string | null>(null);
   const [showNav, setShowNav] = useState(true);
   const [switchingModel, setSwitchingModel] = useState(false);
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [editingTitle, setEditingTitle] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   const activeModel = models.find(m => m.id === activeModelId);
@@ -364,8 +367,11 @@ export function ChatPage() {
       setChatWallpaper(savedWallpaper);
     }
     
-    // 请求桌面通知权限
-    notificationService.requestPermission();
+    // 仅在启用桌面通知时请求权限
+    const chatNotification = configStorage.get('chatNotification');
+    if (chatNotification?.enabled) {
+      notificationService.requestPermission();
+    }
   }, []);
 
   const simulateStreaming = async (conversationId: string, messageId: string, fullText: string) => {
@@ -458,9 +464,10 @@ export function ChatPage() {
 
     // Create new conversation if none active
     if (!convId) {
+      const titleText = userInput.replace(/\n/g, ' ').trim();
       const newConv = {
         id: generateId(),
-        title: userInput.slice(0, 30) + (userInput.length > 30 ? '...' : ''),
+        title: titleText.slice(0, 20) + (titleText.length > 20 ? '...' : ''),
         messages: [],
         modelId: activeModelId || models[0]?.id || '',
         createdAt: Date.now(),
@@ -469,6 +476,12 @@ export function ChatPage() {
       };
       addConversation(newConv);
       convId = newConv.id;
+    } else if (activeConversation && activeConversation.title === '新对话' && activeConversation.messages.length === 0) {
+      // Update title for new conversation with first message
+      const titleText = userInput.replace(/\n/g, ' ').trim();
+      updateConversation(convId, { 
+        title: titleText.slice(0, 20) + (titleText.length > 20 ? '...' : '') 
+      });
     }
 
     // Add user message
@@ -600,9 +613,12 @@ export function ChatPage() {
           
           toast.success(`${activeOllamaModel} 回复完成`, { duration: 2000 });
           
-          // 发送桌面通知
-          const preview = finalResponse.slice(0, 100) + (finalResponse.length > 100 ? '...' : '');
-          notificationService.showChatComplete(activeOllamaModel, preview);
+          // 发送桌面通知（仅在启用时）
+          const chatNotification = configStorage.get('chatNotification');
+          if (chatNotification?.enabled) {
+            const preview = finalResponse.slice(0, 100) + (finalResponse.length > 100 ? '...' : '');
+            notificationService.showChatComplete(activeOllamaModel, preview);
+          }
           
           addLog({
             id: generateId(),
@@ -618,7 +634,10 @@ export function ChatPage() {
           });
           setIsStreaming(false);
           toast.error('Ollama 响应失败', { duration: 3000 });
-          notificationService.showChatError(activeOllamaModel, `HTTP ${response.status}`);
+          const chatNotification = configStorage.get('chatNotification');
+          if (chatNotification?.enabled) {
+            notificationService.showChatError(activeOllamaModel, `HTTP ${response.status}`);
+          }
           addLog({
             id: generateId(),
             level: 'error',
@@ -634,7 +653,10 @@ export function ChatPage() {
         });
         setIsStreaming(false);
         toast.error('无法连接到 Ollama 服务', { duration: 3000 });
-        notificationService.showChatError(activeOllamaModel, '无法连接到服务');
+        const chatNotification = configStorage.get('chatNotification');
+        if (chatNotification?.enabled) {
+          notificationService.showChatError(activeOllamaModel, '无法连接到服务');
+        }
         addLog({
           id: generateId(),
           level: 'error',
@@ -650,9 +672,12 @@ export function ChatPage() {
 
       toast.success(`${activeModel?.name || 'AI'} 回复完成`, { duration: 2000 });
 
-      // 发送桌面通知
-      const preview = responseText.slice(0, 100) + (responseText.length > 100 ? '...' : '');
-      notificationService.showChatComplete(activeModel?.name || 'AI', preview);
+      // 发送桌面通知（仅在启用时）
+      const chatNotification = configStorage.get('chatNotification');
+      if (chatNotification?.enabled) {
+        const preview = responseText.slice(0, 100) + (responseText.length > 100 ? '...' : '');
+        notificationService.showChatComplete(activeModel?.name || 'AI', preview);
+      }
 
       addLog({
         id: generateId(),
@@ -668,6 +693,39 @@ export function ChatPage() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  };
+
+  const handleStartEditTitle = () => {
+    if (activeConversation) {
+      setEditingTitle(activeConversation.title);
+      setIsEditingTitle(true);
+      setTimeout(() => {
+        titleInputRef.current?.focus();
+        titleInputRef.current?.select();
+      }, 0);
+    }
+  };
+
+  const handleSaveTitle = () => {
+    if (activeConversation && editingTitle.trim()) {
+      updateConversation(activeConversation.id, { title: editingTitle.trim() });
+      toast.success('标题已更新');
+    }
+    setIsEditingTitle(false);
+  };
+
+  const handleCancelEditTitle = () => {
+    setIsEditingTitle(false);
+    setEditingTitle('');
+  };
+
+  const handleTitleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveTitle();
+    } else if (e.key === 'Escape') {
+      handleCancelEditTitle();
     }
   };
 
@@ -691,10 +749,59 @@ export function ChatPage() {
         }}
       >
         <div className="flex items-center gap-3">
-          <h1 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-            {activeConversation?.title || '新对话'}
-          </h1>
-          {activeConversation && (
+          {isEditingTitle ? (
+            <div className="flex items-center gap-2">
+              <input
+                ref={titleInputRef}
+                type="text"
+                value={editingTitle}
+                onChange={(e) => setEditingTitle(e.target.value)}
+                onKeyDown={handleTitleKeyDown}
+                onBlur={handleSaveTitle}
+                className="text-base font-semibold px-2 py-1 rounded border focus:outline-none"
+                style={{
+                  color: 'var(--text-primary)',
+                  backgroundColor: 'var(--bg-primary)',
+                  borderColor: 'var(--primary-color)',
+                  minWidth: '200px'
+                }}
+              />
+              <button
+                onClick={handleSaveTitle}
+                className="p-1 rounded hover:bg-opacity-80 transition-colors"
+                style={{ color: 'var(--primary-color)' }}
+              >
+                <Check size={16} />
+              </button>
+              <button
+                onClick={handleCancelEditTitle}
+                className="p-1 rounded hover:bg-opacity-80 transition-colors"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                <Square size={14} />
+              </button>
+            </div>
+          ) : (
+            <>
+              {activeConversation && (
+                <button
+                  onClick={handleStartEditTitle}
+                  className="p-1.5 rounded-lg transition-colors hover:bg-opacity-80"
+                  style={{ 
+                    color: 'var(--text-tertiary)',
+                    backgroundColor: 'transparent'
+                  }}
+                  title="编辑标题"
+                >
+                  <Pencil size={14} />
+                </button>
+              )}
+              <h1 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                {activeConversation?.title || '新对话'}
+              </h1>
+            </>
+          )}
+          {activeConversation && !isEditingTitle && (
             <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
               {activeConversation.messages.length} 条消息
             </span>

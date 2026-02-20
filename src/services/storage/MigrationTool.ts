@@ -7,6 +7,8 @@ import { GalleryStorage } from './GalleryStorage';
 import { VideoStorage } from './VideoStorage';
 import { ImageAlbum } from './GalleryStorage';
 import { VideoPlaylist } from './VideoStorage';
+import { ChatModelStorage } from './ChatModelStorage';
+import type { ModelConfig, Conversation } from '@/store';
 
 /**
  * 迁移状态接口
@@ -329,5 +331,50 @@ export class MigrationTool {
 
 迁移完成时间: ${new Date().toLocaleString()}
 `;
+  }
+
+  static async needsChatModelMigration(): Promise<boolean> {
+    try {
+      const storedModels = await ChatModelStorage.loadModels();
+      return storedModels === null || storedModels.length === 0;
+    } catch (error) {
+      console.error('检查迁移状态失败:', error);
+      return true;
+    }
+  }
+
+  static async migrateDefaultData(
+    models: ModelConfig[],
+    conversations: Conversation[],
+    activeModelId: string | null,
+    activeConversationId: string | null
+  ): Promise<boolean> {
+    try {
+      console.log('开始迁移默认数据到持久化存储...');
+      
+      if (models.length > 0) {
+        await ChatModelStorage.saveModels(models);
+        console.log(`已迁移 ${models.length} 个模型配置`);
+      }
+      
+      if (conversations.length > 0) {
+        await ChatModelStorage.saveConversations(conversations);
+        console.log(`已迁移 ${conversations.length} 个对话记录`);
+      }
+      
+      if (activeModelId) {
+        await ChatModelStorage.saveActiveModelId(activeModelId);
+      }
+      
+      if (activeConversationId) {
+        await ChatModelStorage.saveActiveConversationId(activeConversationId);
+      }
+      
+      console.log('数据迁移完成');
+      return true;
+    } catch (error) {
+      console.error('数据迁移失败:', error);
+      return false;
+    }
   }
 }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useStore } from '@/store';
+import { useStore, initializeStoreFromStorage } from '@/store';
 import { Sidebar } from '@/layouts/Sidebar';
 import { ChatPage } from '@/pages/Chat';
 import { ModelsPage } from '@/pages/Models';
@@ -49,6 +49,19 @@ export function App() {
   const { activePage, setActivePage, webShortcutPopupOpen, setWebShortcutPopupOpen, dataManagerOpen, setDataManagerOpen } = useStore();
   const [showPathConfigModal, setShowPathConfigModal] = useState(false);
   const [pathsConfigured, setPathsConfigured] = useState(false);
+
+  // 初始化持久化存储
+  useEffect(() => {
+    const initStorage = async () => {
+      try {
+        await initializeStoreFromStorage();
+        console.log('持久化存储初始化完成');
+      } catch (error) {
+        console.error('持久化存储初始化失败:', error);
+      }
+    };
+    initStorage();
+  }, []);
 
   // 初始化时检查路径配置
   useEffect(() => {

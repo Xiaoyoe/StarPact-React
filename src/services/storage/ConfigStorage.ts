@@ -14,6 +14,9 @@ export interface AppConfig {
     enabled: boolean;
     interval: 10 | 3600 | 86400;
   };
+  chatNotification: {
+    enabled: boolean;
+  };
   videoAutoPlay: boolean;
   closeConfirm: boolean;
   [key: string]: any;
@@ -27,6 +30,7 @@ export class ConfigStorage {
   private dbStorage: IndexedDBStorage;
   private configCache: AppConfig;
   private loadPromise: Promise<void>;
+  private isReady: boolean = false;
 
   private constructor() {
     this.dbStorage = IndexedDBStorage.getInstance();
@@ -45,6 +49,9 @@ export class ConfigStorage {
         enabled: false,
         interval: 10
       },
+      chatNotification: {
+        enabled: false
+      },
       videoAutoPlay: true,
       closeConfirm: true
     };
@@ -52,18 +59,22 @@ export class ConfigStorage {
 
   private async loadConfig(): Promise<void> {
     try {
-      await new Promise(resolve => setTimeout(resolve, 500));
       const storedConfig = await this.dbStorage.get<{ data: AppConfig }>('config', 'app-config');
       if (storedConfig && storedConfig.data) {
         this.configCache = { ...this.getDefaultConfig(), ...storedConfig.data };
       }
+      this.isReady = true;
     } catch (error) {
       console.error('加载配置失败:', error);
       this.configCache = this.getDefaultConfig();
+      this.isReady = true;
     }
   }
 
   async ready(): Promise<void> {
+    if (this.isReady) {
+      return;
+    }
     await this.loadPromise;
   }
 
@@ -78,6 +89,8 @@ export class ConfigStorage {
       });
     } catch (error) {
       console.error('保存配置失败:', error);
+      console.error('配置内容:', JSON.stringify(this.configCache, null, 2));
+      console.error('错误堆栈:', error instanceof Error ? error.stack : '未知错误');
     }
   }
 

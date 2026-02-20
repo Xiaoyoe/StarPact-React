@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield, MessageSquareQuote, LogOut
+  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield, MessageSquareQuote, LogOut, Bell
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { ThemeType } from '@/store';
 import { motion } from 'framer-motion';
 import { StorageManager } from '@/services/storage/StorageManager';
+import { StorageMonitor } from '@/services/storage/StorageMonitor';
+import type { StorageHealthReport } from '@/services/storage/StorageMonitor';
 import { configStorage, type AppConfig } from '@/services/storage/ConfigStorage';
 import { PromptTemplateStorage } from '@/services/storage/PromptTemplateStorage';
 import { VideoPlaylistStorage } from '@/services/storage/VideoPlaylistStorage';
@@ -33,7 +35,10 @@ export function SettingsPage() {
   const [videoPlaylistStoragePath, setVideoPlaylistStoragePath] = useState('');
   const [dailyQuoteEnabled, setDailyQuoteEnabled] = useState(false);
   const [dailyQuoteInterval, setDailyQuoteInterval] = useState<10 | 3600 | 86400>(10);
+  const [chatNotificationEnabled, setChatNotificationEnabled] = useState(false);
   const [closeConfirm, setCloseConfirm] = useState(true);
+  const [storageReport, setStorageReport] = useState<StorageHealthReport | null>(null);
+  const [configLoaded, setConfigLoaded] = useState(false);
   const toast = useToast();
   
 
@@ -85,6 +90,7 @@ export function SettingsPage() {
       const savedSendOnEnter = configStorage.get('sendOnEnter');
       const savedStoragePath = configStorage.get('storagePath');
       const savedDailyQuote = configStorage.get('dailyQuote');
+      const savedChatNotification = configStorage.get('chatNotification');
       const savedCloseConfirm = configStorage.get('closeConfirm');
 
       if (savedTheme) setTheme(savedTheme);
@@ -94,38 +100,64 @@ export function SettingsPage() {
         setDailyQuoteEnabled(savedDailyQuote.enabled ?? true);
         setDailyQuoteInterval(savedDailyQuote.interval ?? 10);
       }
+      if (savedChatNotification) {
+        setChatNotificationEnabled(savedChatNotification.enabled ?? false);
+      }
       if (savedCloseConfirm !== undefined) setCloseConfirm(savedCloseConfirm);
+      setConfigLoaded(true);
     };
     loadSettings();
   }, []);
 
   // 保存设置到配置存储
   useEffect(() => {
-    configStorage.set('theme', theme);
-  }, [theme]);
-
-
-
-
+    if (configLoaded) {
+      configStorage.set('theme', theme);
+    }
+  }, [theme, configLoaded]);
 
   useEffect(() => {
-    configStorage.set('sendOnEnter', sendOnEnter);
-  }, [sendOnEnter]);
+    if (configLoaded) {
+      configStorage.set('sendOnEnter', sendOnEnter);
+    }
+  }, [sendOnEnter, configLoaded]);
 
   useEffect(() => {
-    configStorage.set('storagePath', storagePath);
-  }, [storagePath]);
+    if (configLoaded) {
+      configStorage.set('storagePath', storagePath);
+    }
+  }, [storagePath, configLoaded]);
 
   useEffect(() => {
-    configStorage.set('dailyQuote', {
-      enabled: dailyQuoteEnabled,
-      interval: dailyQuoteInterval
-    });
-  }, [dailyQuoteEnabled, dailyQuoteInterval]);
+    if (configLoaded) {
+      configStorage.set('dailyQuote', {
+        enabled: dailyQuoteEnabled,
+        interval: dailyQuoteInterval
+      });
+    }
+  }, [dailyQuoteEnabled, dailyQuoteInterval, configLoaded]);
 
   useEffect(() => {
-    configStorage.set('closeConfirm', closeConfirm);
-  }, [closeConfirm]);
+    if (configLoaded) {
+      configStorage.set('chatNotification', {
+        enabled: chatNotificationEnabled
+      });
+    }
+  }, [chatNotificationEnabled, configLoaded]);
+
+  useEffect(() => {
+    if (configLoaded) {
+      configStorage.set('closeConfirm', closeConfirm);
+    }
+  }, [closeConfirm, configLoaded]);
+
+  useEffect(() => {
+    const loadStorageReport = async () => {
+      const report = await StorageMonitor.getHealthReport();
+      setStorageReport(report);
+    };
+    loadStorageReport();
+  }, []);
 
   const themeCategories = {
     light: {
@@ -462,6 +494,32 @@ export function SettingsPage() {
                     </div>
                   </div>
                 )}
+              </div>
+
+              {/* Chat Notification Settings */}
+              <div
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Bell className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>聊天桌面通知</div>
+                  </div>
+                  <button
+                    onClick={() => setChatNotificationEnabled(!chatNotificationEnabled)}
+                    className="relative h-6 w-11 rounded-full transition-colors"
+                    style={{ backgroundColor: chatNotificationEnabled ? 'var(--primary-color)' : 'var(--bg-tertiary)' }}
+                  >
+                    <motion.div
+                      animate={{ x: chatNotificationEnabled ? 22 : 2 }}
+                      className="absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm"
+                    />
+                  </button>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  当 AI 回复完成时发送桌面通知提醒
+                </p>
               </div>
 
               {/* Close Confirm Settings */}
@@ -1421,6 +1479,89 @@ export function SettingsPage() {
                   所有 API Key 均使用 AES-256 加密存储在本地设备，不会上传至任何远程服务器。
                   对话记录仅保存在本地 SQLite 数据库中。
                 </p>
+              </div>
+
+              {/* Storage Status */}
+              <div
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    <RefreshCw size={14} className="mr-1 inline" /> 存储状态
+                  </h3>
+                  <button
+                    onClick={async () => {
+                      const report = await StorageMonitor.getHealthReport();
+                      setStorageReport(report);
+                      toast.success('存储状态已刷新');
+                    }}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+                  >
+                    <RefreshCw size={12} />
+                    刷新
+                  </button>
+                </div>
+
+                {storageReport ? (
+                  <>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div
+                        className="w-2 h-2 rounded-full"
+                        style={{
+                          backgroundColor: storageReport.overall === 'healthy' ? '#22C55E' :
+                            storageReport.overall === 'warning' ? '#F59E0B' : '#EF4444'
+                        }}
+                      />
+                      <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        整体状态: {storageReport.overall === 'healthy' ? '正常' :
+                          storageReport.overall === 'warning' ? '警告' : '异常'}
+                      </span>
+                      <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                        | 总记录: {storageReport.totalRecords} 条
+                      </span>
+                      <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                        | 总大小: {StorageMonitor.formatSize(storageReport.totalSize)}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2">
+                      {storageReport.stores.map((store) => (
+                        <div
+                          key={store.storeName}
+                          className="flex items-center justify-between p-2 rounded-lg"
+                          style={{ backgroundColor: 'var(--bg-primary)' }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="w-1.5 h-1.5 rounded-full"
+                              style={{
+                                backgroundColor: store.health === 'healthy' ? '#22C55E' :
+                                  store.health === 'warning' ? '#F59E0B' : '#EF4444'
+                              }}
+                            />
+                            <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                              {store.storeName}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                              {store.count} 条
+                            </span>
+                            <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                              {StorageMonitor.formatSize(store.size)}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    正在加载存储状态...
+                  </p>
+                )}
               </div>
             </motion.div>
           )}

@@ -13,7 +13,7 @@ export class IndexedDBStorage {
    */
   private constructor() {
     this.dbName = 'starpact-db';
-    this.dbVersion = 3; // 增加版本号，强制触发数据库升级
+    this.dbVersion = 4; // 增加版本号，强制触发数据库升级
     this.initDatabase();
   }
 
@@ -84,6 +84,11 @@ export class IndexedDBStorage {
     // 创建网页快捷方式存储
     if (!db.objectStoreNames.contains('web-shortcuts')) {
       db.createObjectStore('web-shortcuts', { keyPath: 'id' });
+    }
+
+    // 创建聊天模型存储
+    if (!db.objectStoreNames.contains('chat-model')) {
+      db.createObjectStore('chat-model', { keyPath: 'id' });
     }
 
     console.log('IndexedDB数据库结构更新成功');

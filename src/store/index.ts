@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { OllamaServiceStatus, OllamaModel } from '@/shared/types/ollama';
+import { ChatModelStorage } from '@/services/storage/ChatModelStorage';
 
 // ========== Types ==========
 export type ThemeType = 'light' | 'dark' | 'tech-blue' | 'eye-care' | 'midnight-blue' | 'forest-green' | 'coral-orange' | 'lavender-purple' | 'mint-cyan' | 'caramel-brown' | 'sakura-pink' | 'deep-sea-blue' | 'amber-gold';
@@ -67,6 +67,14 @@ export interface LogEntry {
   message: string;
   timestamp: number;
   module: string;
+}
+
+function debounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  return ((...args: Parameters<T>) => {
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  }) as T;
 }
 
 // ========== Store ==========
@@ -149,6 +157,11 @@ interface AppState {
   setOllamaLogs: (logs: any[]) => void;
   activeOllamaModel: string | null;
   setActiveOllamaModel: (modelName: string | null) => void;
+
+  // Persistence
+  isHydrated: boolean;
+  setHydrated: (value: boolean) => void;
+  hydrateFromStorage: () => Promise<void>;
 }
 
 export const generateId = () => Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
@@ -445,7 +458,32 @@ project/
   },
 ];
 
-export const useStore = create<AppState>((set) => ({
+export const useStore = create<AppState>((set, get) => {
+  const debouncedSaveModels = debounce(async (models: ModelConfig[]) => {
+    if (get().isHydrated) {
+      await ChatModelStorage.saveModels(models);
+    }
+  }, 300);
+
+  const debouncedSaveConversations = debounce(async (conversations: Conversation[]) => {
+    if (get().isHydrated) {
+      await ChatModelStorage.saveConversations(conversations);
+    }
+  }, 300);
+
+  const debouncedSaveActiveModelId = debounce(async (modelId: string | null) => {
+    if (get().isHydrated) {
+      await ChatModelStorage.saveActiveModelId(modelId);
+    }
+  }, 300);
+
+  const debouncedSaveActiveConversationId = debounce(async (conversationId: string | null) => {
+    if (get().isHydrated) {
+      await ChatModelStorage.saveActiveConversationId(conversationId);
+    }
+  }, 300);
+
+  return {
   // Theme
   theme: 'light',
   setTheme: (theme) => {
@@ -468,53 +506,103 @@ export const useStore = create<AppState>((set) => ({
   // Models
   models: defaultModels,
   activeModelId: 'gpt4',
-  addModel: (model) => set((state) => ({ models: [...state.models, model] })),
-  updateModel: (id, updates) => set((state) => ({
-    models: state.models.map((m) => (m.id === id ? { ...m, ...updates } : m)),
-  })),
-  deleteModel: (id) => set((state) => ({
-    models: state.models.filter((m) => m.id !== id),
-    activeModelId: state.activeModelId === id ? (state.models[0]?.id ?? null) : state.activeModelId,
-  })),
-  setActiveModel: (id) => set({ activeModelId: id }),
-  toggleModelFavorite: (id) => set((state) => ({
-    models: state.models.map((m) => (m.id === id ? { ...m, isFavorite: !m.isFavorite } : m)),
-  })),
+  addModel: (model) => {
+    set((state) => {
+      const newModels = [...state.models, model];
+      debouncedSaveModels(newModels);
+      return { models: newModels };
+    });
+  },
+  updateModel: (id, updates) => {
+    set((state) => {
+      const newModels = state.models.map((m) => (m.id === id ? { ...m, ...updates } : m));
+      debouncedSaveModels(newModels);
+      return { models: newModels };
+    });
+  },
+  deleteModel: (id) => {
+    set((state) => {
+      const newModels = state.models.filter((m) => m.id !== id);
+      const newActiveModelId = state.activeModelId === id ? (newModels[0]?.id ?? null) : state.activeModelId;
+      debouncedSaveModels(newModels);
+      if (state.activeModelId === id) {
+        debouncedSaveActiveModelId(newActiveModelId);
+      }
+      return { models: newModels, activeModelId: newActiveModelId };
+    });
+  },
+  setActiveModel: (id) => {
+    set({ activeModelId: id });
+    debouncedSaveActiveModelId(id);
+  },
+  toggleModelFavorite: (id) => {
+    set((state) => {
+      const newModels = state.models.map((m) => (m.id === id ? { ...m, isFavorite: !m.isFavorite } : m));
+      debouncedSaveModels(newModels);
+      return { models: newModels };
+    });
+  },
 
   // Conversations
-  conversations: demoConversations,
-  activeConversationId: 'conv1',
-  addConversation: (conv) => set((state) => ({
-    conversations: [conv, ...state.conversations],
-    activeConversationId: conv.id,
-  })),
-  updateConversation: (id, updates) => set((state) => ({
-    conversations: state.conversations.map((c) => (c.id === id ? { ...c, ...updates } : c)),
-  })),
-  deleteConversation: (id) => set((state) => ({
-    conversations: state.conversations.filter((c) => c.id !== id),
-    activeConversationId: state.activeConversationId === id
-      ? (state.conversations.filter(c => c.id !== id)[0]?.id ?? null)
-      : state.activeConversationId,
-  })),
-  setActiveConversation: (id) => set({ activeConversationId: id }),
-  addMessage: (conversationId, message) => set((state) => ({
-    conversations: state.conversations.map((c) =>
-      c.id === conversationId
-        ? { ...c, messages: [...c.messages, message], updatedAt: Date.now() }
-        : c
-    ),
-  })),
-  updateMessage: (conversationId, messageId, updates) => set((state) => ({
-    conversations: state.conversations.map((c) =>
-      c.id === conversationId
-        ? {
-            ...c,
-            messages: c.messages.map((m) => (m.id === messageId ? { ...m, ...updates } : m)),
-          }
-        : c
-    ),
-  })),
+  conversations: [],
+  activeConversationId: null,
+  addConversation: (conv) => {
+    set((state) => {
+      const newConversations = [conv, ...state.conversations];
+      debouncedSaveConversations(newConversations);
+      debouncedSaveActiveConversationId(conv.id);
+      return { conversations: newConversations, activeConversationId: conv.id };
+    });
+  },
+  updateConversation: (id, updates) => {
+    set((state) => {
+      const newConversations = state.conversations.map((c) => (c.id === id ? { ...c, ...updates } : c));
+      debouncedSaveConversations(newConversations);
+      return { conversations: newConversations };
+    });
+  },
+  deleteConversation: (id) => {
+    set((state) => {
+      const newConversations = state.conversations.filter((c) => c.id !== id);
+      const newActiveConversationId = state.activeConversationId === id
+        ? (newConversations[0]?.id ?? null)
+        : state.activeConversationId;
+      debouncedSaveConversations(newConversations);
+      if (state.activeConversationId === id) {
+        debouncedSaveActiveConversationId(newActiveConversationId);
+      }
+      return { conversations: newConversations, activeConversationId: newActiveConversationId };
+    });
+  },
+  setActiveConversation: (id) => {
+    set({ activeConversationId: id });
+    debouncedSaveActiveConversationId(id);
+  },
+  addMessage: (conversationId, message) => {
+    set((state) => {
+      const newConversations = state.conversations.map((c) =>
+        c.id === conversationId
+          ? { ...c, messages: [...c.messages, message], updatedAt: Date.now() }
+          : c
+      );
+      debouncedSaveConversations(newConversations);
+      return { conversations: newConversations };
+    });
+  },
+  updateMessage: (conversationId, messageId, updates) => {
+    set((state) => {
+      const newConversations = state.conversations.map((c) =>
+        c.id === conversationId
+          ? {
+              ...c,
+              messages: c.messages.map((m) => (m.id === messageId ? { ...m, ...updates } : m)),
+            }
+          : c
+      );
+      debouncedSaveConversations(newConversations);
+      return { conversations: newConversations };
+    });
+  },
 
   // Logs
   logs: [
@@ -568,5 +656,76 @@ export const useStore = create<AppState>((set) => ({
   setOllamaLogs: (logs) => set({ ollamaLogs: logs }),
   activeOllamaModel: null as string | null,
   setActiveOllamaModel: (modelName) => set({ activeOllamaModel: modelName }),
-}));
+
+  // Persistence
+  isHydrated: false,
+  setHydrated: (value) => set({ isHydrated: value }),
+  hydrateFromStorage: async () => {
+    try {
+      const [models, conversations, activeModelId, activeConversationId] = await Promise.all([
+        ChatModelStorage.loadModels(),
+        ChatModelStorage.loadConversations(),
+        ChatModelStorage.loadActiveModelId(),
+        ChatModelStorage.loadActiveConversationId(),
+      ]);
+
+      if (models && models.length > 0) {
+        set({ models });
+      }
+
+      if (conversations && conversations.length > 0) {
+        set({ conversations });
+      }
+
+      if (activeModelId) {
+        set({ activeModelId });
+      }
+
+      if (activeConversationId) {
+        set({ activeConversationId });
+      }
+
+      set({ isHydrated: true });
+      console.log('Store hydrated from storage successfully');
+    } catch (error) {
+      console.error('Failed to hydrate store from storage:', error);
+      set({ isHydrated: false });
+    }
+  },
+}});
+
+export async function initializeStoreFromStorage() {
+  const store = useStore.getState();
+  
+  try {
+    const [models, conversations, activeModelId, activeConversationId] = await Promise.all([
+      ChatModelStorage.loadModels(),
+      ChatModelStorage.loadConversations(),
+      ChatModelStorage.loadActiveModelId(),
+      ChatModelStorage.loadActiveConversationId(),
+    ]);
+    
+    if (models && models.length > 0) {
+      useStore.setState({ models });
+    }
+    
+    if (conversations && conversations.length > 0) {
+      useStore.setState({ conversations });
+    }
+    
+    if (activeModelId) {
+      store.setActiveModel(activeModelId);
+    }
+    
+    if (activeConversationId) {
+      store.setActiveConversation(activeConversationId);
+    }
+    
+    store.setHydrated(true);
+    console.log('Store hydrated from storage successfully');
+  } catch (error) {
+    console.error('Failed to hydrate store from storage:', error);
+    store.setHydrated(false);
+  }
+}
 
