@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import {
   RefreshCw, Download, Trash2, AlertCircle,
-  Activity, HardDrive, Clock, Zap, Settings2, X, CheckCircle2, XCircle
+  Activity, HardDrive, Clock, Zap, Settings2, X, CheckCircle2, XCircle, Play, StopCircle
 } from 'lucide-react';
 import { useStore } from '@/store';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { OllamaModel, OllamaPullProgress } from '@/shared/types/ollama';
+import { useToast } from '@/components/Toast';
 
 export function OllamaModal() {
   const {
@@ -17,13 +18,28 @@ export function OllamaModal() {
     ollamaLogs,
     addOllamaLog,
     setOllamaLogs,
+    activeOllamaModel,
+    setActiveOllamaModel,
   } = useStore();
 
-  
+  const toast = useToast();
+
   const [showConfig, setShowConfig] = useState(true);
   const [config, setConfig] = useState({ host: 'localhost', port: 11434 });
   const [isChecking, setIsChecking] = useState(false);
   const [showLogsSidebar, setShowLogsSidebar] = useState(false);
+  const [pullingModel, setPullingModel] = useState<string | null>(null);
+  const [pullProgress, setPullProgress] = useState<OllamaPullProgress | null>(null);
+  const [startingModel, setStartingModel] = useState<string | null>(null);
+  const [runningModels, setRunningModels] = useState<Array<{
+    name: string;
+    model: string;
+    size: number;
+    digest: string;
+    details: { format: string; family: string; parameter_size: string; quantization_level: string };
+    expiresAt?: string;
+    sizeVram?: number;
+  }>>([]);
 
   useEffect(() => {
     if (ollamaModalOpen) {
@@ -48,7 +64,6 @@ export function OllamaModal() {
     setShowLogsSidebar(true);
     setIsChecking(true);
     try {
-      // 尝试使用 Electron API 检测
       if (window.electronAPI?.ollama) {
         const status = await window.electronAPI.ollama.checkStatus();
         setOllamaStatus(status);
@@ -56,11 +71,11 @@ export function OllamaModal() {
         if (status.isRunning) {
           addOllamaLog({ type: 'info', message: 'Ollama 服务运行中' });
           loadOllamaModels();
+          loadRunningModels();
         } else {
           addOllamaLog({ type: 'warning', message: '未检测到 Ollama 服务，请先启动 Ollama' });
         }
       } else {
-        // 不依赖 Electron API 的检测机制
         addOllamaLog({ type: 'info', message: '使用网络检测 Ollama 服务状态' });
         const status = await checkOllamaStatusNetwork();
         setOllamaStatus(status);
@@ -68,6 +83,7 @@ export function OllamaModal() {
         if (status.isRunning) {
           addOllamaLog({ type: 'info', message: 'Ollama 服务运行中' });
           loadOllamaModelsNetwork();
+          loadRunningModels();
         } else {
           addOllamaLog({ type: 'warning', message: '未检测到 Ollama 服务，请先启动 Ollama' });
         }
@@ -140,6 +156,168 @@ export function OllamaModal() {
     }
   };
 
+  const loadRunningModels = async (showToast = false) => {
+    if (showToast) {
+      toast.info('正在刷新运行中的模型...', { duration: 1500 });
+    }
+    try {
+      const response = await fetch(`http://${config.host}:${config.port}/api/ps`);
+      if (response.ok) {
+        const data = await response.json();
+        const models = data.models || [];
+        setRunningModels(models);
+        if (models.length > 0) {
+          addOllamaLog({ type: 'info', message: `当前有 ${models.length} 个模型正在运行` });
+        }
+        if (showToast) {
+          toast.success(`已刷新，当前 ${models.length} 个模型运行中`, { duration: 2000 });
+        }
+      } else {
+        addOllamaLog({ type: 'error', message: '查询运行模型失败' });
+        if (showToast) {
+          toast.error('查询运行模型失败', { duration: 2000 });
+        }
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: '查询运行模型失败' });
+      if (showToast) {
+        toast.error('查询运行模型失败', { duration: 2000 });
+      }
+    }
+  };
+
+  const handleStartModel = async (modelName: string) => {
+    if (startingModel) {
+      addOllamaLog({ type: 'warning', message: '已有模型正在启动中，请稍候' });
+      toast.info('已有模型正在加载中，请稍候', { duration: 2000 });
+      return;
+    }
+    
+    setStartingModel(modelName);
+    addOllamaLog({ type: 'info', message: `正在启动模型 ${modelName}...` });
+    toast.info(`正在加载模型 ${modelName}...`, { duration: 2000 });
+    
+    try {
+      const response = await fetch(`http://${config.host}:${config.port}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: modelName,
+          prompt: '',
+          keep_alive: '10m'
+        })
+      });
+      
+      if (response.ok) {
+        addOllamaLog({ type: 'info', message: `模型 ${modelName} 已启动，等待加载完成...` });
+        setTimeout(async () => {
+          await loadRunningModels();
+          addOllamaLog({ type: 'info', message: `模型 ${modelName} 加载完成` });
+          toast.success(`模型 ${modelName} 加载完成`, { duration: 3000 });
+        }, 3000);
+      } else {
+        addOllamaLog({ type: 'error', message: `启动模型 ${modelName} 失败` });
+        toast.error(`加载模型 ${modelName} 失败`, { duration: 3000 });
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `启动模型 ${modelName} 失败` });
+      toast.error(`加载模型 ${modelName} 失败`, { duration: 3000 });
+    } finally {
+      setStartingModel(null);
+    }
+  };
+
+  const handleStopRunningModel = async (modelName: string) => {
+    toast.info(`正在卸载模型 ${modelName}...`, { duration: 2000 });
+    try {
+      const response = await fetch(`http://${config.host}:${config.port}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: modelName,
+          keep_alive: 0
+        })
+      });
+      
+      if (response.ok) {
+        addOllamaLog({ type: 'info', message: `正在停止模型 ${modelName}...` });
+        setTimeout(async () => {
+          await loadRunningModels();
+          addOllamaLog({ type: 'info', message: `模型 ${modelName} 已停止` });
+          toast.success(`模型 ${modelName} 已卸载完成`, { duration: 3000 });
+        }, 3000);
+      } else {
+        addOllamaLog({ type: 'error', message: `停止模型 ${modelName} 失败` });
+        toast.error(`卸载模型 ${modelName} 失败`, { duration: 3000 });
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `停止模型 ${modelName} 失败` });
+      toast.error(`卸载模型 ${modelName} 失败`, { duration: 3000 });
+    }
+  };
+
+  const handleSelectAndSwitchModel = async (modelName: string) => {
+    if (startingModel) {
+      toast.info('已有模型正在加载中，请稍候', { duration: 2000 });
+      return;
+    }
+
+    if (modelName === activeOllamaModel) {
+      toast.info(`${modelName} 已是当前选中模型`, { duration: 2000 });
+      return;
+    }
+
+    setStartingModel(modelName);
+
+    try {
+      if (activeOllamaModel) {
+        const isRunning = runningModels.some(m => m.name === activeOllamaModel || m.model === activeOllamaModel);
+        if (isRunning) {
+          toast.info(`正在关闭 ${activeOllamaModel}...`, { duration: 2000 });
+          await fetch(`http://${config.host}:${config.port}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: activeOllamaModel,
+              keep_alive: 0
+            })
+          });
+        }
+      }
+
+      setActiveOllamaModel(modelName);
+      toast.info(`正在启动 ${modelName}...`, { duration: 2000 });
+
+      const response = await fetch(`http://${config.host}:${config.port}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: modelName,
+          prompt: '',
+          keep_alive: '10m'
+        })
+      });
+
+      if (response.ok) {
+        addOllamaLog({ type: 'info', message: `模型 ${modelName} 已启动` });
+        setTimeout(async () => {
+          await loadRunningModels();
+          toast.success(`已切换到 ${modelName}`, { duration: 2000 });
+        }, 3000);
+      } else {
+        addOllamaLog({ type: 'error', message: `启动模型 ${modelName} 失败` });
+        toast.error(`启动 ${modelName} 失败`, { duration: 3000 });
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `切换模型失败` });
+      toast.error('模型切换失败', { duration: 3000 });
+    } finally {
+      setTimeout(() => {
+        setStartingModel(null);
+      }, 3000);
+    }
+  };
+
   const handlePullModel = async (modelName: string) => {
     if (!window.electronAPI?.ollama) {
       addOllamaLog({ type: 'error', message: 'Electron API 不可用，无法拉取模型' });
@@ -202,10 +380,6 @@ export function OllamaModal() {
     return date.toLocaleDateString();
   };
 
-  // 新增：用于处理模型拉取状态
-  const [pullingModel, setPullingModel] = useState<string | null>(null);
-  const [pullProgress, setPullProgress] = useState<OllamaPullProgress | null>(null);
-
   return (
     <AnimatePresence>
       {ollamaModalOpen && (
@@ -225,7 +399,6 @@ export function OllamaModal() {
               style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}
               onClick={(e) => e.stopPropagation()}
             >
-            {/* Header */}
             <div
               className="flex items-center justify-between border-b px-6"
               style={{ height: 56, borderColor: 'var(--border-color)' }}
@@ -302,11 +475,8 @@ export function OllamaModal() {
               </div>
             </div>
 
-            {/* Content */}
             <div className="flex h-[calc(90vh-56px)] overflow-hidden">
-              {/* Main Content */}
               <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0 }}>
-                {/* Status Info */}
                 <div className="border-b px-6 py-4" style={{ borderColor: 'var(--border-color)' }}>
                   {!ollamaStatus?.isRunning ? (
                     <div className="flex items-center gap-3 rounded-lg p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
@@ -335,7 +505,6 @@ export function OllamaModal() {
                   )}
                 </div>
 
-                {/* Models List */}
                 <div className="flex-1 min-h-0 overflow-hidden">
                   <div className="flex items-center justify-between border-b px-6 py-3" style={{ borderColor: 'var(--border-color)' }}>
                     <div className="flex items-center gap-2">
@@ -343,9 +512,17 @@ export function OllamaModal() {
                       <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                         本地模型 ({ollamaModels.length})
                       </span>
+                      {runningModels.length > 0 && (
+                        <span
+                          className="rounded-full px-2 py-0.5 text-xs"
+                          style={{ backgroundColor: 'rgba(0,180,42,0.1)', color: 'var(--success-color)' }}
+                        >
+                          {runningModels.length} 个运行中
+                        </span>
+                      )}
                     </div>
                     <button
-                      onClick={loadOllamaModels}
+                      onClick={() => { loadOllamaModels(); loadRunningModels(true); }}
                       disabled={!ollamaStatus?.isRunning}
                       className="btn-secondary flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm disabled:opacity-50"
                     >
@@ -370,65 +547,123 @@ export function OllamaModal() {
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {ollamaModels.map((model) => (
-                          <motion.div
-                            key={model.name}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            className="rounded-lg p-4"
-                            style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
-                          >
-                            <div className="mb-2 flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)', maxWidth: '150px' }}>
-                                  {model.name}
-                                </span>
-                                <span
-                                  className="rounded px-1.5 py-0.5 text-xs"
-                                  style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
-                                >
-                                  {model.details?.family || '未知'}
+                        {ollamaModels.map((model) => {
+                          const isRunning = runningModels.some(rm => rm.name === model.name || rm.model === model.name);
+                          const isStarting = startingModel === model.name;
+                          const isSelected = activeOllamaModel === model.name;
+                          
+                          return (
+                            <motion.div
+                              key={model.name}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className="rounded-lg p-4"
+                              style={{ 
+                                backgroundColor: 'var(--bg-secondary)', 
+                                border: isSelected ? '2px solid var(--primary-color)' : (isRunning ? '1px solid var(--success-color)' : '1px solid var(--border-color)')
+                              }}
+                            >
+                              <div className="mb-2 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-semibold truncate" style={{ color: 'var(--text-primary)', maxWidth: '150px' }}>
+                                    {model.name}
+                                  </span>
+                                  {isSelected && (
+                                    <span
+                                      className="rounded px-1.5 py-0.5 text-xs"
+                                      style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                                    >
+                                      已选择
+                                    </span>
+                                  )}
+                                  {isRunning && (
+                                    <span
+                                      className="rounded px-1.5 py-0.5 text-xs"
+                                      style={{ backgroundColor: 'rgba(0,180,42,0.1)', color: 'var(--success-color)' }}
+                                    >
+                                      运行中
+                                    </span>
+                                  )}
+                                  <span
+                                    className="rounded px-1.5 py-0.5 text-xs"
+                                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
+                                  >
+                                    {model.details?.family || '未知'}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleSelectAndSwitchModel(model.name)}
+                                    disabled={startingModel !== null}
+                                    className="flex h-6 w-6 items-center justify-center rounded transition-colors disabled:opacity-50"
+                                    style={{ 
+                                      color: isSelected ? 'var(--primary-color)' : 'var(--text-tertiary)', 
+                                      backgroundColor: isSelected ? 'var(--primary-light)' : 'transparent' 
+                                    }}
+                                    title="选择并切换模型"
+                                  >
+                                    <CheckCircle2 size={12} />
+                                  </button>
+                                  {isRunning ? (
+                                    <button
+                                      onClick={() => handleStopRunningModel(model.name)}
+                                      className="flex h-6 w-6 items-center justify-center rounded transition-colors"
+                                      style={{ color: 'var(--error-color)', backgroundColor: 'rgba(245,63,63,0.1)' }}
+                                      title="停止运行"
+                                    >
+                                      <StopCircle size={12} />
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleStartModel(model.name)}
+                                      disabled={isStarting || startingModel !== null}
+                                      className="flex h-6 w-6 items-center justify-center rounded transition-colors disabled:opacity-50"
+                                      style={{ color: 'var(--success-color)', backgroundColor: 'rgba(0,180,42,0.1)' }}
+                                      title={isStarting ? '启动中...' : '启动模型'}
+                                    >
+                                      <Play size={12} className={isStarting ? 'animate-pulse' : ''} />
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleDeleteModel(model.name)}
+                                    className="btn-danger flex h-6 w-6 items-center justify-center rounded"
+                                    title="删除模型"
+                                  >
+                                    <Trash2 size={12} />
+                                  </button>
+                                </div>
+                              </div>
+                              
+                              <div className="mb-2 flex flex-wrap gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                                {model.details?.parameter_size && (
+                                  <span className="flex items-center gap-1">
+                                    <Zap size={10} /> {model.details.parameter_size}
+                                  </span>
+                                )}
+                                {model.size > 0 && (
+                                  <span className="flex items-center gap-1">
+                                    <HardDrive size={10} /> {formatSize(model.size)}
+                                  </span>
+                                )}
+                                <span className="flex items-center gap-1">
+                                  <Clock size={10} /> {formatTime(model.modified_at)}
                                 </span>
                               </div>
-                              <button
-                                onClick={() => handleDeleteModel(model.name)}
-                                className="btn-danger flex h-6 w-6 items-center justify-center rounded"
-                                title="删除模型"
-                              >
-                                <Trash2 size={12} />
-                              </button>
-                            </div>
-                            
-                            <div className="mb-2 flex flex-wrap gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                              {model.details?.parameter_size && (
-                                <span className="flex items-center gap-1">
-                                  <Zap size={10} /> {model.details.parameter_size}
-                                </span>
-                              )}
-                              {model.size > 0 && (
-                                <span className="flex items-center gap-1">
-                                  <HardDrive size={10} /> {formatSize(model.size)}
-                                </span>
-                              )}
-                              <span className="flex items-center gap-1">
-                                <Clock size={10} /> {formatTime(model.modified_at)}
-                              </span>
-                            </div>
 
-                            {model.details?.quantization_level && (
-                              <div className="rounded-md px-2 py-1 text-xs" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}>
-                                量化: {model.details.quantization_level}
-                              </div>
-                            )}
-                          </motion.div>
-                        ))}
+                              {model.details?.quantization_level && (
+                                <div className="rounded-md px-2 py-1 text-xs" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}>
+                                  量化: {model.details.quantization_level}
+                                </div>
+                              )}
+                            </motion.div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Logs Sidebar */}
               <AnimatePresence>
                 {showLogsSidebar && (
                   <motion.div
@@ -480,7 +715,6 @@ export function OllamaModal() {
                         )}
                       </div>
                       
-                      {/* Config Panel */}
                       <div className="border-t p-4" style={{ borderColor: 'var(--border-color)' }}>
                         <div className="mb-3 flex items-center justify-between">
                           <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>

@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle, AlertCircle, Info } from 'lucide-react';
+import { CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
 
 // Types
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'warning';
 export type ToastPosition = 'top-right' | 'top-center' | 'top-left' | 'bottom-right' | 'bottom-center' | 'bottom-left' | 'center';
 
 export interface ToastOptions {
@@ -25,6 +25,7 @@ export interface ToastContextType {
   success: (text: string, options?: Omit<ToastOptions, 'type'>) => void;
   error: (text: string, options?: Omit<ToastOptions, 'type'>) => void;
   info: (text: string, options?: Omit<ToastOptions, 'type'>) => void;
+  warning: (text: string, options?: Omit<ToastOptions, 'type'>) => void;
   remove: (id: string) => void;
   clear: () => void;
 }
@@ -71,8 +72,9 @@ const getIconComponent = (type: ToastType) => {
       return CheckCircle;
     case 'error':
       return AlertCircle;
+    case 'warning':
+      return AlertTriangle;
     case 'info':
-      return Info;
     default:
       return Info;
   }
@@ -147,6 +149,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     return showToast(text, { ...options, type: 'info' });
   }, [showToast]);
 
+  const warning = useCallback((text: string, options?: Omit<ToastOptions, 'type'>) => {
+    return showToast(text, { ...options, type: 'warning' });
+  }, [showToast]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -159,6 +165,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     success,
     error,
     info,
+    warning,
     remove: removeToast,
     clear: clearToasts
   };
@@ -200,9 +207,19 @@ function ToastContainer({ messages, onRemove }: { messages: ToastMessage[]; onRe
           <AnimatePresence>
             {positionMessages.map((message) => {
               const IconComp = getIconComponent(message.type);
-              const bgKey = message.type === 'success' ? '--toast-success-bg' : message.type === 'error' ? '--toast-error-bg' : '--toast-info-bg';
-              const textKey = message.type === 'success' ? '--toast-success-text' : message.type === 'error' ? '--toast-error-text' : '--toast-info-text';
-              const borderKey = message.type === 'success' ? '--toast-success-border' : message.type === 'error' ? '--toast-error-border' : '--toast-info-border';
+              const getStyleKeys = () => {
+                switch (message.type) {
+                  case 'success':
+                    return { bg: '--toast-success-bg', text: '--toast-success-text', border: '--toast-success-border' };
+                  case 'error':
+                    return { bg: '--toast-error-bg', text: '--toast-error-text', border: '--toast-error-border' };
+                  case 'warning':
+                    return { bg: '--toast-warning-bg', text: '--toast-warning-text', border: '--toast-warning-border' };
+                  default:
+                    return { bg: '--toast-info-bg', text: '--toast-info-text', border: '--toast-info-border' };
+                }
+              };
+              const styleKeys = getStyleKeys();
 
               // Animation variants based on position
               const getVariants = () => {
@@ -265,9 +282,9 @@ function ToastContainer({ messages, onRemove }: { messages: ToastMessage[]; onRe
                     fontWeight: 500,
                     cursor: 'pointer',
                     boxShadow: 'var(--shadow-lg)',
-                    background: `var(${bgKey})`,
-                    color: `var(${textKey})`,
-                    borderLeft: `3px solid var(${borderKey})`,
+                    background: `var(${styleKeys.bg})`,
+                    color: `var(${styleKeys.text})`,
+                    borderLeft: `3px solid var(${styleKeys.border})`,
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
@@ -327,12 +344,18 @@ export function createToast() {
     return toastContext.info(text, options);
   };
 
+  const warning = (text: string, options?: Omit<ToastOptions, 'type'>) => {
+    if (!toastContext) throw new Error('Toast not initialized');
+    return toastContext.warning(text, options);
+  };
+
   return {
     initialize,
     show,
     success,
     error,
-    info
+    info,
+    warning
   };
 }
 

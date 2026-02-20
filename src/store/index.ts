@@ -47,6 +47,8 @@ export interface ChatMessage {
   modelName?: string;
   isStreaming?: boolean;
   isFavorite?: boolean;
+  thinking?: string;
+  showThinking?: boolean;
 }
 
 export interface Conversation {
@@ -134,6 +136,19 @@ interface AppState {
   // Data Manager
   dataManagerOpen: boolean;
   setDataManagerOpen: (open: boolean) => void;
+
+  // Ollama
+  ollamaModalOpen: boolean;
+  setOllamaModalOpen: (open: boolean) => void;
+  ollamaStatus: any;
+  setOllamaStatus: (status: any) => void;
+  ollamaModels: any[];
+  setOllamaModels: (models: any[]) => void;
+  ollamaLogs: any[];
+  addOllamaLog: (log: any) => void;
+  setOllamaLogs: (logs: any[]) => void;
+  activeOllamaModel: string | null;
+  setActiveOllamaModel: (modelName: string | null) => void;
 }
 
 export const generateId = () => Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
@@ -551,5 +566,7 @@ export const useStore = create<AppState>((set) => ({
     ollamaLogs: [...state.ollamaLogs, { ...log, timestamp: Date.now() }],
   })),
   setOllamaLogs: (logs) => set({ ollamaLogs: logs }),
+  activeOllamaModel: null as string | null,
+  setActiveOllamaModel: (modelName) => set({ activeOllamaModel: modelName }),
 }));
 

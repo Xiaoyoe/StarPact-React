@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
-  Star, ChevronDown, Sparkles, Bot, User
+  Star, ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -13,6 +13,8 @@ import { cn } from '@/utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChatQuickNav } from '@/components/ChatQuickNav';
 import { configStorage } from '@/services/storage/ConfigStorage';
+import { useToast } from '@/components/Toast';
+import { notificationService } from '@/utils/notification';
 
 // Simulated AI responses
 const aiResponses = [
@@ -165,6 +167,7 @@ function CodeBlock({ language, children }: { language: string; children: string 
 function MessageBubble({ message, isLast, compactMode }: { message: ChatMessage; isLast: boolean; compactMode: boolean }) {
   const isUser = message.role === 'user';
   const [showActions, setShowActions] = useState(true);
+  const [showThinking, setShowThinking] = useState(true);
 
   const formatTime = (ts: number) => {
     const d = new Date(ts);
@@ -219,23 +222,72 @@ function MessageBubble({ message, isLast, compactMode }: { message: ChatMessage;
           {isUser ? (
             <p className="whitespace-pre-wrap text-sm leading-relaxed copy-allowed" style={{ userSelect: 'text' }}>{message.content}</p>
           ) : (
-            <div className={cn("markdown-body copy-allowed", message.isStreaming && isLast && 'typing-cursor')} style={{ userSelect: 'text' }}>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                components={{
-                  code({ className, children, ...props }) {
-                    const match = /language-(\w+)/.exec(className || '');
-                    const codeString = String(children).replace(/\n$/, '');
-                    if (match) {
-                      return <CodeBlock language={match[1]}>{codeString}</CodeBlock>;
-                    }
-                    return <code className={className} {...props}>{children}</code>;
-                  },
-                }}
-              >
-                {message.content}
-              </ReactMarkdown>
-            </div>
+            <>
+              {/* Thinking Section */}
+              {message.thinking && (
+                <div className="mb-3">
+                  <button
+                    onClick={() => setShowThinking(!showThinking)}
+                    className="flex items-center gap-1.5 text-xs font-medium mb-2 transition-colors"
+                    style={{ color: 'var(--primary-color)' }}
+                  >
+                    <Brain size={12} />
+                    <span>思考过程</span>
+                    <ChevronRight 
+                      size={12} 
+                      style={{ 
+                        transform: showThinking ? 'rotate(90deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s'
+                      }} 
+                    />
+                  </button>
+                  <AnimatePresence>
+                    {showThinking && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="overflow-hidden"
+                      >
+                        <div 
+                          className="rounded-lg p-3 text-xs leading-relaxed"
+                          style={{ 
+                            backgroundColor: 'var(--bg-secondary)',
+                            border: '1px solid var(--border-color)',
+                            color: 'var(--text-secondary)'
+                          }}
+                        >
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                          >
+                            {message.thinking}
+                          </ReactMarkdown>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+              
+              {/* Main Content */}
+              <div className={cn("markdown-body copy-allowed", message.isStreaming && isLast && 'typing-cursor')} style={{ userSelect: 'text' }}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  components={{
+                    code({ className, children, ...props }) {
+                      const match = /language-(\w+)/.exec(className || '');
+                      const codeString = String(children).replace(/\n$/, '');
+                      if (match) {
+                        return <CodeBlock language={match[1]}>{codeString}</CodeBlock>;
+                      }
+                      return <code className={className} {...props}>{children}</code>;
+                    },
+                  }}
+                >
+                  {message.content}
+                </ReactMarkdown>
+              </div>
+            </>
           )}
         </div>
 
@@ -279,13 +331,18 @@ export function ChatPage() {
     addLog,
     chatWallpaper, setChatWallpaper,
     compactMode, setCompactMode,
+    ollamaModels, activeOllamaModel, setActiveOllamaModel,
+    ollamaStatus,
   } = useStore();
+
+  const toast = useToast();
 
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [showModelSelect, setShowModelSelect] = useState(false);
   const [hoveredMessage, setHoveredMessage] = useState<string | null>(null);
   const [showNav, setShowNav] = useState(true);
+  const [switchingModel, setSwitchingModel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -306,6 +363,9 @@ export function ChatPage() {
     if (savedWallpaper) {
       setChatWallpaper(savedWallpaper);
     }
+    
+    // 请求桌面通知权限
+    notificationService.requestPermission();
   }, []);
 
   const simulateStreaming = async (conversationId: string, messageId: string, fullText: string) => {
@@ -332,16 +392,75 @@ export function ChatPage() {
     setIsStreaming(false);
   };
 
+  const handleSwitchOllamaModel = async (newModelName: string) => {
+    if (switchingModel) {
+      toast.info('正在切换模型中，请稍候', { duration: 2000 });
+      return;
+    }
+
+    if (newModelName === activeOllamaModel) {
+      setShowModelSelect(false);
+      return;
+    }
+
+    setSwitchingModel(true);
+    setShowModelSelect(false);
+
+    try {
+      if (activeOllamaModel) {
+        toast.info(`正在关闭 ${activeOllamaModel}...`, { duration: 2000 });
+        await fetch('http://localhost:11434/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: activeOllamaModel,
+            keep_alive: 0
+          })
+        });
+      }
+
+      setActiveOllamaModel(newModelName);
+      setActiveModel(null);
+      toast.info(`正在启动 ${newModelName}...`, { duration: 2000 });
+
+      const response = await fetch('http://localhost:11434/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: newModelName,
+          prompt: '',
+          keep_alive: '10m'
+        })
+      });
+
+      if (response.ok) {
+        setTimeout(() => {
+          toast.success(`已切换到 ${newModelName}`, { duration: 2000 });
+        }, 2000);
+      } else {
+        toast.error(`启动 ${newModelName} 失败`, { duration: 3000 });
+      }
+    } catch (error) {
+      toast.error('模型切换失败', { duration: 3000 });
+    } finally {
+      setTimeout(() => {
+        setSwitchingModel(false);
+      }, 3000);
+    }
+  };
+
   const handleSend = async () => {
     if (!inputValue.trim() || isStreaming) return;
 
     let convId = activeConversationId;
+    const currentModelName = activeOllamaModel || activeModel?.name || 'AI';
+    const userInput = inputValue.trim();
 
     // Create new conversation if none active
     if (!convId) {
       const newConv = {
         id: generateId(),
-        title: inputValue.slice(0, 30) + (inputValue.length > 30 ? '...' : ''),
+        title: userInput.slice(0, 30) + (userInput.length > 30 ? '...' : ''),
         messages: [],
         modelId: activeModelId || models[0]?.id || '',
         createdAt: Date.now(),
@@ -356,7 +475,7 @@ export function ChatPage() {
     const userMsg: ChatMessage = {
       id: generateId(),
       role: 'user',
-      content: inputValue.trim(),
+      content: userInput,
       timestamp: Date.now(),
     };
     addMessage(convId, userMsg);
@@ -371,33 +490,178 @@ export function ChatPage() {
     addLog({
       id: generateId(),
       level: 'info',
-      message: `发送消息到 ${activeModel?.name || '未知模型'}`,
+      message: `发送消息到 ${currentModelName}`,
       timestamp: Date.now(),
       module: 'Chat',
     });
 
-    // Simulate AI response
+    // Add AI message placeholder
     const aiMsgId = generateId();
     const aiMsg: ChatMessage = {
       id: aiMsgId,
       role: 'assistant',
       content: '',
       timestamp: Date.now(),
-      modelName: activeModel?.name || 'AI',
+      modelName: currentModelName,
       isStreaming: true,
     };
     addMessage(convId, aiMsg);
 
-    const responseText = aiResponses[Math.floor(Math.random() * aiResponses.length)];
-    await simulateStreaming(convId, aiMsgId, responseText);
+    // If Ollama model is selected, call Ollama API
+    if (activeOllamaModel && ollamaStatus?.isRunning) {
+      try {
+        const response = await fetch('http://localhost:11434/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: activeOllamaModel,
+            prompt: userInput,
+            stream: true,
+          }),
+        });
 
-    addLog({
-      id: generateId(),
-      level: 'info',
-      message: `收到 ${activeModel?.name || 'AI'} 响应 (${responseText.length} 字符)`,
-      timestamp: Date.now(),
-      module: 'Chat',
-    });
+        if (response.ok) {
+          setIsStreaming(true);
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+          let fullResponse = '';
+          let thinkingContent = '';
+          let isInThinking = false;
+
+          if (reader) {
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+
+              const chunk = decoder.decode(value, { stream: true });
+              const lines = chunk.split('\n').filter(line => line.trim());
+
+              for (const line of lines) {
+                try {
+                  const data = JSON.parse(line);
+                  if (data.response) {
+                    const token = data.response;
+                    
+                    // 检测 <think&gt; 标签
+                    if (token.includes('<think&gt;')) {
+                      isInThinking = true;
+                    }
+                    if (token.includes('</think&gt;')) {
+                      isInThinking = false;
+                    }
+
+                    fullResponse += token;
+
+                    // 解析思考内容和回答内容
+                    let displayContent = fullResponse;
+                    let currentThinking = '';
+
+                    const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)(<\/think&gt;|$)/);
+                    if (thinkMatch) {
+                      currentThinking = thinkMatch[1];
+                      if (fullResponse.includes('</think&gt;')) {
+                        displayContent = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
+                      } else {
+                        displayContent = '';
+                      }
+                    }
+
+                    // 实时更新消息
+                    updateMessage(convId, aiMsgId, {
+                      content: displayContent,
+                      thinking: currentThinking,
+                      isStreaming: true,
+                    });
+                  }
+                } catch (e) {
+                  // 忽略解析错误
+                }
+              }
+            }
+          }
+
+          // 最终处理：清理标签
+          let finalResponse = fullResponse;
+          let finalThinking = '';
+          
+          const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)<\/think&gt;/);
+          if (thinkMatch) {
+            finalThinking = thinkMatch[1].trim();
+            finalResponse = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
+          }
+
+          updateMessage(convId, aiMsgId, {
+            content: finalResponse,
+            thinking: finalThinking,
+            isStreaming: false,
+          });
+
+          setIsStreaming(false);
+          
+          toast.success(`${activeOllamaModel} 回复完成`, { duration: 2000 });
+          
+          // 发送桌面通知
+          const preview = finalResponse.slice(0, 100) + (finalResponse.length > 100 ? '...' : '');
+          notificationService.showChatComplete(activeOllamaModel, preview);
+          
+          addLog({
+            id: generateId(),
+            level: 'info',
+            message: `收到 ${activeOllamaModel} 响应 (${finalResponse.length} 字符)${finalThinking ? `, 思考内容 ${finalThinking.length} 字符` : ''}`,
+            timestamp: Date.now(),
+            module: 'Chat',
+          });
+        } else {
+          updateMessage(convId, aiMsgId, { 
+            content: '抱歉，Ollama 响应失败，请检查服务状态。',
+            isStreaming: false 
+          });
+          setIsStreaming(false);
+          toast.error('Ollama 响应失败', { duration: 3000 });
+          notificationService.showChatError(activeOllamaModel, `HTTP ${response.status}`);
+          addLog({
+            id: generateId(),
+            level: 'error',
+            message: `Ollama 响应失败: HTTP ${response.status}`,
+            timestamp: Date.now(),
+            module: 'Chat',
+          });
+        }
+      } catch (error) {
+        updateMessage(convId, aiMsgId, { 
+          content: '抱歉，无法连接到 Ollama 服务。',
+          isStreaming: false 
+        });
+        setIsStreaming(false);
+        toast.error('无法连接到 Ollama 服务', { duration: 3000 });
+        notificationService.showChatError(activeOllamaModel, '无法连接到服务');
+        addLog({
+          id: generateId(),
+          level: 'error',
+          message: `Ollama 连接失败: ${error}`,
+          timestamp: Date.now(),
+          module: 'Chat',
+        });
+      }
+    } else {
+      // Simulate AI response for remote models
+      const responseText = aiResponses[Math.floor(Math.random() * aiResponses.length)];
+      await simulateStreaming(convId, aiMsgId, responseText);
+
+      toast.success(`${activeModel?.name || 'AI'} 回复完成`, { duration: 2000 });
+
+      // 发送桌面通知
+      const preview = responseText.slice(0, 100) + (responseText.length > 100 ? '...' : '');
+      notificationService.showChatComplete(activeModel?.name || 'AI', preview);
+
+      addLog({
+        id: generateId(),
+        level: 'info',
+        message: `收到 ${activeModel?.name || 'AI'} 响应 (${responseText.length} 字符)`,
+        timestamp: Date.now(),
+        module: 'Chat',
+      });
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -486,7 +750,7 @@ export function ChatPage() {
             }}
           >
             <Sparkles size={14} style={{ color: 'var(--primary-color)' }} />
-            <span>{activeModel?.name || '选择模型'}</span>
+            <span>{activeOllamaModel || activeModel?.name || '选择模型'}</span>
             <ChevronDown size={14} style={{ color: 'var(--text-tertiary)' }} />
           </button>
 
@@ -497,48 +761,129 @@ export function ChatPage() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -8, scale: 0.96 }}
                 transition={{ duration: 0.15 }}
-                className="absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-xl"
+                className="absolute right-0 top-full z-50 mt-2 w-[480px] max-h-80 overflow-hidden rounded-xl"
                 style={{
                   backgroundColor: 'var(--bg-primary)',
                   border: '1px solid var(--border-color)',
                   boxShadow: 'var(--shadow-lg)',
                 }}
               >
-                <div className="p-1.5">
-                  {models.filter(m => m.isActive).map((model) => (
-                    <button
-                      key={model.id}
-                      onClick={() => {
-                        setActiveModel(model.id);
-                        setShowModelSelect(false);
-                      }}
-                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
-                      style={{
-                        backgroundColor: model.id === activeModelId ? 'var(--primary-light)' : 'transparent',
-                      }}
-                    >
-                      <div
-                        className="flex h-8 w-8 items-center justify-center rounded-lg text-xs font-bold"
-                        style={{
-                          backgroundColor: 'var(--primary-light)',
-                          color: 'var(--primary-color)',
-                        }}
-                      >
-                        {model.name.charAt(0)}
+                <div className="grid grid-cols-2 divide-x" style={{ borderColor: 'var(--border-color)' }}>
+                  {/* 左侧：Ollama 本地模型 */}
+                  <div className="flex flex-col">
+                    <div className="px-3 py-2 text-xs font-medium shrink-0" style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-primary)' }}>
+                      <div className="flex items-center gap-1.5">
+                        <HardDrive size={12} />
+                        Ollama 本地模型
                       </div>
-                      <div>
-                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                          {model.name}
+                    </div>
+                    <div className="overflow-y-auto max-h-64 flex-1">
+                      {ollamaStatus?.isRunning && ollamaModels.length > 0 ? (
+                        ollamaModels.map((model: any) => (
+                          <button
+                            key={`ollama-${model.name}`}
+                            onClick={() => handleSwitchOllamaModel(model.name)}
+                            disabled={switchingModel}
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors disabled:opacity-50"
+                            style={{
+                              backgroundColor: model.name === activeOllamaModel ? 'var(--primary-light)' : 'transparent',
+                            }}
+                          >
+                            <div
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold shrink-0"
+                              style={{
+                                backgroundColor: 'rgba(0,180,42,0.1)',
+                                color: 'var(--success-color)',
+                              }}
+                            >
+                              {model.name.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                                {model.name}
+                              </div>
+                              <div className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>
+                                {model.details?.parameter_size || '未知大小'}
+                              </div>
+                            </div>
+                            {model.name === activeOllamaModel && (
+                              <Check size={14} className="shrink-0" style={{ color: 'var(--primary-color)' }} />
+                            )}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                          <HardDrive size={24} className="mb-2 opacity-30" style={{ color: 'var(--text-tertiary)' }} />
+                          <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                            {ollamaStatus?.isRunning ? '暂无本地模型' : 'Ollama 未连接'}
+                          </div>
+                          <div className="text-xs mt-1" style={{ color: 'var(--text-tertiary)', opacity: 0.6 }}>
+                            请在模型管理中启动 Ollama
+                          </div>
                         </div>
-                        <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                          {model.provider} · {model.type === 'remote' ? '远程' : '本地'}
-                        </div>
-                      </div>
-                      {model.id === activeModelId && (
-                        <Check size={16} className="ml-auto" style={{ color: 'var(--primary-color)' }} />
                       )}
-                    </button>
-                  ))}
+                    </div>
+                  </div>
+
+                  {/* 右侧：远程模型 */}
+                  <div className="flex flex-col">
+                    <div className="px-3 py-2 text-xs font-medium shrink-0" style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-primary)' }}>
+                      <div className="flex items-center gap-1.5">
+                        <Globe size={12} />
+                        远程模型
+                      </div>
+                    </div>
+                    <div className="overflow-y-auto max-h-64 flex-1">
+                      {models.filter(m => m.isActive).length > 0 ? (
+                        models.filter(m => m.isActive).map((model) => (
+                          <button
+                            key={model.id}
+                            onClick={() => {
+                              setActiveModel(model.id);
+                              setActiveOllamaModel(null);
+                              setShowModelSelect(false);
+                              toast.success(`已切换到 ${model.name}`, { duration: 2000 });
+                            }}
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors"
+                            style={{
+                              backgroundColor: model.id === activeModelId && !activeOllamaModel ? 'var(--primary-light)' : 'transparent',
+                            }}
+                          >
+                            <div
+                              className="flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold shrink-0"
+                              style={{
+                                backgroundColor: 'var(--primary-light)',
+                                color: 'var(--primary-color)',
+                              }}
+                            >
+                              {model.name.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                                {model.name}
+                              </div>
+                              <div className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>
+                                {model.provider}
+                              </div>
+                            </div>
+                            {model.id === activeModelId && !activeOllamaModel && (
+                              <Check size={14} className="shrink-0" style={{ color: 'var(--primary-color)' }} />
+                            )}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                          <Globe size={24} className="mb-2 opacity-30" style={{ color: 'var(--text-tertiary)' }} />
+                          <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                            暂无远程模型
+                          </div>
+                          <div className="text-xs mt-1" style={{ color: 'var(--text-tertiary)', opacity: 0.6 }}>
+                            请在模型管理中添加
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </motion.div>
             )}

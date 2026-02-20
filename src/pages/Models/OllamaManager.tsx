@@ -23,6 +23,8 @@ export function OllamaManager() {
   const [config, setConfig] = useState({ host: 'localhost', port: 11434 });
 
   useEffect(() => {
+    if (!window.electronAPI?.ollama) return;
+    
     checkOllamaStatus();
     
     const cleanup = window.electronAPI.ollama.onStatus((status) => {
@@ -40,6 +42,7 @@ export function OllamaManager() {
   }, []);
 
   const checkOllamaStatus = async () => {
+    if (!window.electronAPI?.ollama) return;
     try {
       const status = await window.electronAPI.ollama.checkStatus();
       setOllamaStatus(status);
@@ -53,6 +56,7 @@ export function OllamaManager() {
   };
 
   const loadOllamaModels = async () => {
+    if (!window.electronAPI?.ollama) return;
     try {
       const models = await window.electronAPI.ollama.getModels();
       setOllamaModels(models);
@@ -63,6 +67,7 @@ export function OllamaManager() {
   };
 
   const handleStart = async () => {
+    if (!window.electronAPI?.ollama) return;
     try {
       await window.electronAPI.ollama.start();
       addOllamaLog({ type: 'info', message: '正在启动 Ollama 服务...' });
@@ -73,6 +78,7 @@ export function OllamaManager() {
   };
 
   const handleStop = async () => {
+    if (!window.electronAPI?.ollama) return;
     try {
       await window.electronAPI.ollama.stop();
       addOllamaLog({ type: 'info', message: '正在停止 Ollama 服务...' });
@@ -83,6 +89,7 @@ export function OllamaManager() {
   };
 
   const handleRestart = async () => {
+    if (!window.electronAPI?.ollama) return;
     try {
       await window.electronAPI.ollama.restart();
       addOllamaLog({ type: 'info', message: '正在重启 Ollama 服务...' });
@@ -93,6 +100,7 @@ export function OllamaManager() {
   };
 
   const handlePullModel = async (modelName: string) => {
+    if (!window.electronAPI?.ollama) return;
     setPullingModel(modelName);
     setPullProgress(null);
 
@@ -115,7 +123,7 @@ export function OllamaManager() {
   };
 
   const handleDeleteModel = async (modelName: string) => {
-    if (!confirm(`确定要删除模型 ${modelName} 吗？`)) return;
+    if (!confirm(`确定要删除模型 ${modelName} 吗？`) || !window.electronAPI?.ollama) return;
 
     try {
       await window.electronAPI.ollama.deleteModel(modelName);
@@ -146,7 +154,6 @@ export function OllamaManager() {
 
   return (
     <div className="flex h-full flex-col" style={{ backgroundColor: 'var(--bg-primary)' }}>
-      {/* Header */}
       <header
         className="flex items-center justify-between border-b px-6"
         style={{ height: 56, borderColor: 'var(--border-color)' }}
@@ -183,7 +190,6 @@ export function OllamaManager() {
         </div>
       </header>
 
-      {/* Config Panel */}
       <AnimatePresence>
         {showConfig && (
           <motion.div
@@ -229,7 +235,9 @@ export function OllamaManager() {
             </div>
             <button
               onClick={() => {
-                window.electronAPI.ollama.updateConfig(config);
+                if (window.electronAPI?.ollama) {
+                  window.electronAPI.ollama.updateConfig(config);
+                }
                 setShowConfig(false);
               }}
               className="mt-4 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
@@ -241,7 +249,6 @@ export function OllamaManager() {
         )}
       </AnimatePresence>
 
-      {/* Status Card */}
       <div className="mx-6 mt-6 rounded-xl p-6" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -296,7 +303,6 @@ export function OllamaManager() {
         </div>
       </div>
 
-      {/* Models List */}
       <div className="mx-6 mt-6 flex-1 overflow-hidden rounded-xl" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
         <div className="flex items-center justify-between border-b px-6 py-3" style={{ borderColor: 'var(--border-color)' }}>
           <div className="flex items-center gap-2">
@@ -388,7 +394,6 @@ export function OllamaManager() {
         </div>
       </div>
 
-      {/* Pull Model Panel */}
       <div className="mx-6 mt-6 rounded-xl p-6" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
         <h3 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
           拉取新模型
@@ -466,7 +471,6 @@ export function OllamaManager() {
         )}
       </div>
 
-      {/* Logs Panel */}
       <div className="mx-6 mt-6 rounded-xl p-6" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>

@@ -106,13 +106,13 @@ export function App() {
           <PageContent />
         </main>
         <LogsPanel />
-      <OllamaModal />
-      <AnimatePresence>
-        {webShortcutPopupOpen && (
-          <WebShortcutPopup onClose={() => setWebShortcutPopupOpen(false)} />
-        )}
-      </AnimatePresence>
-      <DataManager isOpen={dataManagerOpen} onClose={() => setDataManagerOpen(false)} />
+        <OllamaModal />
+        <AnimatePresence>
+          {webShortcutPopupOpen && (
+            <WebShortcutPopup onClose={() => setWebShortcutPopupOpen(false)} />
+          )}
+        </AnimatePresence>
+        <DataManager isOpen={dataManagerOpen} onClose={() => setDataManagerOpen(false)} />
         
         {/* 路径未配置提示弹窗 */}
         <AnimatePresence>

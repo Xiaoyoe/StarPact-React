@@ -1,12 +1,15 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Plus, Search, Star, Trash2, TestTube, Download, Upload,
   Settings2, Check, X, AlertCircle, Zap, Globe, HardDrive,
-  ChevronRight, BarChart3, Clock, Activity, Eye, EyeOff
+  ChevronRight, BarChart3, Clock, Activity, Eye, EyeOff,
+  Play, Square, RefreshCw, StopCircle, ChevronUp, ChevronDown,
+  Terminal
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import type { ModelConfig } from '@/store';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '@/components/Toast';
 
 function ModelForm({
   model,
@@ -58,7 +61,6 @@ function ModelForm({
       exit={{ opacity: 0, x: 20 }}
       className="flex h-full flex-col"
     >
-      {/* Tab Navigation */}
       <div className="flex gap-1 border-b px-6 pt-4" style={{ borderColor: 'var(--border-color)' }}>
         {tabs.map((tab) => (
           <button
@@ -82,7 +84,6 @@ function ModelForm({
         ))}
       </div>
 
-      {/* Form Content */}
       <div className="flex-1 overflow-y-auto p-6">
         {activeTab === 'basic' && (
           <div className="space-y-4">
@@ -269,7 +270,6 @@ function ModelForm({
               </div>
             </div>
 
-            {/* Quick Presets */}
             <div>
               <label className="mb-2 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
                 快捷预设
@@ -359,7 +359,6 @@ function ModelForm({
         )}
       </div>
 
-      {/* Actions */}
       <div className="flex items-center justify-end gap-3 border-t px-6 py-4"
         style={{ borderColor: 'var(--border-color)' }}
       >
@@ -392,11 +391,819 @@ function ModelForm({
   );
 }
 
+function OllamaPanel() {
+  const {
+    ollamaStatus,
+    setOllamaStatus,
+    ollamaModels,
+    setOllamaModels,
+    ollamaLogs,
+    addOllamaLog,
+    activeOllamaModel,
+    setActiveOllamaModel,
+  } = useStore();
+
+  const toast = useToast();
+
+  const [showConfig, setShowConfig] = useState(false);
+  const [config, setConfig] = useState({ host: 'localhost', port: 11434 });
+  const [isChecking, setIsChecking] = useState(false);
+  const [startingModel, setStartingModel] = useState<string | null>(null);
+  const [runningModels, setRunningModels] = useState<Array<{
+    name: string;
+    model: string;
+    size: number;
+    digest: string;
+    details: { format: string; family: string; parameter_size: string; quantization_level: string };
+    expiresAt?: string;
+    sizeVram?: number;
+  }>>([]);
+
+  useEffect(() => {
+    if (window.electronAPI?.ollama) {
+      const cleanup = window.electronAPI.ollama.onStatus((status) => {
+        setOllamaStatus(status);
+      });
+      
+      const logCleanup = window.electronAPI.ollama.onLog((log) => {
+        addOllamaLog(log);
+      });
+
+      return () => {
+        cleanup();
+        logCleanup();
+      };
+    }
+  }, []);
+
+  useEffect(() => {
+    const initOllamaCheck = async () => {
+      try {
+        let isRunning = false;
+        
+        if (window.electronAPI?.ollama) {
+          const status = await window.electronAPI.ollama.checkStatus();
+          setOllamaStatus(status);
+          isRunning = status.isRunning;
+        } else {
+          const status = await checkOllamaStatusNetwork();
+          setOllamaStatus(status);
+          isRunning = status.isRunning;
+        }
+
+        if (isRunning) {
+          addOllamaLog({ type: 'info', message: 'Ollama 服务运行中' });
+          await loadOllamaModelsNetwork();
+          await loadRunningModels();
+        } else {
+          addOllamaLog({ type: 'warning', message: '未检测到 Ollama 服务' });
+        }
+      } catch (error) {
+        addOllamaLog({ type: 'error', message: '初始化检测失败' });
+      }
+    };
+
+    initOllamaCheck();
+  }, []);
+
+  const checkOllamaStatusNetwork = async () => {
+    return new Promise((resolve) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+      fetch(`http://${config.host}:${config.port}/api/tags`, {
+        method: 'GET',
+        signal: controller.signal,
+      })
+        .then((response) => {
+          clearTimeout(timeoutId);
+          if (response.ok) {
+            resolve({ isRunning: true, port: config.port, version: response.headers.get('ollama-version') || 'unknown' });
+          } else {
+            resolve({ isRunning: false, port: config.port, error: `HTTP ${response.status}` });
+          }
+        })
+        .catch((error) => {
+          clearTimeout(timeoutId);
+          resolve({ isRunning: false, port: config.port, error: error.message });
+        });
+    });
+  };
+
+  const loadOllamaModelsNetwork = async () => {
+    try {
+      const response = await fetch(`http://${config.host}:${config.port}/api/tags`);
+      if (response.ok) {
+        const data = await response.json();
+        const models = data.models || [];
+        setOllamaModels(models);
+        addOllamaLog({ type: 'info', message: `加载了 ${models.length} 个 Ollama 模型` });
+      } else {
+        addOllamaLog({ type: 'error', message: '加载模型列表失败' });
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: '加载模型列表失败' });
+    }
+  };
+
+  const checkOllamaStatus = async () => {
+    setIsChecking(true);
+    try {
+      if (window.electronAPI?.ollama) {
+        const status = await window.electronAPI.ollama.checkStatus();
+        setOllamaStatus(status);
+        
+        if (status.isRunning) {
+          addOllamaLog({ type: 'info', message: 'Ollama 服务运行中' });
+          loadOllamaModels();
+          loadRunningModels();
+        } else {
+          addOllamaLog({ type: 'warning', message: '未检测到 Ollama 服务，请先启动 Ollama' });
+        }
+      } else {
+        addOllamaLog({ type: 'info', message: '使用网络检测 Ollama 服务状态' });
+        const status = await checkOllamaStatusNetwork();
+        setOllamaStatus(status);
+        
+        if (status.isRunning) {
+          addOllamaLog({ type: 'info', message: 'Ollama 服务运行中' });
+          loadOllamaModelsNetwork();
+          loadRunningModels();
+        } else {
+          addOllamaLog({ type: 'warning', message: '未检测到 Ollama 服务，请先启动 Ollama' });
+        }
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: '检查 Ollama 状态失败' });
+      setOllamaStatus({ isRunning: false, port: config.port, error: error instanceof Error ? error.message : '未知错误' });
+    } finally {
+      setIsChecking(false);
+    }
+  };
+
+  const loadOllamaModels = async () => {
+    if (window.electronAPI?.ollama) {
+      try {
+        const models = await window.electronAPI.ollama.getModels();
+        setOllamaModels(models);
+        addOllamaLog({ type: 'info', message: `加载了 ${models.length} 个 Ollama 模型` });
+      } catch (error) {
+        addOllamaLog({ type: 'error', message: '加载 Ollama 模型失败' });
+      }
+    } else {
+      await loadOllamaModelsNetwork();
+    }
+  };
+
+  const handleStart = async () => {
+    if (window.electronAPI?.ollama) {
+      try {
+        toast.info('正在启动 Ollama 服务...', { duration: 2000 });
+        addOllamaLog({ type: 'info', message: '正在启动 Ollama 服务...' });
+        await window.electronAPI.ollama.start();
+        setTimeout(() => {
+          checkOllamaStatus();
+          toast.success('Ollama 服务已启动', { duration: 2000 });
+        }, 3000);
+      } catch (error) {
+        addOllamaLog({ type: 'error', message: '启动 Ollama 服务失败' });
+        toast.error('启动 Ollama 服务失败', { duration: 3000 });
+      }
+    } else {
+      addOllamaLog({ type: 'warning', message: '请在终端运行 ollama serve 启动服务' });
+      toast.warning('请在终端运行 ollama serve 启动服务', { duration: 3000 });
+    }
+  };
+
+  const handleStop = async () => {
+    if (window.electronAPI?.ollama) {
+      try {
+        toast.info('正在停止 Ollama 服务...', { duration: 2000 });
+        addOllamaLog({ type: 'info', message: '正在停止 Ollama 服务...' });
+        await window.electronAPI.ollama.stop();
+        setTimeout(() => {
+          checkOllamaStatus();
+          toast.success('Ollama 服务已停止', { duration: 2000 });
+        }, 2000);
+      } catch (error) {
+        addOllamaLog({ type: 'error', message: '停止 Ollama 服务失败' });
+        toast.error('停止 Ollama 服务失败', { duration: 3000 });
+      }
+    } else {
+      addOllamaLog({ type: 'warning', message: '请在终端手动停止 Ollama 服务' });
+      toast.warning('请在终端手动停止 Ollama 服务', { duration: 3000 });
+    }
+  };
+
+  const handleRestart = async () => {
+    if (window.electronAPI?.ollama) {
+      try {
+        toast.info('正在重启 Ollama 服务...', { duration: 2000 });
+        addOllamaLog({ type: 'info', message: '正在重启 Ollama 服务...' });
+        await window.electronAPI.ollama.restart();
+        setTimeout(() => {
+          checkOllamaStatus();
+          toast.success('Ollama 服务已重启', { duration: 2000 });
+        }, 5000);
+      } catch (error) {
+        addOllamaLog({ type: 'error', message: '重启 Ollama 服务失败' });
+        toast.error('重启 Ollama 服务失败', { duration: 3000 });
+      }
+    } else {
+      addOllamaLog({ type: 'warning', message: '请在终端手动重启 Ollama 服务' });
+      toast.warning('请在终端手动重启 Ollama 服务', { duration: 3000 });
+    }
+  };
+
+  const handleDeleteModel = async (modelName: string) => {
+    if (!confirm(`确定要删除模型 ${modelName} 吗？`)) return;
+
+    if (!window.electronAPI?.ollama) {
+      addOllamaLog({ type: 'error', message: 'Electron API 不可用，无法删除模型' });
+      return;
+    }
+
+    try {
+      await window.electronAPI.ollama.deleteModel(modelName);
+      addOllamaLog({ type: 'info', message: `模型 ${modelName} 已删除` });
+      await loadOllamaModels();
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `删除模型 ${modelName} 失败` });
+    }
+  };
+
+  const loadRunningModels = async (showToast = false) => {
+    if (showToast) {
+      toast.info('正在刷新运行中的模型...', { duration: 1500 });
+    }
+    try {
+      const response = await fetch(`http://${config.host}:${config.port}/api/ps`);
+      if (response.ok) {
+        const data = await response.json();
+        const models = data.models || [];
+        setRunningModels(models);
+        if (models.length > 0) {
+          addOllamaLog({ type: 'info', message: `当前有 ${models.length} 个模型正在运行` });
+        }
+        if (showToast) {
+          toast.success(`已刷新，当前 ${models.length} 个模型运行中`, { duration: 2000 });
+        }
+      } else {
+        addOllamaLog({ type: 'error', message: '查询运行模型失败' });
+        if (showToast) {
+          toast.error('查询运行模型失败', { duration: 2000 });
+        }
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: '查询运行模型失败' });
+      if (showToast) {
+        toast.error('查询运行模型失败', { duration: 2000 });
+      }
+    }
+  };
+
+  const handleStopRunningModel = async (modelName: string) => {
+    toast.info(`正在卸载模型 ${modelName}...`, { duration: 2000 });
+    try {
+      const response = await fetch(`http://${config.host}:${config.port}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: modelName,
+          keep_alive: 0
+        })
+      });
+      
+      if (response.ok) {
+        addOllamaLog({ type: 'info', message: `正在停止模型 ${modelName}...` });
+        setTimeout(async () => {
+          await loadRunningModels();
+          addOllamaLog({ type: 'info', message: `模型 ${modelName} 已停止` });
+          toast.success(`模型 ${modelName} 已卸载完成`, { duration: 3000 });
+        }, 3000);
+      } else {
+        addOllamaLog({ type: 'error', message: `停止模型 ${modelName} 失败` });
+        toast.error(`卸载模型 ${modelName} 失败`, { duration: 3000 });
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `停止模型 ${modelName} 失败` });
+      toast.error(`卸载模型 ${modelName} 失败`, { duration: 3000 });
+    }
+  };
+
+  const handleStartModel = async (modelName: string) => {
+    if (startingModel) {
+      addOllamaLog({ type: 'warning', message: '已有模型正在启动中，请稍候' });
+      toast.info('已有模型正在加载中，请稍候', { duration: 2000 });
+      return;
+    }
+    
+    setStartingModel(modelName);
+    addOllamaLog({ type: 'info', message: `正在启动模型 ${modelName}...` });
+    toast.info(`正在加载模型 ${modelName}...`, { duration: 2000 });
+    
+    try {
+      const response = await fetch(`http://${config.host}:${config.port}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: modelName,
+          prompt: '',
+          keep_alive: '10m'
+        })
+      });
+      
+      if (response.ok) {
+        addOllamaLog({ type: 'info', message: `模型 ${modelName} 已启动，等待加载完成...` });
+        setTimeout(async () => {
+          await loadRunningModels();
+          addOllamaLog({ type: 'info', message: `模型 ${modelName} 加载完成` });
+          toast.success(`模型 ${modelName} 加载完成`, { duration: 3000 });
+        }, 3000);
+      } else {
+        addOllamaLog({ type: 'error', message: `启动模型 ${modelName} 失败` });
+        toast.error(`加载模型 ${modelName} 失败`, { duration: 3000 });
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `启动模型 ${modelName} 失败` });
+      toast.error(`加载模型 ${modelName} 失败`, { duration: 3000 });
+    } finally {
+      setStartingModel(null);
+    }
+  };
+
+  const handleSelectAndSwitchModel = async (modelName: string) => {
+    if (startingModel) {
+      toast.info('已有模型正在加载中，请稍候', { duration: 2000 });
+      return;
+    }
+
+    if (modelName === activeOllamaModel) {
+      toast.info(`${modelName} 已是当前选中模型`, { duration: 2000 });
+      return;
+    }
+
+    setStartingModel(modelName);
+
+    try {
+      if (activeOllamaModel) {
+        const isRunning = runningModels.some(m => m.name === activeOllamaModel || m.model === activeOllamaModel);
+        if (isRunning) {
+          toast.info(`正在关闭 ${activeOllamaModel}...`, { duration: 2000 });
+          await fetch(`http://${config.host}:${config.port}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: activeOllamaModel,
+              keep_alive: 0
+            })
+          });
+        }
+      }
+
+      setActiveOllamaModel(modelName);
+      toast.info(`正在启动 ${modelName}...`, { duration: 2000 });
+
+      const response = await fetch(`http://${config.host}:${config.port}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: modelName,
+          prompt: '',
+          keep_alive: '10m'
+        })
+      });
+
+      if (response.ok) {
+        addOllamaLog({ type: 'info', message: `模型 ${modelName} 已启动` });
+        setTimeout(async () => {
+          await loadRunningModels();
+          toast.success(`已切换到 ${modelName}`, { duration: 2000 });
+        }, 3000);
+      } else {
+        addOllamaLog({ type: 'error', message: `启动模型 ${modelName} 失败` });
+        toast.error(`启动 ${modelName} 失败`, { duration: 3000 });
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `切换模型失败` });
+      toast.error('模型切换失败', { duration: 3000 });
+    } finally {
+      setTimeout(() => {
+        setStartingModel(null);
+      }, 3000);
+    }
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} GB`;
+  };
+
+  return (
+    <div className="flex h-full flex-col p-6">
+      <div className="flex items-center justify-between mb-4 shrink-0">
+        <div className="flex items-center gap-3">
+          <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+            Ollama 本地服务
+          </h2>
+          <span
+            className="rounded-full px-2 py-0.5 text-xs"
+            style={{
+              backgroundColor: ollamaStatus?.isRunning ? 'var(--toast-success-bg)' : 'var(--toast-error-bg)',
+              color: ollamaStatus?.isRunning ? 'var(--toast-success-text)' : 'var(--toast-error-text)',
+            }}
+          >
+            {ollamaStatus?.isRunning ? '运行中' : '未运行'}
+          </span>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={checkOllamaStatus}
+            disabled={isChecking}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors disabled:opacity-50"
+            style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
+          >
+            <RefreshCw size={14} className={isChecking ? 'animate-spin' : ''} /> {isChecking ? '检测中...' : '刷新状态'}
+          </button>
+          <button
+            onClick={() => setShowConfig(!showConfig)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm transition-colors"
+            style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
+          >
+            <Settings2 size={14} /> 配置
+          </button>
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {showConfig && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="mb-4 rounded-xl p-4 shrink-0"
+            style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                  主机地址
+                </label>
+                <input
+                  type="text"
+                  value={config.host}
+                  onChange={(e) => setConfig({ ...config, host: e.target.value })}
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors"
+                  style={{
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                  端口
+                </label>
+                <input
+                  type="number"
+                  value={config.port}
+                  onChange={(e) => setConfig({ ...config, port: parseInt(e.target.value) })}
+                  className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors"
+                  style={{
+                    backgroundColor: 'var(--bg-primary)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                if (window.electronAPI?.ollama) {
+                  window.electronAPI.ollama.updateConfig(config);
+                }
+                setShowConfig(false);
+              }}
+              className="mt-4 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+              style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+            >
+              保存配置
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div className="mb-4 rounded-xl p-4 shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+        {!ollamaStatus?.isRunning ? (
+          <div className="flex items-center gap-3">
+            <AlertCircle size={24} style={{ color: 'var(--warning-color)' }} />
+            <div className="flex-1">
+              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                未检测到 Ollama 服务
+              </p>
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                请在终端中运行 <code className="rounded px-1.5 py-0.5" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>ollama serve</code> 启动服务，然后点击右上角刷新按钮
+              </p>
+            </div>
+            {window.electronAPI?.ollama && (
+              <button
+                onClick={handleStart}
+                className="group flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
+                style={{ 
+                  backgroundColor: 'rgba(0,180,42,0.1)', 
+                  color: 'var(--success-color)',
+                  border: '1px solid rgba(0,180,42,0.2)'
+                }}
+              >
+                <Play size={14} className="transition-transform group-hover:scale-110" /> 
+                <span>启动服务</span>
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-xl"
+                style={{ backgroundColor: 'var(--toast-success-bg)' }}
+              >
+                <Activity size={20} style={{ color: 'var(--toast-success-text)' }} />
+              </div>
+              <div>
+                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                  Ollama 服务运行中
+                </div>
+                <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  服务地址: {config.host}:{ollamaStatus.port}
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleStop}
+                className="group flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
+                style={{ 
+                  backgroundColor: 'rgba(245,63,63,0.1)', 
+                  color: 'var(--error-color)',
+                  border: '1px solid rgba(245,63,63,0.2)'
+                }}
+              >
+                <Square size={14} className="transition-transform group-hover:scale-110" /> 
+                <span>停止服务</span>
+              </button>
+              <button
+                onClick={handleRestart}
+                className="group flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
+                style={{ 
+                  backgroundColor: 'var(--primary-light)', 
+                  color: 'var(--primary-color)',
+                  border: '1px solid var(--primary-color)'
+                }}
+              >
+                <RefreshCw size={14} className="transition-transform group-hover:rotate-180" /> 
+                <span>重启服务</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {ollamaStatus?.isRunning && (
+        <div className="mb-4 rounded-xl overflow-hidden shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+          <div className="flex items-center justify-between border-b px-4 py-2.5" style={{ borderColor: 'var(--border-color)' }}>
+            <div className="flex items-center gap-2">
+              <Activity size={14} style={{ color: 'var(--success-color)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                运行中的模型 ({runningModels.length})
+              </span>
+            </div>
+            <button
+              onClick={() => loadRunningModels(true)}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors"
+              style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+            >
+              <RefreshCw size={12} /> 刷新
+            </button>
+          </div>
+
+          <div className="max-h-28 overflow-y-auto p-3">
+            {runningModels.length === 0 ? (
+              <div className="flex h-10 flex-col items-center justify-center text-center">
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  当前没有运行中的模型
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {runningModels.map((model) => (
+                  <motion.div
+                    key={model.name}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="rounded-lg p-2.5"
+                    style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--success-color)' }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                            {model.name}
+                          </span>
+                          <span
+                            className="rounded px-1.5 py-0.5 text-xs shrink-0"
+                            style={{ backgroundColor: 'rgba(0,180,42,0.1)', color: 'var(--success-color)' }}
+                          >
+                            运行中
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                          {model.details?.parameter_size && (
+                            <span className="flex items-center gap-1">
+                              <Zap size={10} /> {model.details.parameter_size}
+                            </span>
+                          )}
+                          {model.size > 0 && (
+                            <span className="flex items-center gap-1">
+                              <HardDrive size={10} /> {formatSize(model.size)}
+                            </span>
+                          )}
+                          {model.sizeVram !== undefined && model.sizeVram > 0 && (
+                            <span className="flex items-center gap-1">
+                              VRAM: {formatSize(model.sizeVram)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handleStopRunningModel(model.name)}
+                        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all active:scale-95"
+                        style={{ backgroundColor: 'var(--btn-danger-bg)', color: 'var(--btn-danger-text)' }}
+                        title="停止运行"
+                      >
+                        <StopCircle size={12} /> 停止
+                      </button>
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="mb-4 rounded-xl flex-1 min-h-0 flex flex-col" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+        <div className="flex items-center justify-between border-b px-4 py-2.5 shrink-0" style={{ borderColor: 'var(--border-color)' }}>
+          <div className="flex items-center gap-2">
+            <HardDrive size={14} style={{ color: 'var(--text-tertiary)' }} />
+            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+              本地模型 ({ollamaModels.length})
+            </span>
+          </div>
+          <button
+            onClick={loadOllamaModels}
+            disabled={!ollamaStatus?.isRunning}
+            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors disabled:opacity-50"
+            style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+          >
+            <RefreshCw size={12} /> 刷新
+          </button>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto p-3">
+          {ollamaModels.length === 0 ? (
+            <div className="flex h-24 flex-col items-center justify-center text-center">
+              <AlertCircle size={32} style={{ color: 'var(--text-tertiary)' }} className="mb-2 opacity-30" />
+              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                {ollamaStatus?.isRunning ? '暂无模型' : '请先启动 Ollama 服务'}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2">
+              {ollamaModels.map((model) => {
+                const isRunning = runningModels.some(rm => rm.name === model.name || rm.model === model.name);
+                const isStarting = startingModel === model.name;
+                const isSelected = activeOllamaModel === model.name;
+                
+                return (
+                  <motion.div
+                    key={model.name}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="rounded-lg p-3"
+                    style={{ 
+                      backgroundColor: 'var(--bg-primary)', 
+                      border: isSelected ? '2px solid var(--primary-color)' : (isRunning ? '1px solid var(--success-color)' : '1px solid var(--border-color)')
+                    }}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                            {model.name}
+                          </span>
+                          {isSelected && (
+                            <span
+                              className="rounded px-1.5 py-0.5 text-xs shrink-0"
+                              style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                            >
+                              已选择
+                            </span>
+                          )}
+                          {isRunning && (
+                            <span
+                              className="rounded px-1.5 py-0.5 text-xs shrink-0"
+                              style={{ backgroundColor: 'rgba(0,180,42,0.1)', color: 'var(--success-color)' }}
+                            >
+                              运行中
+                            </span>
+                          )}
+                          <span
+                            className="rounded px-1.5 py-0.5 text-xs shrink-0"
+                            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
+                          >
+                            {model.details?.family || '未知'}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                          {model.details?.parameter_size && (
+                            <span className="flex items-center gap-1">
+                              <Zap size={10} /> {model.details.parameter_size}
+                            </span>
+                          )}
+                          {model.size > 0 && (
+                            <span className="flex items-center gap-1">
+                              <HardDrive size={10} /> {formatSize(model.size)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleSelectAndSwitchModel(model.name)}
+                          disabled={startingModel !== null}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors disabled:opacity-50"
+                          style={{ 
+                            color: isSelected ? 'var(--primary-color)' : 'var(--text-tertiary)', 
+                            backgroundColor: isSelected ? 'var(--primary-light)' : 'var(--bg-tertiary)' 
+                          }}
+                          title="选择并切换模型"
+                        >
+                          <Check size={14} />
+                        </button>
+                        {ollamaStatus?.isRunning && (
+                          isRunning ? (
+                            <button
+                              onClick={() => handleStopRunningModel(model.name)}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+                              style={{ color: 'var(--error-color)', backgroundColor: 'rgba(245,63,63,0.1)' }}
+                              title="停止运行"
+                            >
+                              <StopCircle size={14} />
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleStartModel(model.name)}
+                              disabled={isStarting || startingModel !== null}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors disabled:opacity-50"
+                              style={{ color: 'var(--success-color)', backgroundColor: 'rgba(0,180,42,0.1)' }}
+                              title={isStarting ? '启动中...' : '启动模型'}
+                            >
+                              <Play size={14} className={isStarting ? 'animate-pulse' : ''} />
+                            </button>
+                          )
+                        )}
+                        <button
+                          onClick={() => handleDeleteModel(model.name)}
+                          className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-opacity-80"
+                          style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-tertiary)' }}
+                          title="删除模型"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ModelsPage() {
   const {
     models, activeModelId,
     addModel, updateModel, deleteModel,
     addLog,
+    setOllamaModalOpen,
+    ollamaLogs,
+    addOllamaLog,
+    setOllamaLogs,
   } = useStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -405,6 +1212,8 @@ export function ModelsPage() {
   const [selectedModelId, setSelectedModelId] = useState<string | null>(activeModelId);
   const [testingId, setTestingId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; time: number } | null>(null);
+  const [activeMainTab, setActiveMainTab] = useState<'ollama' | 'remote'>('ollama');
+  const [showLogs, setShowLogs] = useState(true);
 
   const groups = Array.from(new Set(models.map(m => m.group)));
   const filteredModels = models.filter(m =>
@@ -426,7 +1235,6 @@ export function ModelsPage() {
       module: 'ModelManager',
     });
 
-    // Simulate test
     await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
     const success = Math.random() > 0.2;
     const time = 0.5 + Math.random() * 2;
@@ -499,120 +1307,11 @@ export function ModelsPage() {
 
   return (
     <div className="flex h-full" style={{ backgroundColor: 'var(--bg-primary)' }}>
-      {/* Left: Model List */}
-      <div className="flex w-80 flex-col border-r" style={{ borderColor: 'var(--border-color)' }}>
-        {/* Header */}
-        <header
-          className="flex items-center justify-between border-b px-4"
-          style={{ height: 56, borderColor: 'var(--border-color)' }}
-        >
-          <h1 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-            模型管理
-          </h1>
-          <div className="flex gap-1">
-            <button
-              onClick={() => setIsAdding(true)}
-              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
-              style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}
-              title="新增模型"
-            >
-              <Plus size={16} />
-            </button>
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
-              style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)' }}
-              title="导入配置"
-            >
-              <Download size={16} />
-            </button>
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
-              style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)' }}
-              title="导出配置"
-            >
-              <Upload size={16} />
-            </button>
-          </div>
-        </header>
-
-        {/* Search */}
-        <div className="p-3">
-          <div
-            className="flex items-center gap-2 rounded-lg px-3 py-2"
-            style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
-          >
-            <Search size={14} style={{ color: 'var(--text-tertiary)' }} />
-            <input
-              type="text"
-              placeholder="搜索模型..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-transparent text-sm outline-none"
-              style={{ color: 'var(--text-primary)' }}
-            />
-          </div>
-        </div>
-
-        {/* Model Groups */}
-        <div className="flex-1 overflow-y-auto px-3">
-          {groups.map(group => {
-            const groupModels = filteredModels.filter(m => m.group === group);
-            if (groupModels.length === 0) return null;
-            return (
-              <div key={group} className="mb-3">
-                <div className="mb-1 flex items-center gap-1 px-2 text-xs font-medium"
-                  style={{ color: 'var(--text-tertiary)' }}
-                >
-                  <span>{group}</span>
-                  <span>({groupModels.length})</span>
-                </div>
-                {groupModels.map(model => (
-                  <button
-                    key={model.id}
-                    onClick={() => setSelectedModelId(model.id)}
-                    className="mb-0.5 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
-                    style={{
-                      backgroundColor: selectedModelId === model.id ? 'var(--primary-light)' : 'transparent',
-                    }}
-                  >
-                    <div
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
-                      style={{
-                        backgroundColor: model.isActive ? 'var(--primary-light)' : 'var(--bg-tertiary)',
-                        color: model.isActive ? 'var(--primary-color)' : 'var(--text-tertiary)',
-                      }}
-                    >
-                      {model.name.charAt(0)}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1">
-                        {model.isFavorite && <Star size={10} style={{ color: 'var(--warning-color)' }} fill="var(--warning-color)" />}
-                        <span className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                          {model.name}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                        <span>{model.provider}</span>
-                        <span>·</span>
-                        <span className={model.isActive ? '' : 'opacity-50'}>
-                          {model.isActive ? '已启用' : '已禁用'}
-                        </span>
-                      </div>
-                    </div>
-                    <ChevronRight size={14} style={{ color: 'var(--text-tertiary)' }} />
-                  </button>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Right: Model Detail */}
       <div className="flex-1 overflow-y-auto">
-        {selectedModel ? (
+        {activeMainTab === 'ollama' ? (
+          <OllamaPanel />
+        ) : activeMainTab === 'remote' && selectedModel ? (
           <div className="p-6">
-            {/* Model Header */}
             <div className="mb-6 flex items-start justify-between">
               <div className="flex items-center gap-4">
                 <div
@@ -688,7 +1387,6 @@ export function ModelsPage() {
               </div>
             </div>
 
-            {/* Test Result */}
             <AnimatePresence>
               {testResult && testResult.id === selectedModel.id && (
                 <motion.div
@@ -715,7 +1413,6 @@ export function ModelsPage() {
               )}
             </AnimatePresence>
 
-            {/* Stats */}
             <div className="mb-6 grid grid-cols-4 gap-3">
               {[
                 { icon: BarChart3, label: '总调用', value: selectedModel.stats.totalCalls.toString(), color: 'var(--primary-color)' },
@@ -735,7 +1432,6 @@ export function ModelsPage() {
               ))}
             </div>
 
-            {/* Config Details */}
             <div className="rounded-xl p-5" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}>
               <h3 className="mb-4 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>配置详情</h3>
               <div className="space-y-3">
@@ -755,7 +1451,6 @@ export function ModelsPage() {
               </div>
             </div>
 
-            {/* Presets */}
             {selectedModel.presets.length > 0 && (
               <div className="mt-4 rounded-xl p-5" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}>
                 <h3 className="mb-3 text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>参数预设</h3>
@@ -786,6 +1481,280 @@ export function ModelsPage() {
               <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>选择一个模型查看详情</p>
             </div>
           </div>
+        )}
+      </div>
+
+      <div className="flex w-80 flex-col border-l" style={{ borderColor: 'var(--border-color)' }}>
+        <header
+          className="flex items-center justify-between border-b px-4"
+          style={{ height: 56, borderColor: 'var(--border-color)' }}
+        >
+          <h1 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+            模型管理
+          </h1>
+          <div className="flex gap-1">
+            <button
+              onClick={() => setIsAdding(true)}
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+              style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}
+              title="新增模型"
+            >
+              <Plus size={16} />
+            </button>
+            <button
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+              style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)' }}
+              title="导入配置"
+            >
+              <Download size={16} />
+            </button>
+            <button
+              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+              style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)' }}
+              title="导出配置"
+            >
+              <Upload size={16} />
+            </button>
+          </div>
+        </header>
+
+        <div className="flex border-b" style={{ borderColor: 'var(--border-color)' }}>
+          <button
+            onClick={() => setActiveMainTab('ollama')}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm transition-colors"
+            style={{
+              color: activeMainTab === 'ollama' ? 'var(--primary-color)' : 'var(--text-secondary)',
+              backgroundColor: activeMainTab === 'ollama' ? 'var(--primary-light)' : 'transparent',
+              fontWeight: activeMainTab === 'ollama' ? 600 : 400,
+            }}
+          >
+            <HardDrive size={14} />
+            Ollama
+          </button>
+          <button
+            onClick={() => setActiveMainTab('remote')}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm transition-colors"
+            style={{
+              color: activeMainTab === 'remote' ? 'var(--primary-color)' : 'var(--text-secondary)',
+              backgroundColor: activeMainTab === 'remote' ? 'var(--primary-light)' : 'transparent',
+              fontWeight: activeMainTab === 'remote' ? 600 : 400,
+            }}
+          >
+            <Globe size={14} />
+            远程模型
+          </button>
+        </div>
+
+        {activeMainTab === 'ollama' && (
+          <div className="flex flex-col flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto p-3">
+              <div className="rounded-xl p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                <div className="flex items-center gap-3 mb-3">
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: 'var(--primary-light)' }}
+                  >
+                    <HardDrive size={20} style={{ color: 'var(--primary-color)' }} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      Ollama 本地服务
+                    </div>
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      管理本地 Ollama 模型
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
+                  在左侧面板中启动 Ollama 服务、拉取和管理本地模型。本地模型可以直接在聊天中使用。
+                </p>
+                <button
+                  onClick={() => setOllamaModalOpen(true)}
+                  className="w-full rounded-lg px-3 py-2 text-sm font-medium transition-colors"
+                  style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+                >
+                  打开 Ollama 管理
+                </button>
+              </div>
+            </div>
+
+            <div className="shrink-0 p-3 pt-0">
+              <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                <div 
+                  className="flex items-center justify-between px-3 py-2 cursor-pointer select-none"
+                  style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                  onClick={() => setShowLogs(!showLogs)}
+                >
+                  <div className="flex items-center gap-2">
+                    <Terminal size={12} style={{ color: 'var(--text-tertiary)' }} />
+                    <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                      操作日志
+                    </span>
+                    {ollamaLogs.length > 0 && (
+                      <span 
+                        className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                        style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                      >
+                        {ollamaLogs.length}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {ollamaLogs.length > 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOllamaLogs([]);
+                        }}
+                        className="text-[10px] px-1.5 py-0.5 rounded transition-colors hover:opacity-80"
+                        style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)' }}
+                      >
+                        清空
+                      </button>
+                    )}
+                    {showLogs ? (
+                      <ChevronDown size={14} style={{ color: 'var(--text-tertiary)' }} />
+                    ) : (
+                      <ChevronUp size={14} style={{ color: 'var(--text-tertiary)' }} />
+                    )}
+                  </div>
+                </div>
+                
+                <AnimatePresence>
+                  {showLogs && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="max-h-52 overflow-y-auto p-2" style={{ backgroundColor: 'var(--bg-primary)' }}>
+                        {ollamaLogs.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-4">
+                            <Terminal size={20} style={{ color: 'var(--text-tertiary)' }} className="mb-1 opacity-30" />
+                            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                              暂无日志记录
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {ollamaLogs.slice().reverse().slice(0, 15).map((log, idx) => (
+                              <motion.div
+                                key={idx}
+                                initial={{ opacity: 0, x: -10 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                transition={{ delay: idx * 0.02 }}
+                                className="flex items-start gap-2 p-1.5 rounded-lg"
+                                style={{ 
+                                  backgroundColor: log.type === 'error' 
+                                    ? 'rgba(245,63,63,0.05)' 
+                                    : log.type === 'warning'
+                                    ? 'rgba(245,158,11,0.05)'
+                                    : 'transparent'
+                                }}
+                              >
+                                <div
+                                  className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                                  style={{
+                                    backgroundColor: log.type === 'error' 
+                                      ? 'var(--error-color)' 
+                                      : log.type === 'warning'
+                                      ? 'var(--warning-color)'
+                                      : 'var(--success-color)'
+                                  }}
+                                />
+                                <span className="flex-1 text-xs leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
+                                  {log.message}
+                                </span>
+                                <span className="text-[10px] shrink-0" style={{ color: 'var(--text-tertiary)' }}>
+                                  {new Date(log.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                                </span>
+                              </motion.div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeMainTab === 'remote' && (
+          <>
+            <div className="p-3">
+              <div
+                className="flex items-center gap-2 rounded-lg px-3 py-2"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+              >
+                <Search size={14} style={{ color: 'var(--text-tertiary)' }} />
+                <input
+                  type="text"
+                  placeholder="搜索模型..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-transparent text-sm outline-none"
+                  style={{ color: 'var(--text-primary)' }}
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-3">
+              {groups.map(group => {
+                const groupModels = filteredModels.filter(m => m.group === group);
+                if (groupModels.length === 0) return null;
+                return (
+                  <div key={group} className="mb-3">
+                    <div className="mb-1 flex items-center gap-1 px-2 text-xs font-medium"
+                      style={{ color: 'var(--text-tertiary)' }}
+                    >
+                      <span>{group}</span>
+                      <span>({groupModels.length})</span>
+                    </div>
+                    {groupModels.map(model => (
+                      <button
+                        key={model.id}
+                        onClick={() => setSelectedModelId(model.id)}
+                        className="mb-0.5 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
+                        style={{
+                          backgroundColor: selectedModelId === model.id ? 'var(--primary-light)' : 'transparent',
+                        }}
+                      >
+                        <div
+                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+                          style={{
+                            backgroundColor: model.isActive ? 'var(--primary-light)' : 'var(--bg-tertiary)',
+                            color: model.isActive ? 'var(--primary-color)' : 'var(--text-tertiary)',
+                          }}
+                        >
+                          {model.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1">
+                            {model.isFavorite && <Star size={10} style={{ color: 'var(--warning-color)' }} fill="var(--warning-color)" />}
+                            <span className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                              {model.name}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                            <span>{model.provider}</span>
+                            <span>·</span>
+                            <span className={model.isActive ? '' : 'opacity-50'}>
+                              {model.isActive ? '已启用' : '已禁用'}
+                            </span>
+                          </div>
+                        </div>
+                        <ChevronRight size={14} style={{ color: 'var(--text-tertiary)' }} />
+                      </button>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
       </div>
     </div>

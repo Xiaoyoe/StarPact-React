@@ -83,6 +83,9 @@
   --toast-info-bg: rgba(88, 158, 255, 0.15);
   --toast-info-text: var(--primary-color);
   --toast-info-border: var(--primary-color);
+  --toast-warning-bg: rgba(255, 125, 0, 0.15);
+  --toast-warning-text: #FF7D00;
+  --toast-warning-border: #FF7D00;
   --hover-bg-secondary: var(--bg-tertiary);
   --hover-bg-tertiary: #363639;
   --hover-text-secondary: var(--text-primary);

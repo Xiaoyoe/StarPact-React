@@ -85,6 +85,9 @@
   --toast-info-bg: #E8F3FF;
   --toast-info-text: #165DFF;
   --toast-info-border: #165DFF;
+  --toast-warning-bg: #FFF7E8;
+  --toast-warning-text: #FF7D00;
+  --toast-warning-border: #FF7D00;
   
   /* Hover Effects */
   --hover-bg-secondary: #E5E6EB;

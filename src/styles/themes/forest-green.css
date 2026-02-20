@@ -77,6 +77,9 @@
   --toast-info-bg: rgba(34, 197, 94, 0.15);
   --toast-info-text: #22C55E;
   --toast-info-border: #22C55E;
+  --toast-warning-bg: rgba(255, 125, 0, 0.15);
+  --toast-warning-text: #FF7D00;
+  --toast-warning-border: #FF7D00;
   
   /* Hover Effects */
   --hover-bg-secondary: #1E3A3A;
