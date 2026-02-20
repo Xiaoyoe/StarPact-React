@@ -4,7 +4,6 @@ import { Sidebar } from '@/layouts/Sidebar';
 import { ChatPage } from '@/pages/Chat';
 import { ModelsPage } from '@/pages/Models';
 import { SettingsPage } from '@/pages/Settings';
-import { LogsPage } from '@/pages/Logs';
 import { ComparePage } from '@/pages/Compare';
 import { IniConfigPage } from '@/pages/IniConfig';
 import { GalleryPage } from '@/pages/Gallery';
@@ -34,7 +33,6 @@ function PageContent() {
         {activePage === 'chat' && <ChatPage />}
         {activePage === 'models' && <ModelsPage />}
         {activePage === 'settings' && <SettingsPage />}
-        {activePage === 'logs' && <LogsPage />}
         {activePage === 'compare' && <ComparePage />}
         {activePage === 'ini-config' && <IniConfigPage />}
         {activePage === 'gallery' && <GalleryPage />}

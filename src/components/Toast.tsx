@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { CheckCircle, AlertCircle, Info, AlertTriangle } from 'lucide-react';
+import { useStore, generateId } from '@/store';
 
 // Types
 export type ToastType = 'success' | 'error' | 'info' | 'warning';
@@ -37,11 +38,6 @@ const DEFAULT_TYPE: ToastType = 'info';
 
 // Context
 const ToastContext = createContext<ToastContextType | undefined>(undefined);
-
-// Helper to generate unique IDs
-const generateId = (): string => {
-  return Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
-};
 
 // Position styles
 const getPositionStyles = (position: ToastPosition) => {
@@ -84,6 +80,7 @@ const getIconComponent = (type: ToastType) => {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<ToastMessage[]>([]);
   const messageRefs = useRef<Record<string, NodeJS.Timeout>>({});
+  const addLog = useStore((state) => state.addLog);
 
   // Remove toast by ID
   const removeToast = useCallback((id: string) => {
@@ -126,6 +123,16 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
     setMessages(prev => [...prev, newMessage]);
 
+    // Sync to logs
+    const logLevel = type === 'success' ? 'info' : type === 'warning' ? 'warn' : type;
+    addLog({
+      id: generateId(),
+      level: logLevel as 'info' | 'warn' | 'error' | 'debug',
+      message: text,
+      timestamp: Date.now(),
+      module: 'Toast'
+    });
+
     // Set timeout to remove
     const timeout = setTimeout(() => {
       removeToast(id);
@@ -134,7 +141,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     messageRefs.current[id] = timeout;
 
     return id;
-  }, [messages, removeToast]);
+  }, [messages, removeToast, addLog]);
 
   // Type-specific methods
   const success = useCallback((text: string, options?: Omit<ToastOptions, 'type'>) => {

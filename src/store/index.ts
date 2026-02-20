@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ChatModelStorage } from '@/services/storage/ChatModelStorage';
+import { LogStorage } from '@/services/storage/LogStorage';
 
 // ========== Types ==========
 export type ThemeType = 'light' | 'dark' | 'tech-blue' | 'eye-care' | 'midnight-blue' | 'forest-green' | 'coral-orange' | 'lavender-purple' | 'mint-cyan' | 'caramel-brown' | 'sakura-pink' | 'deep-sea-blue' | 'amber-gold';
@@ -88,8 +89,8 @@ interface AppState {
   setChatWallpaper: (wallpaper: string) => void;
 
   // Navigation
-  activePage: 'chat' | 'models' | 'settings' | 'logs' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates';
-  setActivePage: (page: 'chat' | 'models' | 'settings' | 'logs' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates') => void;
+  activePage: 'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates';
+  setActivePage: (page: 'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates') => void;
 
   // Sidebar
   sidebarCollapsed: boolean;
@@ -483,6 +484,12 @@ export const useStore = create<AppState>((set, get) => {
     }
   }, 300);
 
+  const debouncedSaveLogs = debounce(async (logs: LogEntry[]) => {
+    if (get().isHydrated) {
+      await LogStorage.saveLogs(logs);
+    }
+  }, 500);
+
   return {
   // Theme
   theme: 'light',
@@ -614,8 +621,15 @@ export const useStore = create<AppState>((set, get) => {
     { id: 'l6', level: 'debug', message: '对话历史加载完成: 3条记录', timestamp: Date.now() - 35000, module: 'Storage' },
   ],
   logsPanelOpen: false,
-  addLog: (log) => set((state) => ({ logs: [...state.logs, log] })),
-  clearLogs: () => set({ logs: [] }),
+  addLog: (log) => set((state) => {
+    const newLogs = [...state.logs, log];
+    debouncedSaveLogs(newLogs);
+    return { logs: newLogs };
+  }),
+  clearLogs: () => {
+    set({ logs: [] });
+    LogStorage.clearLogs();
+  },
   setLogsPanelOpen: (open) => set({ logsPanelOpen: open }),
 
   // Settings
@@ -698,11 +712,12 @@ export async function initializeStoreFromStorage() {
   const store = useStore.getState();
   
   try {
-    const [models, conversations, activeModelId, activeConversationId] = await Promise.all([
+    const [models, conversations, activeModelId, activeConversationId, logs] = await Promise.all([
       ChatModelStorage.loadModels(),
       ChatModelStorage.loadConversations(),
       ChatModelStorage.loadActiveModelId(),
       ChatModelStorage.loadActiveConversationId(),
+      LogStorage.loadLogs(),
     ]);
     
     if (models && models.length > 0) {
@@ -711,6 +726,10 @@ export async function initializeStoreFromStorage() {
     
     if (conversations && conversations.length > 0) {
       useStore.setState({ conversations });
+    }
+    
+    if (logs && logs.length > 0) {
+      useStore.setState({ logs });
     }
     
     if (activeModelId) {

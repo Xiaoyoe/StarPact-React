@@ -1,13 +1,100 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import {
-  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield, MessageSquareQuote, LogOut, Bell
+  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import { useStore } from '@/store';
-import type { ThemeType } from '@/store';
+import type { ThemeType, LogEntry } from '@/store';
 import { motion } from 'framer-motion';
 import { StorageManager } from '@/services/storage/StorageManager';
 import { StorageMonitor } from '@/services/storage/StorageMonitor';
 import type { StorageHealthReport } from '@/services/storage/StorageMonitor';
+
+const logLevelConfig = {
+  info: { 
+    color: '#3B82F6', 
+    bg: 'rgba(59, 130, 246, 0.1)', 
+    label: 'INFO',
+    borderColor: 'rgba(59, 130, 246, 0.3)'
+  },
+  warn: { 
+    color: '#F59E0B', 
+    bg: 'rgba(245, 158, 11, 0.1)', 
+    label: 'WARN',
+    borderColor: 'rgba(245, 158, 11, 0.3)'
+  },
+  error: { 
+    color: '#EF4444', 
+    bg: 'rgba(239, 68, 68, 0.1)', 
+    label: 'ERROR',
+    borderColor: 'rgba(239, 68, 68, 0.3)'
+  },
+  debug: { 
+    color: '#8B5CF6', 
+    bg: 'rgba(139, 92, 246, 0.1)', 
+    label: 'DEBUG',
+    borderColor: 'rgba(139, 92, 246, 0.3)'
+  },
+};
+
+const logLevelIcons = {
+  info: Info,
+  warn: AlertTriangle,
+  error: AlertCircle,
+  debug: Bug,
+};
+
+interface SettingsLogItemProps {
+  log: LogEntry;
+}
+
+const SettingsLogItem = memo(function SettingsLogItem({ log }: SettingsLogItemProps) {
+  const config = logLevelConfig[log.level];
+  const Icon = logLevelIcons[log.level];
+  const time = new Date(log.timestamp);
+  const timeStr = `${time.getHours().toString().padStart(2, '0')}:${time.getMinutes().toString().padStart(2, '0')}:${time.getSeconds().toString().padStart(2, '0')}`;
+  const dateStr = `${time.getMonth() + 1}/${time.getDate()}`;
+
+  return (
+    <div
+      className="flex items-start gap-3 px-4 py-3 rounded-xl transition-colors duration-150 hover:brightness-[0.98]"
+      style={{ 
+        backgroundColor: 'var(--bg-primary)',
+        borderLeft: `3px solid ${config.borderColor}`
+      }}
+    >
+      <div
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+        style={{ backgroundColor: config.bg }}
+      >
+        <Icon size={16} style={{ color: config.color }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span
+            className="rounded-md px-2 py-0.5 text-xs font-mono font-semibold tracking-wide"
+            style={{ backgroundColor: config.bg, color: config.color }}
+          >
+            {config.label}
+          </span>
+          <span className="text-xs font-medium px-2 py-0.5 rounded-md" style={{ 
+            color: 'var(--text-secondary)', 
+            backgroundColor: 'var(--bg-tertiary)' 
+          }}>
+            {log.module}
+          </span>
+          <span className="text-xs font-mono ml-auto flex items-center gap-1" style={{ color: 'var(--text-tertiary)' }}>
+            <span>{dateStr}</span>
+            <span className="w-1 h-1 rounded-full" style={{ backgroundColor: 'var(--text-tertiary)' }}></span>
+            <span>{timeStr}</span>
+          </span>
+        </div>
+        <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--text-primary)' }}>
+          {log.message}
+        </p>
+      </div>
+    </div>
+  );
+});
 import { configStorage, type AppConfig } from '@/services/storage/ConfigStorage';
 import { PromptTemplateStorage } from '@/services/storage/PromptTemplateStorage';
 import { VideoPlaylistStorage } from '@/services/storage/VideoPlaylistStorage';
@@ -28,9 +115,10 @@ export function SettingsPage() {
     chatWallpaper, setChatWallpaper,
     sendOnEnter, setSendOnEnter,
     storagePath, setStoragePath,
+    logs, clearLogs,
   } = useStore();
 
-  const [activeTab, setActiveTab] = useState<'appearance' | 'wallpaper' | 'general' | 'path' | 'about'>('appearance');
+  const [activeTab, setActiveTab] = useState<'appearance' | 'wallpaper' | 'general' | 'path' | 'logs' | 'about'>('appearance');
   const [templateStoragePath, setTemplateStoragePath] = useState('');
   const [videoPlaylistStoragePath, setVideoPlaylistStoragePath] = useState('');
   const [dailyQuoteEnabled, setDailyQuoteEnabled] = useState(false);
@@ -39,6 +127,10 @@ export function SettingsPage() {
   const [closeConfirm, setCloseConfirm] = useState(true);
   const [storageReport, setStorageReport] = useState<StorageHealthReport | null>(null);
   const [configLoaded, setConfigLoaded] = useState(false);
+  const [logFilterLevel, setLogFilterLevel] = useState<string>('all');
+  const [logSearchQuery, setLogSearchQuery] = useState('');
+  const [logCurrentPage, setLogCurrentPage] = useState(1);
+  const LOG_PAGE_SIZE = 30;
   const toast = useToast();
   
 
@@ -192,8 +284,70 @@ export function SettingsPage() {
     { id: 'wallpaper' as const, label: '壁纸', icon: Palette },
     { id: 'general' as const, label: '通用', icon: Monitor },
     { id: 'path' as const, label: '路径', icon: RefreshCw },
+    { id: 'logs' as const, label: '日志', icon: ScrollText },
     { id: 'about' as const, label: '关于', icon: Info },
   ];
+
+  const filteredLogs = useMemo(() => {
+    let result = logs;
+    
+    if (logFilterLevel !== 'all') {
+      result = result.filter(l => l.level === logFilterLevel);
+    }
+    
+    if (logSearchQuery.trim()) {
+      const query = logSearchQuery.toLowerCase();
+      result = result.filter(l => 
+        l.message.toLowerCase().includes(query) || 
+        l.module.toLowerCase().includes(query)
+      );
+    }
+    
+    return [...result].sort((a, b) => b.timestamp - a.timestamp);
+  }, [logs, logFilterLevel, logSearchQuery]);
+
+  const logTotalPages = Math.ceil(filteredLogs.length / LOG_PAGE_SIZE);
+  const paginatedLogs = useMemo(() => {
+    const start = (logCurrentPage - 1) * LOG_PAGE_SIZE;
+    return filteredLogs.slice(start, start + LOG_PAGE_SIZE);
+  }, [filteredLogs, logCurrentPage]);
+
+  const logCounts = useMemo(() => ({
+    all: logs.length,
+    info: logs.filter(l => l.level === 'info').length,
+    warn: logs.filter(l => l.level === 'warn').length,
+    error: logs.filter(l => l.level === 'error').length,
+    debug: logs.filter(l => l.level === 'debug').length,
+  }), [logs]);
+
+  const handleExportLogs = () => {
+    const data = filteredLogs.map(log => ({
+      time: new Date(log.timestamp).toISOString(),
+      level: log.level,
+      module: log.module,
+      message: log.message
+    }));
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `logs-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('日志导出成功');
+  };
+
+  const handleLogFilterChange = (level: string) => {
+    setLogFilterLevel(level);
+    setLogCurrentPage(1);
+  };
+
+  const handleLogSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setLogSearchQuery(e.target.value);
+    setLogCurrentPage(1);
+  };
 
   // 创建存储目录的处理函数
   const handleCreateStorageDir = async () => {
@@ -278,8 +432,160 @@ export function SettingsPage() {
     <div className="flex flex-col h-full" style={{ backgroundColor: 'var(--bg-primary)' }}>
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-8">
-        <div className="mx-auto max-w-2xl">
-          {activeTab === 'appearance' && (
+        {activeTab === 'logs' ? (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="h-full flex flex-col"
+            style={{ margin: '-2rem', padding: '2rem' }}
+          >
+            {/* Header */}
+            <div 
+              className="flex items-center justify-between mb-4 pb-4 border-b"
+              style={{ borderColor: 'var(--border-color)' }}
+            >
+              <div className="flex items-center gap-3">
+                <div 
+                  className="flex h-10 w-10 items-center justify-center rounded-xl"
+                  style={{ backgroundColor: 'var(--primary-light)' }}
+                >
+                  <ScrollText size={20} style={{ color: 'var(--primary-color)' }} />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
+                    系统日志
+                  </h2>
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    共 {logs.length} 条记录，当前显示 {filteredLogs.length} 条
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={clearLogs}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:scale-105"
+                  style={{ 
+                    color: 'var(--error-color)', 
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)'
+                  }}
+                >
+                  <Trash2 size={14} /> 清空
+                </button>
+                <button
+                  onClick={handleExportLogs}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:scale-105"
+                  style={{ 
+                    color: 'var(--text-secondary)', 
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)'
+                  }}
+                >
+                  <Download size={14} /> 导出
+                </button>
+              </div>
+            </div>
+
+            {/* Search & Filter */}
+            <div className="flex items-center gap-3 mb-4">
+              {/* Search */}
+              <div 
+                className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 max-w-xs"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+              >
+                <Search size={14} style={{ color: 'var(--text-tertiary)' }} />
+                <input
+                  type="text"
+                  placeholder="搜索日志..."
+                  value={logSearchQuery}
+                  onChange={handleLogSearchChange}
+                  className="bg-transparent text-sm outline-none flex-1"
+                  style={{ color: 'var(--text-primary)' }}
+                />
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex items-center gap-1">
+                {[
+                  { id: 'all', label: '全部', color: 'var(--primary-color)' },
+                  { id: 'info', label: '信息', color: '#3B82F6' },
+                  { id: 'warn', label: '警告', color: '#F59E0B' },
+                  { id: 'error', label: '错误', color: '#EF4444' },
+                  { id: 'debug', label: '调试', color: '#8B5CF6' },
+                ].map(level => (
+                  <button
+                    key={level.id}
+                    onClick={() => handleLogFilterChange(level.id)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium"
+                    style={{
+                      backgroundColor: logFilterLevel === level.id ? level.color : 'var(--bg-secondary)',
+                      color: logFilterLevel === level.id ? 'white' : 'var(--text-secondary)',
+                      border: `1px solid ${logFilterLevel === level.id ? level.color : 'var(--border-color)'}`,
+                    }}
+                  >
+                    {level.label} ({logCounts[level.id as keyof typeof logCounts]})
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Log List */}
+            <div 
+              className="flex-1 overflow-y-auto rounded-xl p-2 space-y-2"
+              style={{ backgroundColor: 'var(--bg-secondary)' }}
+            >
+              {paginatedLogs.length === 0 ? (
+                <div className="flex h-full items-center justify-center">
+                  <div className="text-center">
+                    <div 
+                      className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl"
+                      style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                    >
+                      <Info size={32} style={{ color: 'var(--text-tertiary)' }} />
+                    </div>
+                    <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                      {logSearchQuery ? '未找到匹配的日志' : '暂无日志记录'}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                      {logSearchQuery ? '尝试修改搜索关键词' : '系统操作将自动记录日志'}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                paginatedLogs.map((log) => (
+                  <SettingsLogItem key={log.id} log={log} />
+                ))
+              )}
+            </div>
+
+            {/* Pagination */}
+            {logTotalPages > 1 && (
+              <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t" style={{ borderColor: 'var(--border-color)' }}>
+                <button
+                  onClick={() => setLogCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={logCurrentPage === 1}
+                  className="p-1 rounded disabled:opacity-30"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  <ChevronLeft size={16} />
+                </button>
+                <span className="text-xs px-3" style={{ color: 'var(--text-secondary)' }}>
+                  第 {logCurrentPage} / {logTotalPages} 页
+                </span>
+                <button
+                  onClick={() => setLogCurrentPage(p => Math.min(logTotalPages, p + 1))}
+                  disabled={logCurrentPage === logTotalPages}
+                  className="p-1 rounded disabled:opacity-30"
+                  style={{ color: 'var(--text-secondary)' }}
+                >
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+            )}
+          </motion.div>
+        ) : (
+          <div className="mx-auto max-w-2xl">
+            {activeTab === 'appearance' && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1573,7 +1879,8 @@ export function SettingsPage() {
           {activeTab === 'path' && (
             <PathPage />
           )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Bottom Tabs */}
