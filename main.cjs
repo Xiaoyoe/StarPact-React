@@ -1,5 +1,6 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const isDev = require('electron-is-dev');
 
 // 注册存储相关的 IPC 处理器
@@ -98,6 +99,65 @@ function registerFileHandlers() {
       return {
         success: false,
         path: null,
+        error: error.message,
+      };
+    }
+  });
+
+  // 处理选择文件的请求
+  ipcMain.handle('file:selectFile', async (event, options) => {
+    try {
+      const window = event.sender.getOwnerBrowserWindow();
+      
+      const properties = ['openFile'];
+      if (options?.multi) {
+        properties.push('multiSelections');
+      }
+      
+      const result = await dialog.showOpenDialog(window, {
+        title: options?.title || '选择文件',
+        properties,
+        defaultPath: options?.defaultPath,
+        filters: options?.filters,
+      });
+      
+      if (!result.canceled && result.filePaths.length > 0) {
+        return {
+          success: true,
+          filePath: result.filePaths[0],
+          filePaths: result.filePaths,
+        };
+      } else {
+        return {
+          success: false,
+          filePath: null,
+          filePaths: null,
+        };
+      }
+    } catch (error) {
+      console.error('选择文件失败:', error);
+      return {
+        success: false,
+        filePath: null,
+        filePaths: null,
+        error: error.message,
+      };
+    }
+  });
+
+  // 处理读取文件内容的请求
+  ipcMain.handle('file:readFile', async (event, filePath, encoding = 'utf8') => {
+    try {
+      const content = await fs.promises.readFile(filePath, encoding);
+      return {
+        success: true,
+        content,
+      };
+    } catch (error) {
+      console.error('读取文件失败:', error);
+      return {
+        success: false,
+        content: null,
         error: error.message,
       };
     }

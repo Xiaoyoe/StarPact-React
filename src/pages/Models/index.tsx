@@ -4,12 +4,13 @@ import {
   Settings2, Check, X, AlertCircle, Zap, Globe, HardDrive,
   ChevronRight, BarChart3, Clock, Activity, Eye, EyeOff,
   Play, Square, RefreshCw, StopCircle, ChevronUp, ChevronDown,
-  Terminal
+  Terminal, FileBox, FolderOpen
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import type { ModelConfig } from '@/store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/components/Toast';
+import { ollamaModelStorage, type OllamaModelFile } from '@/services/storage/OllamaModelStorage';
 
 function ModelForm({
   model,
@@ -391,7 +392,25 @@ function ModelForm({
   );
 }
 
-function OllamaPanel() {
+function OllamaPanel({
+  showCreateModel,
+  setShowCreateModel,
+  createModelName,
+  setCreateModelName,
+  createModelPath,
+  setCreateModelPath,
+  isCreating,
+  setIsCreating,
+}: {
+  showCreateModel: boolean;
+  setShowCreateModel: (v: boolean) => void;
+  createModelName: string;
+  setCreateModelName: (v: string) => void;
+  createModelPath: string;
+  setCreateModelPath: (v: string) => void;
+  isCreating: boolean;
+  setIsCreating: (v: boolean) => void;
+}) {
   const {
     ollamaStatus,
     setOllamaStatus,
@@ -401,6 +420,7 @@ function OllamaPanel() {
     addOllamaLog,
     activeOllamaModel,
     setActiveOllamaModel,
+    setOllamaModalOpen,
   } = useStore();
 
   const toast = useToast();
@@ -616,19 +636,44 @@ function OllamaPanel() {
   };
 
   const handleDeleteModel = async (modelName: string) => {
-    if (!confirm(`确定要删除模型 ${modelName} 吗？`)) return;
+    const isModelRunning = runningModels.some(
+      rm => rm.name === modelName || rm.model === modelName
+    );
 
-    if (!window.electronAPI?.ollama) {
-      addOllamaLog({ type: 'error', message: 'Electron API 不可用，无法删除模型' });
+    if (isModelRunning) {
+      toast.error('请先停止正在运行的模型', { duration: 3000 });
+      addOllamaLog({ type: 'warning', message: `无法删除正在运行的模型: ${modelName}` });
       return;
     }
 
+    if (!confirm(`确定要删除模型 ${modelName} 吗？此操作不可撤销！`)) return;
+
+    toast.info(`正在删除模型 ${modelName}...`, { duration: 2000 });
+    addOllamaLog({ type: 'info', message: `正在删除模型 ${modelName}...` });
+
     try {
-      await window.electronAPI.ollama.deleteModel(modelName);
+      if (window.electronAPI?.ollama) {
+        await window.electronAPI.ollama.deleteModel(modelName);
+      } else {
+        const response = await fetch(`http://${config.host}:${config.port}/api/delete`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: modelName }),
+        });
+
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(error);
+        }
+      }
+
       addOllamaLog({ type: 'info', message: `模型 ${modelName} 已删除` });
+      toast.success(`模型 ${modelName} 已删除`, { duration: 2000 });
       await loadOllamaModels();
+      await loadRunningModels();
     } catch (error) {
-      addOllamaLog({ type: 'error', message: `删除模型 ${modelName} 失败` });
+      addOllamaLog({ type: 'error', message: `删除模型 ${modelName} 失败: ${error}` });
+      toast.error(`删除模型 ${modelName} 失败`, { duration: 3000 });
     }
   };
 
@@ -637,22 +682,24 @@ function OllamaPanel() {
       toast.info('正在刷新运行中的模型...', { duration: 1500 });
     }
     try {
-      const response = await fetch(`http://${config.host}:${config.port}/api/ps`);
-      if (response.ok) {
-        const data = await response.json();
-        const models = data.models || [];
-        setRunningModels(models);
-        if (models.length > 0) {
-          addOllamaLog({ type: 'info', message: `当前有 ${models.length} 个模型正在运行` });
-        }
-        if (showToast) {
-          toast.success(`已刷新，当前 ${models.length} 个模型运行中`, { duration: 2000 });
-        }
+      let data;
+      if (window.electronAPI?.ollama?.ps) {
+        data = await window.electronAPI.ollama.ps();
       } else {
-        addOllamaLog({ type: 'error', message: '查询运行模型失败' });
-        if (showToast) {
-          toast.error('查询运行模型失败', { duration: 2000 });
+        const response = await fetch(`http://${config.host}:${config.port}/api/ps`);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
         }
+        data = await response.json();
+      }
+      
+      const models = data.models || [];
+      setRunningModels(models);
+      if (models.length > 0) {
+        addOllamaLog({ type: 'info', message: `当前有 ${models.length} 个模型正在运行` });
+      }
+      if (showToast) {
+        toast.success(`已刷新，当前 ${models.length} 个模型运行中`, { duration: 2000 });
       }
     } catch (error) {
       addOllamaLog({ type: 'error', message: '查询运行模型失败' });
@@ -794,10 +841,121 @@ function OllamaPanel() {
     }
   };
 
+  const handleSelectModelfile = async () => {
+    if (window.electronAPI?.file?.selectFile) {
+      console.log('调用 electronAPI.file.selectFile...');
+      const result = await window.electronAPI.file.selectFile({
+        title: '选择模型文件',
+        filters: [
+          { name: '所有文件', extensions: ['*'] }
+        ]
+      });
+      console.log('选择结果:', result);
+      if (result && result.filePath) {
+        console.log('设置路径:', result.filePath);
+        setCreateModelPath(result.filePath);
+      }
+    } else {
+      console.log('electronAPI.file.selectFile 不可用，使用浏览器选择');
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.onchange = (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (file) {
+          console.log('浏览器选择文件:', file.name);
+          setCreateModelPath(file.name);
+        }
+      };
+      input.click();
+    }
+  };
+
+  const handleCreateModel = async () => {
+    if (!createModelName.trim()) {
+      toast.error('请输入模型名称', { duration: 2000 });
+      return;
+    }
+    if (!createModelPath.trim()) {
+      toast.error('请选择模型文件', { duration: 2000 });
+      return;
+    }
+
+    setIsCreating(true);
+    addOllamaLog({ type: 'info', message: `正在创建模型 ${createModelName}...` });
+    toast.info(`正在创建模型 ${createModelName}...`, { duration: 2000 });
+
+    try {
+      let modelfileContent = '';
+      
+      if (window.electronAPI?.file?.readFile) {
+        try {
+          const result = await window.electronAPI.file.readFile(createModelPath, 'utf8');
+          if (result.success && result.content) {
+            modelfileContent = result.content;
+            addOllamaLog({ type: 'info', message: '成功读取 Modelfile 内容' });
+          } else {
+            addOllamaLog({ type: 'warning', message: '无法读取文件内容' });
+          }
+        } catch (e) {
+          addOllamaLog({ type: 'warning', message: '读取文件失败' });
+        }
+      }
+
+      if (!modelfileContent) {
+        throw new Error('无法读取 Modelfile 内容，请确保文件存在且可读');
+      }
+
+      if (window.electronAPI?.ollama?.createModel) {
+        await window.electronAPI.ollama.createModel(createModelName, modelfileContent);
+      } else {
+        const response = await fetch(`http://${config.host}:${config.port}/api/create`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: createModelName, modelfile: modelfileContent }),
+        });
+
+        if (!response.ok) {
+          const error = await response.text();
+          throw new Error(error);
+        }
+      }
+
+      addOllamaLog({ type: 'info', message: `模型 ${createModelName} 创建成功` });
+      toast.success(`模型 ${createModelName} 创建成功`, { duration: 2000 });
+      setCreateModelName('');
+      setCreateModelPath('');
+      setShowCreateModel(false);
+      await loadOllamaModels();
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `创建模型失败: ${error}` });
+      toast.error(`创建模型失败: ${error}`, { duration: 3000 });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
   const formatSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} GB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  };
+
+  const getModelLabel = (model: any) => {
+    const name = model.name?.toLowerCase() || '';
+    if (name.includes('deepseek')) return 'deepseek';
+    if (name.includes('qwen')) return 'qwen';
+    if (name.includes('llama')) return 'llama';
+    if (name.includes('gemma')) return 'gemma';
+    if (name.includes('mistral')) return 'mistral';
+    if (name.includes('mixtral')) return 'mixtral';
+    if (name.includes('phi')) return 'phi';
+    if (name.includes('yi')) return 'yi';
+    if (name.includes('glm')) return 'glm';
+    if (name.includes('baichuan')) return 'baichuan';
+    if (name.includes('internlm')) return 'internlm';
+    if (model.details?.family) return model.details.family;
+    return '未知';
   };
 
   return (
@@ -818,6 +976,17 @@ function OllamaPanel() {
           </span>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setOllamaModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+            style={{ 
+              backgroundColor: 'var(--primary-light)', 
+              color: 'var(--primary-color)',
+              border: '1px solid var(--primary-color)'
+            }}
+          >
+            <Settings2 size={14} /> 打开管理
+          </button>
           <button
             onClick={checkOllamaStatus}
             disabled={isChecking}
@@ -970,6 +1139,124 @@ function OllamaPanel() {
         )}
       </div>
 
+      {/* Create Model Section */}
+      {ollamaStatus?.isRunning && (
+        <div className="mb-4 rounded-xl overflow-hidden shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+          <div
+            onClick={() => setShowCreateModel(!showCreateModel)}
+            className="w-full flex items-center justify-between px-4 py-3 transition-colors cursor-pointer"
+            style={{ backgroundColor: showCreateModel ? 'var(--bg-tertiary)' : 'transparent' }}
+          >
+            <div className="flex items-center gap-2">
+              <FileBox size={16} style={{ color: 'var(--primary-color)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                创建 Ollama 模型
+              </span>
+            </div>
+            <ChevronDown 
+              size={16} 
+              style={{ 
+                color: 'var(--text-tertiary)',
+                transform: showCreateModel ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s'
+              }} 
+            />
+          </div>
+          
+          <AnimatePresence>
+            {showCreateModel && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="border-t"
+                style={{ borderColor: 'var(--border-color)' }}
+              >
+                <div className="p-4 space-y-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                      模型名称
+                    </label>
+                    <input
+                      type="text"
+                      value={createModelName}
+                      onChange={(e) => setCreateModelName(e.target.value)}
+                      placeholder="例如：my-custom-model"
+                      className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors"
+                      style={{
+                        backgroundColor: 'var(--bg-primary)',
+                        border: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
+                      模型文件 (Modelfile)
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={createModelPath}
+                        onChange={(e) => setCreateModelPath(e.target.value)}
+                        placeholder="选择或输入 Modelfile 路径"
+                        className="flex-1 rounded-lg px-3 py-2 text-sm outline-none transition-colors"
+                        style={{
+                          backgroundColor: 'var(--bg-primary)',
+                          border: '1px solid var(--border-color)',
+                          color: 'var(--text-primary)',
+                        }}
+                      />
+                      <button
+                        onClick={handleSelectModelfile}
+                        className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors"
+                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+                      >
+                        <FolderOpen size={14} /> 选择文件
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      onClick={() => {
+                        setCreateModelName('');
+                        setCreateModelPath('');
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
+                      style={{ 
+                        backgroundColor: 'rgba(245,63,63,0.1)', 
+                        color: 'var(--error-color)',
+                        border: '1px solid rgba(245,63,63,0.2)'
+                      }}
+                    >
+                      <X size={14} /> 清空内容
+                    </button>
+                    <button
+                      onClick={handleCreateModel}
+                      disabled={isCreating || !createModelName.trim() || !createModelPath.trim()}
+                      className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-50"
+                      style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+                    >
+                      {isCreating ? (
+                        <>
+                          <RefreshCw size={14} className="animate-spin" /> 创建中...
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={14} /> 创建模型
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      )}
+
       {ollamaStatus?.isRunning && (
         <div className="mb-4 rounded-xl overflow-hidden shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
           <div className="flex items-center justify-between border-b px-4 py-2.5" style={{ borderColor: 'var(--border-color)' }}>
@@ -1032,6 +1319,11 @@ function OllamaPanel() {
                           {model.sizeVram !== undefined && model.sizeVram > 0 && (
                             <span className="flex items-center gap-1">
                               VRAM: {formatSize(model.sizeVram)}
+                            </span>
+                          )}
+                          {model.modified_at && (
+                            <span className="flex items-center gap-1">
+                              <Clock size={10} /> {new Date(model.modified_at).toLocaleDateString()}
                             </span>
                           )}
                         </div>
@@ -1123,7 +1415,7 @@ function OllamaPanel() {
                             className="rounded px-1.5 py-0.5 text-xs shrink-0"
                             style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
                           >
-                            {model.details?.family || '未知'}
+                            {getModelLabel(model)}
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
@@ -1135,6 +1427,11 @@ function OllamaPanel() {
                           {model.size > 0 && (
                             <span className="flex items-center gap-1">
                               <HardDrive size={10} /> {formatSize(model.size)}
+                            </span>
+                          )}
+                          {model.modified_at && (
+                            <span className="flex items-center gap-1">
+                              <Clock size={10} /> {new Date(model.modified_at).toLocaleDateString()}
                             </span>
                           )}
                         </div>
@@ -1214,6 +1511,22 @@ export function ModelsPage() {
   const [testResult, setTestResult] = useState<{ id: string; success: boolean; time: number } | null>(null);
   const [activeMainTab, setActiveMainTab] = useState<'ollama' | 'remote'>('ollama');
   const [showLogs, setShowLogs] = useState(true);
+  const [modelFiles, setModelFiles] = useState<OllamaModelFile[]>([]);
+  const [showModelFiles, setShowModelFiles] = useState(true);
+  const [showCreateModel, setShowCreateModel] = useState(false);
+  const [createModelName, setCreateModelName] = useState('');
+  const [createModelPath, setCreateModelPath] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+
+  const toast = useToast();
+
+  useEffect(() => {
+    const loadModelFiles = async () => {
+      const files = await ollamaModelStorage.getAll();
+      setModelFiles(files);
+    };
+    loadModelFiles();
+  }, []);
 
   const groups = Array.from(new Set(models.map(m => m.group)));
   const filteredModels = models.filter(m =>
@@ -1283,6 +1596,70 @@ export function ModelsPage() {
     });
   };
 
+  const handleAddModelFile = async () => {
+    if (window.electronAPI?.file?.selectFile) {
+      const result = await window.electronAPI.file.selectFile({
+        title: '选择模型文件',
+        filters: [
+          { name: '所有文件', extensions: ['*'] }
+        ],
+        multi: true,
+      });
+      if (result && result.filePath) {
+        const fileName = result.filePath.split(/[/\\]/).pop() || result.filePath;
+        const newFile: OllamaModelFile = {
+          id: generateId(),
+          name: fileName,
+          path: result.filePath,
+          addedAt: Date.now(),
+        };
+        await ollamaModelStorage.add(newFile);
+        setModelFiles(prev => [...prev, newFile]);
+        toast.success(`已添加文件: ${fileName}`, { duration: 2000 });
+      }
+    } else {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.multiple = true;
+      input.onchange = async (e) => {
+        const files = (e.target as HTMLInputElement).files;
+        if (files) {
+          const newFiles: OllamaModelFile[] = [];
+          for (const file of Array.from(files)) {
+            const newFile: OllamaModelFile = {
+              id: generateId(),
+              name: file.name,
+              path: file.name,
+              size: file.size,
+              addedAt: Date.now(),
+            };
+            await ollamaModelStorage.add(newFile);
+            newFiles.push(newFile);
+          }
+          setModelFiles(prev => [...prev, ...newFiles]);
+          toast.success(`已添加 ${newFiles.length} 个文件`, { duration: 2000 });
+        }
+      };
+      input.click();
+    }
+  };
+
+  const handleRemoveModelFile = async (id: string) => {
+    await ollamaModelStorage.remove(id);
+    setModelFiles(prev => prev.filter(f => f.id !== id));
+    toast.success('已移除文件', { duration: 1500 });
+  };
+
+  const handleUseModelFile = (file: { id: string; name: string; path: string }) => {
+    setCreateModelPath(file.path);
+    const baseName = file.name.replace(/\.[^/.]+$/, '');
+    if (!createModelName) {
+      setCreateModelName(baseName);
+    }
+    setShowCreateModel(true);
+    toast.info(`已选择文件: ${file.name}`, { duration: 1500 });
+  };
+
   if (isAdding || editingModel) {
     return (
       <div className="flex h-full flex-col" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -1309,7 +1686,16 @@ export function ModelsPage() {
     <div className="flex h-full" style={{ backgroundColor: 'var(--bg-primary)' }}>
       <div className="flex-1 overflow-y-auto">
         {activeMainTab === 'ollama' ? (
-          <OllamaPanel />
+          <OllamaPanel
+            showCreateModel={showCreateModel}
+            setShowCreateModel={setShowCreateModel}
+            createModelName={createModelName}
+            setCreateModelName={setCreateModelName}
+            createModelPath={createModelPath}
+            setCreateModelPath={setCreateModelPath}
+            isCreating={isCreating}
+            setIsCreating={setIsCreating}
+          />
         ) : activeMainTab === 'remote' && selectedModel ? (
           <div className="p-6">
             <div className="mb-6 flex items-start justify-between">
@@ -1547,34 +1933,109 @@ export function ModelsPage() {
 
         {activeMainTab === 'ollama' && (
           <div className="flex flex-col flex-1 min-h-0">
-            <div className="flex-1 overflow-y-auto p-3">
-              <div className="rounded-xl p-4" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-                <div className="flex items-center gap-3 mb-3">
-                  <div
-                    className="flex h-10 w-10 items-center justify-center rounded-xl"
-                    style={{ backgroundColor: 'var(--primary-light)' }}
-                  >
-                    <HardDrive size={20} style={{ color: 'var(--primary-color)' }} />
+            {/* Model Files Storage Section */}
+            <div className="shrink-0 p-3">
+              <div className="rounded-xl overflow-hidden" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                <div 
+                  className="flex items-center justify-between px-3 py-2 cursor-pointer select-none"
+                  style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                  onClick={() => setShowModelFiles(!showModelFiles)}
+                >
+                  <div className="flex items-center gap-2">
+                    <FolderOpen size={12} style={{ color: 'var(--warning-color)' }} />
+                    <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                      模型文件存储
+                    </span>
+                    {modelFiles.length > 0 && (
+                      <span 
+                        className="rounded-full px-1.5 py-0.5 text-[10px] font-medium"
+                        style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                      >
+                        {modelFiles.length}
+                      </span>
+                    )}
                   </div>
-                  <div>
-                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                      Ollama 本地服务
-                    </div>
-                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      管理本地 Ollama 模型
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAddModelFile();
+                      }}
+                      className="text-[10px] px-1.5 py-0.5 rounded transition-colors hover:opacity-80"
+                      style={{ color: 'white', backgroundColor: 'var(--primary-color)' }}
+                    >
+                      添加
+                    </button>
+                    {showModelFiles ? (
+                      <ChevronDown size={14} style={{ color: 'var(--text-tertiary)' }} />
+                    ) : (
+                      <ChevronUp size={14} style={{ color: 'var(--text-tertiary)' }} />
+                    )}
                   </div>
                 </div>
-                <p className="text-xs mb-3" style={{ color: 'var(--text-secondary)' }}>
-                  在左侧面板中启动 Ollama 服务、拉取和管理本地模型。本地模型可以直接在聊天中使用。
-                </p>
-                <button
-                  onClick={() => setOllamaModalOpen(true)}
-                  className="w-full rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-                  style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
-                >
-                  打开 Ollama 管理
-                </button>
+                
+                <AnimatePresence>
+                  {showModelFiles && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="max-h-60 overflow-y-auto p-2" style={{ backgroundColor: 'var(--bg-primary)' }}>
+                        {modelFiles.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-4">
+                            <FolderOpen size={20} style={{ color: 'var(--text-tertiary)' }} className="mb-1 opacity-30" />
+                            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                              暂无模型文件
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            {modelFiles.map((file) => (
+                              <div
+                                key={file.id}
+                                className="flex items-center gap-2 rounded-lg p-2 transition-colors group"
+                                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+                              >
+                                <div
+                                  className="flex h-6 w-6 items-center justify-center rounded shrink-0"
+                                  style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                                >
+                                  <FileBox size={10} style={{ color: 'var(--text-secondary)' }} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="truncate text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                                    {file.name}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => handleUseModelFile(file)}
+                                    className="flex h-5 w-5 items-center justify-center rounded transition-colors"
+                                    style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}
+                                    title="用于创建模型"
+                                  >
+                                    <Play size={10} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleRemoveModelFile(file.id)}
+                                    className="flex h-5 w-5 items-center justify-center rounded transition-colors"
+                                    style={{ color: 'var(--error-color)', backgroundColor: 'rgba(245,63,63,0.1)' }}
+                                    title="移除"
+                                  >
+                                    <Trash2 size={10} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
 
@@ -1629,7 +2090,7 @@ export function ModelsPage() {
                       transition={{ duration: 0.2 }}
                       className="overflow-hidden"
                     >
-                      <div className="max-h-52 overflow-y-auto p-2" style={{ backgroundColor: 'var(--bg-primary)' }}>
+                      <div className="max-h-80 overflow-y-auto p-2" style={{ backgroundColor: 'var(--bg-primary)' }}>
                         {ollamaLogs.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-4">
                             <Terminal size={20} style={{ color: 'var(--text-tertiary)' }} className="mb-1 opacity-30" />

@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.OLLAMA.COPY_MODEL, { source, destination }),
     generateEmbedding: (text: string, model?: string) => 
       ipcRenderer.invoke(IPC_CHANNELS.OLLAMA.GENERATE_EMBEDDING, { text, model }),
+    ps: () => ipcRenderer.invoke(IPC_CHANNELS.OLLAMA.PS),
+    createModel: (name: string, modelfile: string) => 
+      ipcRenderer.invoke(IPC_CHANNELS.OLLAMA.CREATE_MODEL, { name, modelfile }),
     
     onStatus: (callback: (status: any) => void) => {
       const listener = (_event: any, status: any) => callback(status);
@@ -49,6 +52,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       title?: string;
       defaultPath?: string;
     }) => ipcRenderer.invoke(IPC_CHANNELS.FILE.SELECT_FOLDER, options),
+    selectFile: (options?: {
+      title?: string;
+      defaultPath?: string;
+      filters?: Array<{ name: string; extensions: string[] }>;
+      multi?: boolean;
+    }) => ipcRenderer.invoke(IPC_CHANNELS.FILE.SELECT_FILE, options),
+    readFile: (filePath: string, encoding?: string) => 
+      ipcRenderer.invoke(IPC_CHANNELS.FILE.READ_FILE, filePath, encoding),
   },
   window: {
     minimize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.MINIMIZE),
@@ -76,6 +87,8 @@ declare global {
         getModelInfo: (modelName: string) => Promise<any>;
         copyModel: (source: string, destination: string) => Promise<void>;
         generateEmbedding: (text: string, model?: string) => Promise<number[]>;
+        ps: () => Promise<any>;
+        createModel: (name: string, modelfile: string) => Promise<any>;
         onStatus: (callback: (status: any) => void) => () => void;
         onLog: (callback: (log: any) => void) => () => void;
         onChatChunk: (callback: (chunk: string) => void) => () => void;
@@ -88,6 +101,22 @@ declare global {
         }) => Promise<{
           success: boolean;
           path: string | null;
+          error?: string;
+        }>;
+        selectFile: (options?: {
+          title?: string;
+          defaultPath?: string;
+          filters?: Array<{ name: string; extensions: string[] }>;
+          multi?: boolean;
+        }) => Promise<{
+          success: boolean;
+          filePath: string | null;
+          filePaths?: string[] | null;
+          error?: string;
+        }>;
+        readFile: (filePath: string, encoding?: string) => Promise<{
+          success: boolean;
+          content: string | null;
           error?: string;
         }>;
       };

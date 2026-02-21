@@ -133,7 +133,7 @@ export class OllamaAPIClient {
   }
 
   async deleteModel(modelName: string): Promise<void> {
-    await this.request('DELETE', `/api/delete/${modelName}`);
+    await this.request('DELETE', '/api/delete', { name: modelName });
   }
 
   async getModelInfo(modelName: string): Promise<any> {
@@ -150,6 +150,19 @@ export class OllamaAPIClient {
       prompt: text,
     });
     return response.body.embedding;
+  }
+
+  async ps(): Promise<any> {
+    const response = await this.request('GET', '/api/ps');
+    return response.body;
+  }
+
+  async createModel(name: string, modelfile: string): Promise<any> {
+    const response = await this.request('POST', '/api/create', {
+      name,
+      modelfile,
+    });
+    return response.body;
   }
 
   private request(

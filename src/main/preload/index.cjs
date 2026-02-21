@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 文件操作API
   file: {
     selectFolder: (options) => ipcRenderer.invoke('file:selectFolder', options),
+    selectFile: (options) => ipcRenderer.invoke('file:selectFile', options),
+    readFile: (filePath, encoding) => ipcRenderer.invoke('file:readFile', filePath, encoding),
   },
   
   // 窗口控制API

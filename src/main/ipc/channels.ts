@@ -14,9 +14,13 @@ export const IPC_CHANNELS = {
     GET_MODEL_INFO: 'ollama:getModelInfo',
     COPY_MODEL: 'ollama:copyModel',
     GENERATE_EMBEDDING: 'ollama:generateEmbedding',
+    PS: 'ollama:ps',
+    CREATE_MODEL: 'ollama:createModel',
   },
   FILE: {
     SELECT_FOLDER: 'file:selectFolder',
+    SELECT_FILE: 'file:selectFile',
+    READ_FILE: 'file:readFile',
   },
   STORAGE: {
     GET_MODULE_PATH: 'storage:getModulePath',

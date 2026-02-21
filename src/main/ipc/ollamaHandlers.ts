@@ -126,4 +126,24 @@ export function registerOllamaHandlers() {
     const client = new OllamaAPIClient(status.port);
     return client.generateEmbedding(text, model);
   });
+
+  ipcMain.handle(IPC_CHANNELS.OLLAMA.PS, async () => {
+    const status = await manager.checkStatus();
+    if (!status.isRunning) {
+      throw new Error('Ollama service is not running');
+    }
+
+    const client = new OllamaAPIClient(status.port);
+    return client.ps();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.OLLAMA.CREATE_MODEL, async (_, { name, modelfile }) => {
+    const status = await manager.checkStatus();
+    if (!status.isRunning) {
+      throw new Error('Ollama service is not running');
+    }
+
+    const client = new OllamaAPIClient(status.port);
+    return client.createModel(name, modelfile);
+  });
 }
