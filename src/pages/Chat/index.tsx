@@ -16,117 +16,6 @@ import { configStorage } from '@/services/storage/ConfigStorage';
 import { useToast } from '@/components/Toast';
 import { notificationService } from '@/utils/notification';
 
-// Simulated AI responses
-const aiResponses = [
-  `这是一个很好的问题！让我为你详细解答：
-
-## 关键要点
-
-1. **模块化设计** - 将复杂问题分解为可管理的模块
-2. **渐进式开发** - 从核心功能开始，逐步扩展
-3. **持续迭代** - 根据反馈不断优化
-
-\`\`\`python
-# 示例代码
-def process_data(data: list) -> dict:
-    """处理数据的核心函数"""
-    result = {}
-    for item in data:
-        key = item.get('category', 'default')
-        if key not in result:
-            result[key] = []
-        result[key].append(item)
-    return result
-\`\`\`
-
-> 💡 **提示**：始终保持代码的可读性和可维护性。
-
-| 方面 | 建议 | 优先级 |
-|------|------|--------|
-| 架构 | 分层设计 | ⭐⭐⭐ |
-| 测试 | 单元测试 | ⭐⭐⭐ |
-| 文档 | 内联注释 | ⭐⭐ |
-
-希望这个回答对你有帮助！如果有更多问题，请随时提问。`,
-
-  `好的，我来分析一下这个问题：
-
-### 方案对比
-
-**方案一：传统方法**
-- 优点：稳定可靠，社区支持好
-- 缺点：性能有瓶颈
-
-**方案二：新方法**
-- 优点：性能优异，扩展性强
-- 缺点：学习曲线较陡
-
-\`\`\`typescript
-// TypeScript 实现示例
-interface Config {
-  apiUrl: string;
-  timeout: number;
-  retryCount: number;
-}
-
-class ApiClient {
-  private config: Config;
-  
-  constructor(config: Config) {
-    this.config = config;
-  }
-  
-  async request<T>(endpoint: string): Promise<T> {
-    const response = await fetch(\`\${this.config.apiUrl}\${endpoint}\`);
-    return response.json();
-  }
-}
-\`\`\`
-
-综合来看，我推荐 **方案二**，因为它能更好地满足长期需求。`,
-
-  `# 完整指南
-
-## 第一步：环境搭建
-确保你已安装以下工具：
-- Node.js >= 18
-- Python >= 3.10
-- Git
-
-## 第二步：项目初始化
-
-\`\`\`bash
-# 创建项目
-npx create-vite@latest my-project --template react-ts
-cd my-project
-
-# 安装依赖
-npm install
-npm install tailwindcss @tailwindcss/vite
-\`\`\`
-
-## 第三步：核心配置
-
-\`\`\`json
-{
-  "compilerOptions": {
-    "target": "ES2020",
-    "module": "ESNext",
-    "strict": true
-  }
-}
-\`\`\`
-
-## 第四步：部署上线
-1. 构建生产版本
-2. 配置服务器
-3. 设置 CI/CD
-
----
-
-🎉 恭喜！按照以上步骤，你就能成功搭建项目了。`,
-];
-
 function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -373,30 +262,6 @@ export function ChatPage() {
       notificationService.requestPermission();
     }
   }, []);
-
-  const simulateStreaming = async (conversationId: string, messageId: string, fullText: string) => {
-    setIsStreaming(true);
-    let currentText = '';
-    const words = fullText.split('');
-
-    // 优化流式输出速度，减少延迟
-    for (let i = 0; i < words.length; i++) {
-      currentText += words[i];
-      // 每5个字符更新一次，提高响应速度
-      if (i % 5 === 0 || i === words.length - 1) {
-        updateMessage(conversationId, messageId, {
-          content: currentText,
-          isStreaming: true,
-        });
-        // 减少延迟时间，加快响应速度
-        const delay = words[i] === '\n' ? 10 : (words[i] === ' ' ? 5 : 2);
-        await new Promise(r => setTimeout(r, delay));
-      }
-    }
-
-    updateMessage(conversationId, messageId, { isStreaming: false });
-    setIsStreaming(false);
-  };
 
   const handleSwitchOllamaModel = async (newModelName: string) => {
     if (switchingModel) {
@@ -666,23 +531,16 @@ export function ChatPage() {
         });
       }
     } else {
-      // Simulate AI response for remote models
-      const responseText = aiResponses[Math.floor(Math.random() * aiResponses.length)];
-      await simulateStreaming(convId, aiMsgId, responseText);
-
-      toast.success(`${activeModel?.name || 'AI'} 回复完成`, { duration: 2000 });
-
-      // 发送桌面通知（仅在启用时）
-      const chatNotification = configStorage.get('chatNotification');
-      if (chatNotification?.enabled) {
-        const preview = responseText.slice(0, 100) + (responseText.length > 100 ? '...' : '');
-        notificationService.showChatComplete(activeModel?.name || 'AI', preview);
-      }
-
+      updateMessage(convId, aiMsgId, { 
+        content: '请先配置模型 API 或启动 Ollama 本地模型后再进行对话。\n\n您可以在以下位置进行配置：\n- **模型管理** 页面添加远程模型 API\n- **Ollama 管理器** 启动本地模型',
+        isStreaming: false 
+      });
+      setIsStreaming(false);
+      
       addLog({
         id: generateId(),
-        level: 'info',
-        message: `收到 ${activeModel?.name || 'AI'} 响应 (${responseText.length} 字符)`,
+        level: 'warn',
+        message: '未配置可用的模型，请先配置 API 或启动 Ollama',
         timestamp: Date.now(),
         module: 'Chat',
       });
