@@ -19,6 +19,7 @@ export interface AppConfig {
   };
   videoAutoPlay: boolean;
   closeConfirm: boolean;
+  galleryDefaultLayout: 'grid' | 'waterfall' | 'list';
   [key: string]: any;
 }
 
@@ -53,7 +54,8 @@ export class ConfigStorage {
         enabled: false
       },
       videoAutoPlay: true,
-      closeConfirm: true
+      closeConfirm: true,
+      galleryDefaultLayout: 'grid'
     };
   }
 

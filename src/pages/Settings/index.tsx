@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import {
-  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight
+  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { ThemeType, LogEntry } from '@/store';
@@ -125,6 +125,7 @@ export function SettingsPage() {
   const [dailyQuoteInterval, setDailyQuoteInterval] = useState<10 | 3600 | 86400>(10);
   const [chatNotificationEnabled, setChatNotificationEnabled] = useState(false);
   const [closeConfirm, setCloseConfirm] = useState(true);
+  const [galleryDefaultLayout, setGalleryDefaultLayout] = useState<'grid' | 'waterfall' | 'list'>('grid');
   const [storageReport, setStorageReport] = useState<StorageHealthReport | null>(null);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [logFilterLevel, setLogFilterLevel] = useState<string>('all');
@@ -184,6 +185,7 @@ export function SettingsPage() {
       const savedDailyQuote = configStorage.get('dailyQuote');
       const savedChatNotification = configStorage.get('chatNotification');
       const savedCloseConfirm = configStorage.get('closeConfirm');
+      const savedGalleryDefaultLayout = configStorage.get('galleryDefaultLayout');
 
       if (savedTheme) setTheme(savedTheme);
       if (savedSendOnEnter !== undefined) setSendOnEnter(savedSendOnEnter);
@@ -196,6 +198,7 @@ export function SettingsPage() {
         setChatNotificationEnabled(savedChatNotification.enabled ?? false);
       }
       if (savedCloseConfirm !== undefined) setCloseConfirm(savedCloseConfirm);
+      if (savedGalleryDefaultLayout) setGalleryDefaultLayout(savedGalleryDefaultLayout);
       setConfigLoaded(true);
     };
     loadSettings();
@@ -242,6 +245,12 @@ export function SettingsPage() {
       configStorage.set('closeConfirm', closeConfirm);
     }
   }, [closeConfirm, configLoaded]);
+
+  useEffect(() => {
+    if (configLoaded) {
+      configStorage.set('galleryDefaultLayout', galleryDefaultLayout);
+    }
+  }, [galleryDefaultLayout, configLoaded]);
 
   useEffect(() => {
     const loadStorageReport = async () => {
@@ -852,6 +861,41 @@ export function SettingsPage() {
                 <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                   关闭应用程序时显示确认弹窗，防止误操作
                 </p>
+              </div>
+
+              {/* Gallery Default Layout Settings */}
+              <div
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <LayoutGrid className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                  <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>图片管理默认布局</div>
+                </div>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                  设置图片管理功能页面的默认显示布局
+                </p>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'grid', label: '网格布局', desc: '整齐排列' },
+                    { value: 'waterfall', label: '瀑布流', desc: '自适应高度' },
+                    { value: 'list', label: '列表布局', desc: '详细信息' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setGalleryDefaultLayout(option.value as 'grid' | 'waterfall' | 'list')}
+                      className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                      style={{
+                        backgroundColor: galleryDefaultLayout === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                        color: galleryDefaultLayout === option.value ? 'white' : 'var(--text-secondary)',
+                        border: `1px solid ${galleryDefaultLayout === option.value ? 'var(--primary-color)' : 'var(--border-color)'}`
+                      }}
+                    >
+                      <div className="font-medium">{option.label}</div>
+                      <div className="text-[10px] opacity-70 mt-0.5">{option.desc}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Send on Enter */}

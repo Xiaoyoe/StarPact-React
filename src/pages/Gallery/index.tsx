@@ -9,6 +9,7 @@ import {
 import { ImageItem, ImageFolder, ViewMode, SortBy, SortOrder } from '@/types/gallery';
 import sharp from 'sharp';
 import { GalleryStorage, ImageMetadata, ImageAlbum } from '@/services/storage/GalleryStorage';
+import { configStorage } from '@/services/storage/ConfigStorage';
 import { useToast } from '@/components/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -202,6 +203,18 @@ export function GalleryPage() {
   const [importing, setImporting] = useState<boolean>(false);
   const [importProgress, setImportProgress] = useState<number>(0);
   const [isLoading, setIsLoading] = useState<boolean>(true); // 加载状态
+
+  // 从配置加载默认布局
+  useEffect(() => {
+    const loadDefaultLayout = async () => {
+      await configStorage.ready();
+      const defaultLayout = configStorage.get('galleryDefaultLayout');
+      if (defaultLayout) {
+        setViewMode(defaultLayout);
+      }
+    };
+    loadDefaultLayout();
+  }, []);
   
   // 当前文件夹
   const activeFolder = useMemo(() => {
