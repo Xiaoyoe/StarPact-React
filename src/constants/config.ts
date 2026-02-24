@@ -1,14 +1,14 @@
 export const APP_CONFIG = {
-  name: 'AI Model WebUI',
+  name: '星约',
   version: '1.0.0',
-  description: '智能模型交互平台',
+  description: '多功能智能桌面应用',
 } as const;
 
 export const STORAGE_KEYS = {
-  THEME: 'ai-webui-theme',
-  SETTINGS: 'ai-webui-settings',
-  MODELS: 'ai-webui-models',
-  CONVERSATIONS: 'ai-webui-conversations',
+  THEME: 'starpact-theme',
+  SETTINGS: 'starpact-settings',
+  MODELS: 'starpact-models',
+  CONVERSATIONS: 'starpact-conversations',
 } as const;
 
 export const API_CONFIG = {

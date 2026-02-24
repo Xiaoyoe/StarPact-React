@@ -126,6 +126,7 @@ export function SettingsPage() {
   const [chatNotificationEnabled, setChatNotificationEnabled] = useState(false);
   const [closeConfirm, setCloseConfirm] = useState(true);
   const [galleryDefaultLayout, setGalleryDefaultLayout] = useState<'grid' | 'waterfall' | 'list'>('grid');
+  const [appNameDisplay, setAppNameDisplay] = useState<'chinese' | 'english'>('english');
   const [storageReport, setStorageReport] = useState<StorageHealthReport | null>(null);
   const [configLoaded, setConfigLoaded] = useState(false);
   const [logFilterLevel, setLogFilterLevel] = useState<string>('all');
@@ -186,6 +187,7 @@ export function SettingsPage() {
       const savedChatNotification = configStorage.get('chatNotification');
       const savedCloseConfirm = configStorage.get('closeConfirm');
       const savedGalleryDefaultLayout = configStorage.get('galleryDefaultLayout');
+      const savedAppNameDisplay = configStorage.get('appNameDisplay');
 
       if (savedTheme) setTheme(savedTheme);
       if (savedSendOnEnter !== undefined) setSendOnEnter(savedSendOnEnter);
@@ -199,6 +201,7 @@ export function SettingsPage() {
       }
       if (savedCloseConfirm !== undefined) setCloseConfirm(savedCloseConfirm);
       if (savedGalleryDefaultLayout) setGalleryDefaultLayout(savedGalleryDefaultLayout);
+      if (savedAppNameDisplay) setAppNameDisplay(savedAppNameDisplay);
       setConfigLoaded(true);
     };
     loadSettings();
@@ -251,6 +254,12 @@ export function SettingsPage() {
       configStorage.set('galleryDefaultLayout', galleryDefaultLayout);
     }
   }, [galleryDefaultLayout, configLoaded]);
+
+  useEffect(() => {
+    if (configLoaded) {
+      configStorage.set('appNameDisplay', appNameDisplay);
+    }
+  }, [appNameDisplay, configLoaded]);
 
   useEffect(() => {
     const loadStorageReport = async () => {
@@ -763,6 +772,40 @@ export function SettingsPage() {
               <h2 className="mb-4 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
                 通用设置
               </h2>
+
+              {/* App Name Display Settings */}
+              <div
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Type className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                  <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>项目名称显示</div>
+                </div>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                  设置项目名称在界面上的显示方式
+                </p>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'chinese', label: '中文名称', desc: '星约' },
+                    { value: 'english', label: '英文名称', desc: 'Starpact' }
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setAppNameDisplay(option.value as 'chinese' | 'english')}
+                      className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                      style={{
+                        backgroundColor: appNameDisplay === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                        color: appNameDisplay === option.value ? 'white' : 'var(--text-secondary)',
+                        border: `1px solid ${appNameDisplay === option.value ? 'var(--primary-color)' : 'var(--border-color)'}`
+                      }}
+                    >
+                      <div className="font-medium">{option.label}</div>
+                      <div className="text-[10px] opacity-70 mt-0.5">{option.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {/* Daily Quote Settings */}
               <div

@@ -23,7 +23,8 @@ interface CustomTitleBarProps {
   showWindowControls?: boolean;
 }
 
-const DEFAULT_TITLE = 'AI Model WebUI';
+const DEFAULT_TITLE_CN = '星约';
+const DEFAULT_TITLE_EN = 'Starpact';
 
 const CustomTitleBar: React.FC<CustomTitleBarProps> = ({
   isElectronEnv = typeof window !== 'undefined' && !!window.electronAPI,
@@ -35,6 +36,7 @@ const CustomTitleBar: React.FC<CustomTitleBarProps> = ({
   const [dailyQuoteInterval, setDailyQuoteInterval] = useState<10 | 3600 | 86400>(10);
   const [closeConfirm, setCloseConfirm] = useState(true);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [appNameDisplay, setAppNameDisplay] = useState<'chinese' | 'english'>('english');
   const titleBarRef = useRef<HTMLDivElement>(null);
 
   const currentQuote = useMemo(() => dailyQuotes[quoteIndex], [quoteIndex]);
@@ -50,6 +52,10 @@ const CustomTitleBar: React.FC<CustomTitleBarProps> = ({
       const savedCloseConfirm = configStorage.get('closeConfirm');
       if (savedCloseConfirm !== undefined) {
         setCloseConfirm(savedCloseConfirm);
+      }
+      const savedAppNameDisplay = configStorage.get('appNameDisplay');
+      if (savedAppNameDisplay) {
+        setAppNameDisplay(savedAppNameDisplay);
       }
     };
     loadConfig();
@@ -173,7 +179,7 @@ const CustomTitleBar: React.FC<CustomTitleBarProps> = ({
         style={{ maxWidth: 'calc(100% - 120px)' }}
       >
         <h1 className="font-medium truncate text-sm transition-opacity duration-500" aria-level="1">
-          {dailyQuoteEnabled ? currentQuote : DEFAULT_TITLE}
+          {dailyQuoteEnabled ? currentQuote : (appNameDisplay === 'chinese' ? DEFAULT_TITLE_CN : DEFAULT_TITLE_EN)}
         </h1>
       </div>
       

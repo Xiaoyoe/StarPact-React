@@ -1,6 +1,6 @@
-# React + Electron + Node.js 多功能智能应用
+# 星约 (Starpact)
 
-一个基于 React、Electron 和 Node.js 的多功能桌面应用程序，集成了 AI 模型管理、对话功能、高级代码编辑、视频播放、图片管理等多种实用功能，提供丰富的主题选择和良好的用户体验。
+一个基于 React、Electron 和 Node.js 的多功能智能桌面应用程序，集成了 AI 模型管理、对话功能、高级代码编辑、视频播放、图片管理等多种实用功能，提供丰富的主题选择和良好的用户体验。
 
 ## 技术栈
 
@@ -301,8 +301,8 @@ npm run electron:build:portable
 #### 打包输出
 
 - **输出目录**：`dist-electron/`
-- **NSIS安装包**：`dist-electron/React Vite App Setup {版本号}.exe`
-- **便携式应用**：`dist-electron/React Vite App-Portable-{版本号}.exe`
+- **NSIS安装包**：`dist-electron/星约 Setup {版本号}.exe`
+- **便携式应用**：`dist-electron/星约-Portable-{版本号}.exe`
 
 ## Ollama 集成说明
 
@@ -763,4 +763,4 @@ MIT License
 
 ---
 
-**感谢使用 React + Electron + Node.js 多功能智能应用！**
+**感谢使用星约 (Starpact)！**

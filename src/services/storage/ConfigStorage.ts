@@ -20,6 +20,7 @@ export interface AppConfig {
   videoAutoPlay: boolean;
   closeConfirm: boolean;
   galleryDefaultLayout: 'grid' | 'waterfall' | 'list';
+  appNameDisplay: 'chinese' | 'english';
   [key: string]: any;
 }
 
@@ -55,7 +56,8 @@ export class ConfigStorage {
       },
       videoAutoPlay: true,
       closeConfirm: true,
-      galleryDefaultLayout: 'grid'
+      galleryDefaultLayout: 'grid',
+      appNameDisplay: 'english'
     };
   }
 

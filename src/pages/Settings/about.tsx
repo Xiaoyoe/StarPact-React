@@ -1,9 +1,29 @@
 import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { configStorage } from '@/services/storage/ConfigStorage';
 
 /**
  * 关于页面组件
  */
 export function AboutSection() {
+  const [appNameDisplay, setAppNameDisplay] = useState<'chinese' | 'english'>('english');
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      await configStorage.ready();
+      const savedAppNameDisplay = configStorage.get('appNameDisplay');
+      if (savedAppNameDisplay) {
+        setAppNameDisplay(savedAppNameDisplay);
+      }
+    };
+    loadConfig();
+
+    const checkInterval = setInterval(loadConfig, 1000);
+    return () => clearInterval(checkInterval);
+  }, []);
+
+  const appName = appNameDisplay === 'chinese' ? '星约' : 'Starpact';
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -18,10 +38,10 @@ export function AboutSection() {
           <span className="text-2xl font-bold" style={{ color: 'var(--primary-color)' }}>AI</span>
         </div>
         <h2 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>
-          AI Model WebUI
+          {appName}
         </h2>
         <p className="mt-1 text-sm" style={{ color: 'var(--text-tertiary)' }}>
-          智能模型交互平台 v1.0.0
+          多功能智能桌面应用 v1.0.0
         </p>
       </div>
 

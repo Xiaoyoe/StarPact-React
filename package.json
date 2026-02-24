@@ -1,9 +1,9 @@
 {
-  "name": "react-vite-tailwind",
+  "name": "starpact",
   "private": true,
   "version": "1.0.0",
-  "description": "React Vite Desktop Application",
-  "author": "Your Name",
+  "description": "星约 - 多功能智能桌面应用",
+  "author": "Starpact Team",
   "main": "main.cjs",
   "type": "module",
   "scripts": {
@@ -16,9 +16,9 @@
     "electron:build:portable": "npm run build && electron-builder --win --x64 --portable"
   },
   "build": {
-    "appId": "com.reactvite.app",
-    "productName": "React Vite App",
-    "copyright": "Copyright © 2024 ${author}",
+    "appId": "com.starpact.app",
+    "productName": "星约",
+    "copyright": "Copyright © 2025 Starpact Team",
     "directories": {
       "output": "dist-electron"
     },
@@ -43,7 +43,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "React Vite App"
+      "shortcutName": "星约"
     },
     "portable": {
       "artifactName": "${productName}-Portable-${version}.exe"

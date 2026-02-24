@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
   ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical
@@ -7,6 +7,7 @@ import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/components/Toast';
+import { configStorage } from '@/services/storage/ConfigStorage';
 
 interface PanelItem {
   id: string;
@@ -46,6 +47,21 @@ export function Sidebar() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const dragNodeRef = useRef<HTMLDivElement | null>(null);
+  const [appNameDisplay, setAppNameDisplay] = useState<'chinese' | 'english'>('english');
+
+  useEffect(() => {
+    const loadConfig = async () => {
+      await configStorage.ready();
+      const savedAppNameDisplay = configStorage.get('appNameDisplay');
+      if (savedAppNameDisplay) {
+        setAppNameDisplay(savedAppNameDisplay);
+      }
+    };
+    loadConfig();
+
+    const checkInterval = setInterval(loadConfig, 1000);
+    return () => clearInterval(checkInterval);
+  }, []);
 
   const activeModel = models.find(m => m.id === activeModelId);
   const isLightTheme = theme === 'light';
@@ -556,7 +572,7 @@ export function Sidebar() {
               <Bot size={18} color="white" />
             </div>
             <span className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
-              AI WebUI
+              {appNameDisplay === 'chinese' ? '星约' : 'Starpact'}
             </span>
           </motion.div>
         )}
