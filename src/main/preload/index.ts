@@ -66,7 +66,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     maximize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.MAXIMIZE),
     close: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.CLOSE),
     getMaximized: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.GET_MAXIMIZED),
+    resize: (width: number, height: number) => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.RESIZE, width, height),
+    getSize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.GET_SIZE),
   },
+};
 });
 
 declare global {
@@ -125,6 +128,8 @@ declare global {
         maximize: () => Promise<void>;
         close: () => Promise<void>;
         getMaximized: () => Promise<boolean>;
+        resize: (width: number, height: number) => Promise<{ success: boolean; width?: number; height?: number }>;
+        getSize: () => Promise<{ width: number; height: number } | null>;
       };
     };
   }

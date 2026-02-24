@@ -34,5 +34,7 @@ export const IPC_CHANNELS = {
     MAXIMIZE: 'window:maximize',
     CLOSE: 'window:close',
     GET_MAXIMIZED: 'window:getMaximized',
+    RESIZE: 'window:resize',
+    GET_SIZE: 'window:getSize',
   },
 } as const;

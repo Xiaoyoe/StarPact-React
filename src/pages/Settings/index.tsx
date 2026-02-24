@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo, memo } from 'react';
 import {
-  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid
+  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid, Maximize2
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { ThemeType, LogEntry } from '@/store';
@@ -132,6 +132,7 @@ export function SettingsPage() {
   const [logFilterLevel, setLogFilterLevel] = useState<string>('all');
   const [logSearchQuery, setLogSearchQuery] = useState('');
   const [logCurrentPage, setLogCurrentPage] = useState(1);
+  const [currentWindowSize, setCurrentWindowSize] = useState<{ width: number; height: number } | null>(null);
   const LOG_PAGE_SIZE = 30;
   const toast = useToast();
   
@@ -267,6 +268,18 @@ export function SettingsPage() {
       setStorageReport(report);
     };
     loadStorageReport();
+  }, []);
+
+  useEffect(() => {
+    const loadWindowSize = async () => {
+      if (typeof window !== 'undefined' && window.electronAPI?.window?.getSize) {
+        const size = await window.electronAPI.window.getSize();
+        if (size) {
+          setCurrentWindowSize(size);
+        }
+      }
+    };
+    loadWindowSize();
   }, []);
 
   const themeCategories = {
@@ -661,6 +674,73 @@ export function SettingsPage() {
                     </div>
                   </div>
                 ))}
+              </section>
+
+              {/* Window Size Selection */}
+              <section>
+                <h2 className="mb-1 text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  <Maximize2 size={16} className="mr-2 inline" />
+                  窗口大小
+                </h2>
+                <p className="mb-4 text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                  快速调整应用程序窗口大小
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { width: 1000, height: 625, name: '紧凑', desc: '1000 × 625' },
+                    { width: 1200, height: 750, name: '标准', desc: '1200 × 750' },
+                    { width: 1400, height: 900, name: '大窗口', desc: '1400 × 900' },
+                  ].map((size) => {
+                    const isActive = currentWindowSize?.width === size.width && currentWindowSize?.height === size.height;
+                    return (
+                      <button
+                        key={size.name}
+                        onClick={async () => {
+                          if (window.electronAPI?.window?.resize) {
+                            const result = await window.electronAPI.window.resize(size.width, size.height);
+                            if (result.success) {
+                              setCurrentWindowSize({ width: size.width, height: size.height });
+                              toast.success(`窗口已调整为 ${size.name} (${size.width} × ${size.height})`);
+                            }
+                          }
+                        }}
+                        className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
+                        style={{
+                          border: `2px solid ${isActive ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                          backgroundColor: 'var(--bg-secondary)',
+                        }}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <div 
+                            className="flex items-center justify-center rounded-lg"
+                            style={{ 
+                              width: size.width / 40, 
+                              height: size.height / 40,
+                              backgroundColor: isActive ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                              minWidth: '24px',
+                              minHeight: '18px',
+                              maxWidth: '40px',
+                              maxHeight: '25px',
+                            }}
+                          >
+                            <Maximize2 size={12} color={isActive ? 'white' : 'var(--text-tertiary)'} />
+                          </div>
+                        </div>
+                        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                          {size.name}
+                        </div>
+                        <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                          {size.desc}
+                        </div>
+                        {isActive && (
+                          <div className="mt-2 text-xs font-medium" style={{ color: 'var(--primary-color)' }}>
+                            ✓ 当前使用
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
               </section>
             </motion.div>
           )}

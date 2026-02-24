@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     minimize: () => ipcRenderer.send('window:minimize'),
     maximize: () => ipcRenderer.send('window:maximize'),
     close: () => ipcRenderer.send('window:close'),
+    resize: (width, height) => ipcRenderer.invoke('window:resize', width, height),
+    getSize: () => ipcRenderer.invoke('window:getSize'),
   },
   
   // 监听路径未配置通知

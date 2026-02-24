@@ -220,14 +220,48 @@ function registerWindowHandlers() {
     const window = event.sender.getOwnerBrowserWindow();
     window.close();
   });
+
+  // 处理窗口大小调整
+  ipcMain.handle('window:resize', async (event, width, height) => {
+    try {
+      const window = event.sender.getOwnerBrowserWindow();
+      if (window) {
+        if (window.isMaximized()) {
+          window.unmaximize();
+        }
+        window.setSize(width, height);
+        window.center();
+        return { success: true, width, height };
+      }
+      return { success: false };
+    } catch (error) {
+      console.error('调整窗口大小失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 获取窗口大小
+  ipcMain.handle('window:getSize', async (event) => {
+    try {
+      const window = event.sender.getOwnerBrowserWindow();
+      if (window) {
+        const [width, height] = window.getSize();
+        return { width, height };
+      }
+      return null;
+    } catch (error) {
+      console.error('获取窗口大小失败:', error);
+      return null;
+    }
+  });
 }
 
 function createWindow() {
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
-    minWidth: 1200,
-    minHeight: 700,
+    minWidth: 900,
+    minHeight: 600,
     frame: false,
     webPreferences: {
       preload: path.join(__dirname, 'src/main/preload/index.cjs'),
