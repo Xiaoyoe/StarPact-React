@@ -1,560 +1,119 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import {
-  getCharDiffs,
-  generateUnifiedDiff,
-  extractFromContent,
-  getTimestamp,
-  isValidSaveName,
-  type CharDiff,
-  type UnifiedDiffLine,
-} from '@/utils/diffEngine';
+import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { NovelEditor } from '@/components/NovelEditor';
 import { useToast } from '@/components/Toast';
+import { getTimestamp } from '@/utils/diffEngine';
 
-// ---- Storage helpers (localStorage-based persistence) ----
-const STORAGE_PREFIX = 'text_compare_';
-const AUTO_SAVE_KEY = STORAGE_PREFIX + 'auto_save';
-const SAVES_INDEX_KEY = STORAGE_PREFIX + 'saves_index';
+import { useCompareState } from './hooks/useCompareState';
+import { useSavedFiles } from './hooks/useSavedFiles';
+import { useAutoSave } from './hooks/useAutoSave';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
-interface SavedFile {
-  id: string;
-  name: string;
-  content: string;
-  side: 'left' | 'right';
-  timestamp: string;
-}
+import { SaveModal } from './components/SaveModal';
+import { DiffResultView } from './components/DiffResultView';
+import { Splitter } from './components/Splitter';
+import { SavedItem } from './components/SavedItem';
+import { CompareStatsView } from './components/CompareStats';
+import { FloatingToolbar } from './components/FloatingToolbar';
 
-function loadAutoSave(): { left: string; right: string } | null {
-  try {
-    const raw = localStorage.getItem(AUTO_SAVE_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  return null;
-}
+import styles from './styles/index.module.css';
 
-function saveAutoSave(left: string, right: string) {
-  try {
-    localStorage.setItem(AUTO_SAVE_KEY, JSON.stringify({ left, right, time: new Date().toISOString() }));
-  } catch { /* ignore */ }
-}
-
-function loadSavesIndex(): SavedFile[] {
-  try {
-    const raw = localStorage.getItem(SAVES_INDEX_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /* ignore */ }
-  return [];
-}
-
-function persistSavesIndex(saves: SavedFile[]) {
-  try {
-    localStorage.setItem(SAVES_INDEX_KEY, JSON.stringify(saves));
-  } catch { /* ignore */ }
-}
-
-
-
-// ---- Modal component ----
-function SaveModal({
-  visible,
-  onSave,
-  onCancel,
-}: {
-  visible: boolean;
-  onSave: (name: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState('');
-  const [error, setError] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (visible) {
-      setName('');
-      setError('');
-      setTimeout(() => inputRef.current?.focus(), 100);
-    }
-  }, [visible]);
-
-  if (!visible) return null;
-
-  const handleSave = () => {
-    if (!name.trim()) {
-      setError('名称不能为空');
-      return;
-    }
-    if (!isValidSaveName(name)) {
-      setError('只能输入英文、数字和下划线');
-      return;
-    }
-    onSave(name);
-  };
-
-  return (
-    <div
-      style={{
-        position: 'fixed', inset: 0, zIndex: 10000,
-        background: 'var(--bg-modal-overlay)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-      onClick={onCancel}
-    >
-      <div
-        style={{
-          background: 'var(--bg-modal)',
-          borderRadius: 'var(--border-radius)',
-          padding: 24,
-          minWidth: 360,
-          boxShadow: 'var(--shadow-lg)',
-        }}
-        onClick={e => e.stopPropagation()}
-      >
-        <h3 style={{ marginBottom: 16, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)' }}>自定义保存名称</h3>
-        <input
-          ref={inputRef}
-          value={name}
-          onChange={e => { setName(e.target.value); setError(''); }}
-          onKeyDown={e => e.key === 'Enter' && handleSave()}
-          placeholder="输入名称（英文、数字、下划线）"
-          style={{
-            width: '100%',
-            padding: '8px 12px',
-            border: `1px solid ${error ? 'var(--btn-danger-bg)' : 'var(--border-primary)'}`,
-            borderRadius: 'var(--border-radius-sm)',
-            fontSize: 14,
-            outline: 'none',
-            background: 'var(--bg-editor)',
-            color: 'var(--text-primary)',
-          }}
-        />
-        {error && <p style={{ color: 'var(--btn-danger-bg)', fontSize: 12, marginTop: 4 }}>{error}</p>}
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
-          <button onClick={onCancel} style={modalBtnStyle('secondary')}>取消</button>
-          <button onClick={handleSave} style={modalBtnStyle('primary')}>保存</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function modalBtnStyle(variant: 'primary' | 'secondary'): React.CSSProperties {
-  return {
-    padding: '6px 18px',
-    borderRadius: 'var(--border-radius-sm)',
-    border: 'none',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 500,
-    background: variant === 'primary' ? 'var(--btn-primary-bg)' : 'var(--btn-secondary-bg)',
-    color: variant === 'primary' ? 'var(--btn-primary-text)' : 'var(--btn-secondary-text)',
-  };
-}
-
-// ---- Git diff result view ----
-function DiffResultView({ diffLines, fontSize }: { diffLines: UnifiedDiffLine[]; fontSize: number }) {
-  if (diffLines.length === 0) {
-    return (
-      <div style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        height: '100%', color: 'var(--text-tertiary)', fontSize: 14,
-      }}>
-        点击"一键对比"查看差异结果
-      </div>
-    );
-  }
-
-  return (
-    <div style={{
-      height: '100%', overflowY: 'auto', padding: 12,
-      background: 'var(--bg-editor)',
-      fontFamily: "'Consolas', 'Monaco', 'Courier New', monospace",
-      fontSize: fontSize,
-      lineHeight: `${fontSize * 1.6}px`,
-    }}>
-      {/* Title */}
-      <div style={{
-        color: 'var(--diff-header-text)',
-        fontWeight: 700,
-        fontSize: fontSize + 2,
-        marginBottom: 4,
-      }}>
-        Git风格对比结果：
-      </div>
-      <div style={{
-        color: 'var(--diff-separator)',
-        fontWeight: 700,
-        marginBottom: 8,
-      }}>
-        {'='.repeat(60)}
-      </div>
-
-      {diffLines.map((line, i) => {
-        let bg = 'transparent';
-        let color = 'var(--diff-context-text)';
-        let fontWeight: number | string = 'normal';
-
-        switch (line.type) {
-          case 'file-old':
-          case 'file-new':
-            color = 'var(--diff-header-text)';
-            fontWeight = 700;
-            break;
-          case 'hunk':
-            color = 'var(--diff-separator)';
-            fontWeight = 600;
-            break;
-          case 'add':
-            bg = 'var(--diff-added-bg)';
-            color = 'var(--diff-added-text)';
-            break;
-          case 'delete':
-            bg = 'var(--diff-deleted-bg)';
-            color = 'var(--diff-deleted-text)';
-            break;
-          case 'context':
-            color = 'var(--diff-context-text)';
-            break;
-        }
-
-        const displayContent = line.type === 'hunk' && line.simplified
-          ? line.simplified
-          : line.content;
-
-        return (
-          <div
-            key={i}
-            style={{
-              background: bg,
-              color: color,
-              fontWeight: fontWeight,
-              padding: '1px 6px',
-              borderRadius: 2,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all',
-            }}
-          >
-            {displayContent}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// ---- Splitter ----
-function Splitter({ onDrag }: { onDrag: (dx: number) => void }) {
-  const dragging = useRef(false);
-  const lastX = useRef(0);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault();
-    dragging.current = true;
-    lastX.current = e.clientX;
-
-    const handleMouseMove = (ev: MouseEvent) => {
-      if (!dragging.current) return;
-      const dx = ev.clientX - lastX.current;
-      lastX.current = ev.clientX;
-      onDrag(dx);
-    };
-
-    const handleMouseUp = () => {
-      dragging.current = false;
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-  };
-
-  return (
-    <div
-      onMouseDown={handleMouseDown}
-      style={{
-        width: 6,
-        minWidth: 6,
-        cursor: 'col-resize',
-        background: 'var(--bg-splitter)',
-        transition: 'background var(--transition-speed)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-splitter-hover)')}
-      onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-splitter)')}
-    >
-      <div style={{
-        width: 2,
-        height: 30,
-        borderRadius: 1,
-        background: 'var(--text-tertiary)',
-        opacity: 0.5,
-      }} />
-    </div>
-  );
-}
-
-// ---- Saved file list item ----
-function SavedItem({
-  file,
-  onClick,
-  onDelete,
-}: {
-  file: SavedFile;
-  onClick: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 4,
-        padding: '4px 10px',
-        background: 'var(--bg-saved-item)',
-        borderRadius: 'var(--border-radius-sm)',
-        fontSize: 12,
-        whiteSpace: 'nowrap',
-        cursor: 'pointer',
-        border: '1px solid var(--border-primary)',
-        transition: 'background var(--transition-speed)',
-      }}
-      onClick={onClick}
-      onMouseEnter={e => (e.currentTarget.style.background = 'var(--bg-saved-item-hover)')}
-      onMouseLeave={e => (e.currentTarget.style.background = 'var(--bg-saved-item)')}
-    >
-      <span style={{ color: 'var(--text-primary)', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {file.name}
-      </span>
-      <span
-        onClick={e => { e.stopPropagation(); onDelete(); }}
-        style={{
-          marginLeft: 4,
-          color: 'var(--btn-danger-bg)',
-          fontWeight: 700,
-          fontSize: 14,
-          lineHeight: '14px',
-          cursor: 'pointer',
-          padding: '0 2px',
-        }}
-        title="删除"
-      >
-        ×
-      </span>
-    </div>
-  );
-}
-
-// ---- Button helper ----
-function ToolButton({
-  children,
-  onClick,
-  variant = 'secondary',
-  disabled = false,
-  title,
-  small = false,
-}: {
-  children: React.ReactNode;
-  onClick: () => void;
-  variant?: 'primary' | 'secondary' | 'danger' | 'success' | 'warning';
-  disabled?: boolean;
-  title?: string;
-  small?: boolean;
-}) {
-  const bgMap: Record<string, string> = {
-    primary: 'var(--btn-primary-bg)',
-    secondary: 'var(--btn-secondary-bg)',
-    danger: 'var(--btn-danger-bg)',
-    success: 'var(--btn-success-bg)',
-    warning: 'var(--btn-warning-bg)',
-  };
-  const hoverMap: Record<string, string> = {
-    primary: 'var(--btn-primary-hover)',
-    secondary: 'var(--btn-secondary-hover)',
-    danger: 'var(--btn-danger-hover)',
-    success: 'var(--btn-success-hover)',
-    warning: 'var(--btn-warning-hover)',
-  };
-  const colorMap: Record<string, string> = {
-    primary: 'var(--btn-primary-text)',
-    secondary: 'var(--btn-secondary-text)',
-    danger: 'var(--btn-danger-text)',
-    success: 'var(--btn-success-text)',
-    warning: 'var(--btn-warning-text)',
-  };
-
-  const [hovered, setHovered] = useState(false);
-
-  return (
-    <button
-      onClick={disabled ? undefined : onClick}
-      disabled={disabled}
-      title={title}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        padding: small ? '3px 8px' : '5px 14px',
-        borderRadius: 'var(--border-radius-sm)',
-        border: 'none',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        fontSize: small ? 11 : 12,
-        fontWeight: 500,
-        background: disabled ? 'var(--btn-disabled-bg)' : (hovered ? hoverMap[variant] : bgMap[variant]),
-        color: disabled ? 'var(--btn-disabled-text)' : colorMap[variant],
-        transition: 'background var(--transition-speed)',
-        whiteSpace: 'nowrap',
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-// ===================== MAIN COMPONENT =====================
 export function ComparePage() {
-  // ---- State ----
   const toast = useToast();
-  const [leftText, setLeftText] = useState('');
-  const [rightText, setRightText] = useState('');
-  const [leftDiffs, setLeftDiffs] = useState<CharDiff[] | null>(null);
-  const [rightDiffs, setRightDiffs] = useState<CharDiff[] | null>(null);
-  const [diffLines, setDiffLines] = useState<UnifiedDiffLine[]>([]);
-  const [viewMode, setViewMode] = useState<'editor' | 'diff'>('editor');
-  const [diffReady, setDiffReady] = useState(false);
-  const [fontSize, setFontSize] = useState(13);
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
-  const [savedFiles, setSavedFiles] = useState<SavedFile[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [modalSide, setModalSide] = useState<'left' | 'right'>('left');
-  const [leftWidth, setLeftWidth] = useState(50); // percentage
-  const [toolbarVisible, setToolbarVisible] = useState(true);
 
-  // ---- Auto load on mount ----
+  const [state, actions] = useCompareState();
+  const { savedFiles, saveFile, loadFile, deleteFile } = useSavedFiles();
+
+  const handleAutoSaveNotify = useCallback(() => {
+    toast.success('自动保存成功', { duration: 2000 });
+  }, [toast]);
+
+  const { autoSaveEnabled, setAutoSaveEnabled, loadSavedContent, saveContent } = useAutoSave(
+    state.leftText,
+    state.rightText,
+    handleAutoSaveNotify
+  );
+
   useEffect(() => {
-    // Load auto save
-    const saved = loadAutoSave();
-    if (saved) {
-      setLeftText(saved.left);
-      setRightText(saved.right);
-      toast.info('已自动加载上次保存的内容');
-    }
-    // Load saved files list
-    const files = loadSavesIndex();
-    setSavedFiles(files);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    const loadSaved = async () => {
+      const saved = await loadSavedContent();
+      if (saved) {
+        actions.setLeftText(saved.left);
+        actions.setRightText(saved.right);
+        toast.info('已自动加载上次保存的内容');
+      }
+    };
+    loadSaved();
+  }, []);
 
-  // ---- Auto save timer ----
-  useEffect(() => {
-    if (!autoSaveEnabled) return;
-    const interval = setInterval(() => {
-      saveAutoSave(leftText, rightText);
-      toast.success('自动保存成功', { duration: 2000 });
-    }, 60000);
-    return () => clearInterval(interval);
-  }, [autoSaveEnabled, leftText, rightText]);
-
-  // ---- Compare ----
   const handleCompare = useCallback(() => {
-    if (!leftText.trim() && !rightText.trim()) {
+    if (!state.leftText.trim() && !state.rightText.trim()) {
       toast.error('请输入文本后再进行对比');
       return;
     }
-
-    // Character-level diff
-    const { leftDiffs: ld, rightDiffs: rd } = getCharDiffs(leftText, rightText);
-    setLeftDiffs(ld);
-    setRightDiffs(rd);
-
-    // Git-style diff
-    const unified = generateUnifiedDiff(leftText, rightText);
-    setDiffLines(unified);
-
-    setDiffReady(true);
-    setViewMode('diff');
+    actions.handleCompare();
     toast.success('对比完成');
-  }, [leftText, rightText]);
+  }, [state.leftText, state.rightText, actions, toast]);
 
-  // ---- Clear ----
   const handleClear = useCallback(() => {
-    setLeftText('');
-    setRightText('');
-    setLeftDiffs(null);
-    setRightDiffs(null);
-    setDiffLines([]);
-    setDiffReady(false);
-    setViewMode('editor');
-    setLeftWidth(50);
+    actions.handleClear();
     toast.info('已清空所有内容');
-  }, []);
+  }, [actions, toast]);
 
-  // ---- Clear styles only ----
   const handleClearStyles = useCallback(() => {
-    setLeftDiffs(null);
-    setRightDiffs(null);
+    actions.handleClearStyles();
     toast.info('样式已清空');
-  }, []);
+  }, [actions, toast]);
 
-  // ---- Save helpers ----
-  const doSave = useCallback((side: 'left' | 'right', customName?: string) => {
-    const content = side === 'left' ? leftText : rightText;
-    if (!content.trim()) {
-      toast.error(`${side === 'left' ? '左侧' : '右侧'}内容为空，无法保存`);
+  const handleSaveLeft = useCallback(async () => {
+    if (!state.leftText.trim()) {
+      toast.error('左侧内容为空，无法保存');
       return;
     }
-
-    const fromContent = extractFromContent(content);
-    const defaultName = fromContent || (side === 'left' ? '左侧内容' : '右侧内容');
-    const name = customName || `${defaultName}_${getTimestamp()}`;
-
-    const file: SavedFile = {
-      id: `compare_${getTimestamp()}_${Math.random().toString(36).slice(2, 6)}`,
-      name,
-      content,
-      side,
-      timestamp: new Date().toISOString(),
-    };
-
-    const newSaves = [...savedFiles, file];
-    setSavedFiles(newSaves);
-    persistSavesIndex(newSaves);
+    const name = await saveFile('left', state.leftText);
     toast.success(`保存成功：${name}`);
-  }, [leftText, rightText, savedFiles]);
+  }, [state.leftText, saveFile, toast]);
 
-  const handleSaveLeft = useCallback(() => doSave('left'), [doSave]);
-  const handleSaveRight = useCallback(() => doSave('right'), [doSave]);
+  const handleSaveRight = useCallback(async () => {
+    if (!state.rightText.trim()) {
+      toast.error('右侧内容为空，无法保存');
+      return;
+    }
+    const name = await saveFile('right', state.rightText);
+    toast.success(`保存成功：${name}`);
+  }, [state.rightText, saveFile, toast]);
 
   const handleCustomSave = useCallback((side: 'left' | 'right') => {
     setModalSide(side);
     setModalVisible(true);
   }, []);
 
-  const handleModalSave = useCallback((name: string) => {
-    doSave(modalSide, name);
+  const handleModalSave = useCallback(async (name: string) => {
+    const content = modalSide === 'left' ? state.leftText : state.rightText;
+    if (!content.trim()) {
+      toast.error(`${modalSide === 'left' ? '左侧' : '右侧'}内容为空，无法保存`);
+      return;
+    }
+    await saveFile(modalSide, content, name);
     setModalVisible(false);
-  }, [doSave, modalSide]);
+    toast.success(`保存成功：${name}`);
+  }, [modalSide, state.leftText, state.rightText, saveFile, toast]);
 
-  // ---- Load saved file ----
-  const handleLoadFile = useCallback((file: SavedFile) => {
-    setRightText(file.content);
+  const handleLoadFile = useCallback((file: typeof savedFiles[0]) => {
+    const content = loadFile(file);
+    actions.setRightText(content);
     toast.success(`已加载：${file.name}`);
-  }, []);
+  }, [actions, loadFile, toast]);
 
-  // ---- Delete saved file ----
-  const handleDeleteFile = useCallback((id: string) => {
-    const newSaves = savedFiles.filter(f => f.id !== id);
-    setSavedFiles(newSaves);
-    persistSavesIndex(newSaves);
+  const handleDeleteFile = useCallback(async (id: string) => {
+    await deleteFile(id);
     toast.success('删除成功');
-  }, [savedFiles]);
+  }, [deleteFile, toast]);
 
-  // ---- Export result ----
   const handleExportResult = useCallback(() => {
-    if (diffLines.length === 0) {
+    if (state.diffLines.length === 0) {
       toast.error('没有对比结果可导出');
       return;
     }
@@ -562,7 +121,7 @@ export function ComparePage() {
     let md = '# 文本对比结果\n\n';
     md += `> 导出时间：${new Date().toLocaleString()}\n\n`;
     md += '```diff\n';
-    for (const line of diffLines) {
+    for (const line of state.diffLines) {
       const content = line.type === 'hunk' && line.simplified ? line.simplified : line.content;
       md += content + '\n';
     }
@@ -578,71 +137,37 @@ export function ComparePage() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     toast.success('导出成功');
-  }, [diffLines]);
+  }, [state.diffLines, toast]);
 
-  // ---- Font size ----
-  const handleFontIncrease = useCallback(() => {
-    setFontSize(prev => Math.min(prev + 2, 18));
-  }, []);
-  const handleFontDecrease = useCallback(() => {
-    setFontSize(prev => Math.max(prev - 2, 6));
-  }, []);
-  const handleFontReset = useCallback(() => {
-    setFontSize(13);
-  }, []);
+  const handleManualSave = useCallback(async () => {
+    await saveContent(state.leftText, state.rightText);
+    toast.success('手动保存成功');
+  }, [state.leftText, state.rightText, saveContent, toast]);
 
-  // ---- Splitter drag ----
-  const containerRef = useRef<HTMLDivElement>(null);
   const handleSplitterDrag = useCallback((dx: number) => {
     if (!containerRef.current) return;
-    const totalWidth = containerRef.current.offsetWidth;
-    const pctChange = (dx / totalWidth) * 100;
-    setLeftWidth(prev => Math.max(20, Math.min(80, prev + pctChange)));
-  }, []);
+    actions.handleSplitterDrag(dx, containerRef.current.offsetWidth);
+  }, [actions]);
 
-  // ---- View toggle ----
-  const handleToggleView = useCallback(() => {
-    setViewMode(prev => prev === 'editor' ? 'diff' : 'editor');
-  }, []);
-
-  // ---- Manual save to auto save ----
-  const handleManualAutoSave = useCallback(() => {
-    saveAutoSave(leftText, rightText);
-    toast.success('手动保存成功');
-  }, [leftText, rightText]);
+  useKeyboardShortcuts({
+    onCompare: handleCompare,
+    onSave: handleManualSave,
+    onClear: handleClear,
+    onCloseModal: () => setModalVisible(false),
+    enabled: !modalVisible,
+  });
 
   return (
-    <div style={{
-      width: '100%',
-      height: '100%',
-      display: 'flex',
-      flexDirection: 'column',
-      background: 'var(--bg-primary)',
-      overflow: 'hidden',
-    }}>
-      {/* Save Modal */}
+    <div className={styles.comparePage}>
       <SaveModal
         visible={modalVisible}
         onSave={handleModalSave}
         onCancel={() => setModalVisible(false)}
       />
 
-      {/* ======= Saved files bar ======= */}
       {savedFiles.length > 0 && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          padding: '4px 12px',
-          background: 'var(--bg-tertiary)',
-          borderBottom: '1px solid var(--border-primary)',
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          minHeight: 'var(--saved-list-height)',
-        }}>
-          <span style={{ fontSize: 11, color: 'var(--text-tertiary)', whiteSpace: 'nowrap', marginRight: 4 }}>
-            已保存:
-          </span>
+        <div className={styles.savedFilesBar}>
+          <span className={styles.savedFilesLabel}>已保存:</span>
           {savedFiles.map(f => (
             <SavedItem
               key={f.id}
@@ -654,147 +179,73 @@ export function ComparePage() {
         </div>
       )}
 
-      {/* ======= Main content area ======= */}
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          display: 'flex',
-          overflow: 'hidden',
-          position: 'relative',
-        }}
-      >
-        {viewMode === 'editor' ? (
+      <CompareStatsView stats={state.stats} visible={state.diffReady && state.viewMode === 'diff'} />
+
+      <div ref={containerRef} className={styles.mainContent}>
+        {state.viewMode === 'editor' ? (
           <>
-            {/* Left editor */}
-            <div style={{
-              width: `${leftWidth}%`,
-              minWidth: '20%',
-              maxWidth: '80%',
-              overflow: 'hidden',
-              borderRight: 'none',
-              display: 'flex',
-              flexDirection: 'column',
-            }}>
+            <div 
+              className={styles.editorPane}
+              style={{ width: `${state.leftWidth}%`, minWidth: '20%', maxWidth: '80%' }}
+            >
               <NovelEditor
-                value={leftText}
-                onChange={setLeftText}
+                value={state.leftText}
+                onChange={actions.setLeftText}
                 placeholder="在此输入原始文本..."
-                diffs={leftDiffs}
-                fontSize={fontSize}
+                diffs={state.leftDiffs}
+                fontSize={state.fontSize}
                 label="原始文本 (左侧)"
-                showLineNumbers={true}
+                showLineNumbers
               />
             </div>
 
-            {/* Splitter */}
             <Splitter onDrag={handleSplitterDrag} />
 
-            {/* Right editor */}
-            <div style={{
-              flex: 1,
-              overflow: 'hidden',
-              display: 'flex',
-              flexDirection: 'column',
-            }}>
+            <div className={styles.editorPane} style={{ flex: 1 }}>
               <NovelEditor
-                value={rightText}
-                onChange={setRightText}
+                value={state.rightText}
+                onChange={actions.setRightText}
                 placeholder="在此输入修改后文本..."
-                diffs={rightDiffs}
-                fontSize={fontSize}
+                diffs={state.rightDiffs}
+                fontSize={state.fontSize}
                 label="修改后文本 (右侧)"
-                showLineNumbers={true}
+                showLineNumbers
               />
             </div>
           </>
         ) : (
-          /* Diff result view */
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <DiffResultView diffLines={diffLines} fontSize={fontSize} />
+          <div className={styles.diffResultPane}>
+            <DiffResultView diffLines={state.diffLines} fontSize={state.fontSize} />
           </div>
         )}
+
+        <FloatingToolbar
+          onCompare={handleCompare}
+          onToggleView={actions.handleToggleView}
+          onSaveLeft={handleSaveLeft}
+          onSaveRight={handleSaveRight}
+          onCustomSaveLeft={() => handleCustomSave('left')}
+          onCustomSaveRight={() => handleCustomSave('right')}
+          onManualSave={handleManualSave}
+          onExportResult={handleExportResult}
+          onClear={handleClear}
+          onClearStyles={handleClearStyles}
+          onFontIncrease={actions.handleFontIncrease}
+          onFontDecrease={actions.handleFontDecrease}
+          onFontReset={actions.handleFontReset}
+          diffReady={state.diffReady}
+          viewMode={state.viewMode}
+          fontSize={state.fontSize}
+        />
       </div>
 
-      {/* ======= Bottom Toolbar ======= */}
-      {toolbarVisible && (
-        <div style={{
-          background: 'var(--bg-secondary)',
-          padding: '0 12px',
-        }}>
-          {/* Toolbar row */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 6,
-            height: 'var(--toolbar-height)',
-            flexWrap: 'wrap',
-            paddingTop: 6,
-          }}>
-            {/* Compare */}
-            <ToolButton onClick={handleCompare} variant="primary">⚡ 一键对比</ToolButton>
-
-            {/* View toggle */}
-            <ToolButton
-              onClick={handleToggleView}
-              disabled={!diffReady}
-              variant="secondary"
-            >
-              {viewMode === 'editor' ? '📊 查看结果' : '📝 查看原文'}
-            </ToolButton>
-
-            <div style={{ width: 1, height: 20, background: 'var(--border-primary)', margin: '0 2px' }} />
-
-            {/* Save buttons */}
-            <ToolButton onClick={handleSaveLeft} variant="success">💾 保存左侧</ToolButton>
-            <ToolButton onClick={handleSaveRight} variant="success">💾 保存右侧</ToolButton>
-            <ToolButton onClick={() => handleCustomSave('left')} variant="secondary" title="自定义名称保存左侧">📋 自定义保存左</ToolButton>
-            <ToolButton onClick={() => handleCustomSave('right')} variant="secondary" title="自定义名称保存右侧">📋 自定义保存右</ToolButton>
-            <ToolButton onClick={handleManualAutoSave} variant="secondary">💾 手动保存</ToolButton>
-
-            <div style={{ width: 1, height: 20, background: 'var(--border-primary)', margin: '0 2px' }} />
-
-            {/* Export */}
-            <ToolButton onClick={handleExportResult} variant="warning" disabled={!diffReady}>📤 导出结果</ToolButton>
-
-            <div style={{ width: 1, height: 20, background: 'var(--border-primary)', margin: '0 2px' }} />
-
-            {/* Clear */}
-            <ToolButton onClick={handleClear} variant="danger">🗑️ 清空内容</ToolButton>
-            <ToolButton onClick={handleClearStyles} variant="secondary">🧹 清空样式</ToolButton>
-
-            <div style={{ width: 1, height: 20, background: 'var(--border-primary)', margin: '0 2px' }} />
-
-            {/* Font size */}
-            <ToolButton onClick={handleFontDecrease} small>A-</ToolButton>
-            <span style={{ fontSize: 11, color: 'var(--text-secondary)', minWidth: 28, textAlign: 'center' }}>{fontSize}px</span>
-            <ToolButton onClick={handleFontIncrease} small>A+</ToolButton>
-            <ToolButton onClick={handleFontReset} small>重置</ToolButton>
-          </div>
+      <div className={styles.statusBar}>
+        <div className={styles.statusInfo}>
+          <span>左侧: {state.leftText.split('\n').length} 行, {state.leftText.length} 字符</span>
+          <span>右侧: {state.rightText.split('\n').length} 行, {state.rightText.length} 字符</span>
         </div>
-      )}
-
-      {/* ======= Status bar ======= */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '4px 12px',
-        background: 'var(--bg-secondary)',
-        borderTop: '1px solid var(--border-primary)',
-        fontSize: 11,
-        color: 'var(--text-tertiary)',
-      }}>
-        <div style={{ display: 'flex', gap: 16 }}>
-          <span>左侧: {leftText.split('\n').length} 行, {leftText.length} 字符</span>
-          <span>右侧: {rightText.split('\n').length} 行, {rightText.length} 字符</span>
-        </div>
-        <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-          {/* Auto save toggle */}
-          <label style={{
-            display: 'flex', alignItems: 'center', gap: 4, fontSize: 11,
-            color: 'var(--text-secondary)', cursor: 'pointer',
-          }}>
+        <div className={styles.statusActions}>
+          <label className={styles.autoSaveLabel}>
             <input
               type="checkbox"
               checked={autoSaveEnabled}
@@ -802,13 +253,6 @@ export function ComparePage() {
             />
             自动保存
           </label>
-          {/* Toolbar toggle */}
-          <ToolButton
-            onClick={() => setToolbarVisible(!toolbarVisible)}
-            small
-          >
-            {toolbarVisible ? '🔽 隐藏工具栏' : '🔼 显示工具栏'}
-          </ToolButton>
         </div>
       </div>
     </div>

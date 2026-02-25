@@ -1,42 +1,80 @@
 .comparePage {
   width: 100%;
-  height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
   overflow: hidden;
 }
 
-.toolbar {
+.savedFilesBar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  height: 40px;
-  background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  gap: 6px;
+  padding: 4px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-primary);
+  overflow-x: auto;
+  overflow-y: hidden;
+  min-height: var(--saved-list-height);
 }
 
-.editorContainer {
+.savedFilesLabel {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.mainContent {
   flex: 1;
   display: flex;
   overflow: hidden;
+  position: relative;
 }
 
-.diffResultContainer {
-  height: 100%;
-  overflow-y: auto;
-  padding: 12px;
-  background: var(--bg-editor);
-}
-
-.savedFilesList {
+.editorPane {
+  overflow: hidden;
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 16px;
+  flex-direction: column;
+}
+
+.diffResultPane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.statusBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
   background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
+  border-top: 1px solid var(--border-primary);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.statusInfo {
+  display: flex;
+  gap: 16px;
+}
+
+.statusActions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.autoSaveLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  cursor: pointer;
 }
 
 .modalOverlay {
@@ -55,4 +93,467 @@
   padding: 24px;
   min-width: 360px;
   box-shadow: var(--shadow-lg);
+}
+
+.modalTitle {
+  margin-bottom: 16px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.modalInput {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: var(--border-radius-sm);
+  font-size: 14px;
+  outline: none;
+  background: var(--bg-editor);
+  color: var(--text-primary);
+}
+
+.modalInputError {
+  border-color: var(--btn-danger-bg);
+}
+
+.modalError {
+  color: var(--btn-danger-bg);
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.modalActions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.diffResultView {
+  height: 100%;
+  overflow-y: auto;
+  padding: 12px;
+  background: var(--bg-editor);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  line-height: 1.6;
+}
+
+.diffHeader {
+  color: var(--diff-header-text);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.diffSeparator {
+  color: var(--diff-separator);
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.diffLine {
+  padding: 1px 6px;
+  border-radius: 2px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.diffLineFile {
+  color: var(--diff-header-text);
+  font-weight: 700;
+}
+
+.diffLineHunk {
+  color: var(--diff-separator);
+  font-weight: 600;
+}
+
+.diffLineAdd {
+  background: var(--diff-added-bg);
+  color: var(--diff-added-text);
+}
+
+.diffLineDelete {
+  background: var(--diff-deleted-bg);
+  color: var(--diff-deleted-text);
+}
+
+.diffLineContext {
+  color: var(--diff-context-text);
+}
+
+.diffEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.splitter {
+  width: 6px;
+  min-width: 6px;
+  cursor: col-resize;
+  background: var(--bg-splitter);
+  transition: background var(--transition-speed);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.splitter:hover {
+  background: var(--bg-splitter-hover);
+}
+
+.splitterHandle {
+  width: 2px;
+  height: 30px;
+  border-radius: 1px;
+  background: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+.savedItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: var(--bg-saved-item);
+  border-radius: var(--border-radius-sm);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  border: 1px solid var(--border-primary);
+  transition: background var(--transition-speed);
+}
+
+.savedItem:hover {
+  background: var(--bg-saved-item-hover);
+}
+
+.savedItemName {
+  color: var(--text-primary);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.savedItemDelete {
+  margin-left: 4px;
+  color: var(--btn-danger-bg);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 14px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+
+.toolButton {
+  padding: 5px 14px;
+  border-radius: var(--border-radius-sm);
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all var(--transition-speed);
+  white-space: nowrap;
+}
+
+.toolButtonSmall {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.toolButton:disabled {
+  cursor: not-allowed;
+  background: var(--btn-disabled-bg);
+  color: var(--btn-disabled-text);
+  opacity: 0.6;
+}
+
+.toolButtonPrimary {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+
+.toolButtonPrimary:hover:not(:disabled) {
+  background: var(--btn-primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.toolButtonSecondary {
+  background: var(--btn-secondary-bg);
+  color: var(--btn-secondary-text);
+}
+
+.toolButtonSecondary:hover:not(:disabled) {
+  background: var(--btn-secondary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.toolButtonDanger {
+  background: var(--btn-danger-bg);
+  color: var(--btn-danger-text);
+}
+
+.toolButtonDanger:hover:not(:disabled) {
+  background: var(--btn-danger-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.toolButtonSuccess {
+  background: var(--btn-success-bg);
+  color: var(--btn-success-text);
+}
+
+.toolButtonSuccess:hover:not(:disabled) {
+  background: var(--btn-success-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.toolButtonWarning {
+  background: var(--btn-warning-bg);
+  color: var(--btn-warning-text);
+}
+
+.toolButtonWarning:hover:not(:disabled) {
+  background: var(--btn-warning-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.compareStats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 11px;
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.statLabel {
+  color: var(--text-tertiary);
+}
+
+.statValue {
+  font-weight: 600;
+}
+
+.statAdded {
+  color: var(--diff-added-text);
+}
+
+.statDeleted {
+  color: var(--diff-deleted-text);
+}
+
+.statModified {
+  color: var(--btn-warning-bg);
+}
+
+.statSame {
+  color: var(--text-secondary);
+}
+
+.fontSizeControl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fontSizeValue {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-width: 28px;
+  text-align: center;
+}
+
+.floatingToolbar {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 100;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  min-width: 180px;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.floatingToolbar:hover {
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.2);
+}
+
+.floatingToolbarCollapsed {
+  min-width: 32px;
+  max-width: 32px;
+}
+
+.floatingToolbarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+  border-bottom: 1px solid var(--border-primary);
+  cursor: default;
+}
+
+.floatingToolbarTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.5px;
+}
+
+.floatingToolbarToggle {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.floatingToolbarToggle:hover {
+  background: var(--btn-primary-bg);
+  color: var(--btn-primary-text);
+}
+
+.floatingToolbarContent {
+  padding: 8px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.floatingToolbarSection {
+  margin-bottom: 4px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-primary);
+  transition: all 0.2s ease;
+}
+
+.floatingToolbarSection:hover {
+  border-color: var(--btn-primary-bg);
+}
+
+.floatingToolbarSectionHeader {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  cursor: pointer;
+  background: var(--bg-tertiary);
+  transition: background 0.2s ease;
+  gap: 8px;
+}
+
+.floatingToolbarSectionHeader:hover {
+  background: var(--bg-secondary);
+}
+
+.sectionIcon {
+  font-size: 14px;
+  width: 20px;
+  text-align: center;
+}
+
+.sectionTitle {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.sectionValue {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  background: var(--bg-primary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.sectionArrow {
+  font-size: 8px;
+  color: var(--text-tertiary);
+  transition: transform 0.2s ease;
+}
+
+.floatingToolbarSectionContent {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fontSizeButtons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.fontSizeDisplay {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 36px;
+  text-align: center;
+  background: var(--bg-tertiary);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.floatingToolbarCollapsed .floatingToolbarHeader {
+  flex-direction: column;
+  padding: 20px 6px;
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  gap: 10px;
+  min-height: 120px;
+}
+
+.floatingToolbarCollapsed .floatingToolbarTitle {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 3px;
+}
+
+.floatingToolbarCollapsed .floatingToolbarToggle {
+  display: none;
 }

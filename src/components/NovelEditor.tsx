@@ -64,9 +64,10 @@ export function NovelEditor({
 
     const heights: number[] = [];
     for (let i = 0; i < lines.length; i++) {
-      const text = lines[i] || '\u00A0';
+      const text = lines[i] !== '' ? lines[i] : '\u00A0';
       measureEl.textContent = text;
-      heights.push(measureEl.offsetHeight);
+      const height = measureEl.offsetHeight;
+      heights.push(height);
     }
 
     setLineHeights(prev => {
@@ -92,18 +93,28 @@ export function NovelEditor({
   const handleScroll = useCallback(() => {
     const ta = textareaRef.current;
     if (!ta) return;
-    if (gutterRef.current) {
-      gutterRef.current.scrollTop = ta.scrollTop;
-    }
-    if (highlightRef.current) {
-      highlightRef.current.scrollTop = ta.scrollTop;
-      highlightRef.current.scrollLeft = ta.scrollLeft;
-    }
+
+    const scrollTop = ta.scrollTop;
+    const scrollLeft = ta.scrollLeft;
+
+    requestAnimationFrame(() => {
+      if (gutterRef.current) {
+        gutterRef.current.scrollTop = scrollTop;
+        gutterRef.current.scrollLeft = scrollLeft;
+      }
+      if (highlightRef.current) {
+        highlightRef.current.scrollTop = scrollTop;
+        highlightRef.current.scrollLeft = scrollLeft;
+      }
+    });
   }, []);
 
   useEffect(() => {
-    handleScroll();
-  }, [value, handleScroll]);
+    const ta = textareaRef.current;
+    if (ta) {
+      handleScroll();
+    }
+  }, [value, handleScroll, lineHeights]);
 
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -150,20 +161,27 @@ export function NovelEditor({
 
   const gutterElements = useMemo(() => {
     return lines.map((_, i) => {
-      const h = lineHeights[i] || lineHeight;
+      const h = lineHeights[i] !== undefined ? lineHeights[i] : lineHeight;
       return (
         <div
           key={i}
           style={{
             height: h,
-            lineHeight: `${lineHeight}px`,
+            lineHeight: `${h}px`,
+            display: 'flex',
+            alignItems: 'flex-start',
+            justifyContent: 'flex-end',
             fontSize,
             textAlign: 'right',
             paddingRight: 10,
             paddingLeft: 6,
+            paddingTop: 0,
+            paddingBottom: 0,
             color: 'var(--text-line-number)',
             userSelect: 'none',
             boxSizing: 'border-box',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
           }}
         >
           {i + 1}

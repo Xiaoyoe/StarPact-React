@@ -13,7 +13,7 @@ export class IndexedDBStorage {
    */
   private constructor() {
     this.dbName = 'starpact-db';
-    this.dbVersion = 6; // 增加版本号，强制触发数据库升级
+    this.dbVersion = 7; // 增加版本号，添加 text-contrast 表
     this.initDatabase();
   }
 
@@ -99,6 +99,11 @@ export class IndexedDBStorage {
     // 创建 Ollama 模型文件存储
     if (!db.objectStoreNames.contains('ollama-model')) {
       db.createObjectStore('ollama-model', { keyPath: 'id' });
+    }
+
+    // 创建文本对比存储
+    if (!db.objectStoreNames.contains('text-contrast')) {
+      db.createObjectStore('text-contrast', { keyPath: 'id' });
     }
 
     console.log('IndexedDB数据库结构更新成功');
