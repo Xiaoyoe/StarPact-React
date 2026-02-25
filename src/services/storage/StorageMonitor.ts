@@ -27,7 +27,8 @@ export class StorageMonitor {
     'videos',
     'web-shortcuts',
     'chat-model',
-    'logs'
+    'logs',
+    'text-contrast'
   ];
 
   static async getStoreStats(storeName: string): Promise<StorageStats> {
