@@ -558,29 +558,63 @@ function VideoPlayerPage() {
 
                   </div>
                 ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center" style={{ 
+                  <div className="w-full h-full relative" style={{ 
                     backgroundColor: 'var(--bg-primary)'
                   }}>
-                    <div className="mb-6">
-                      <svg className="w-20 h-20" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24" style={{ color: 'var(--text-tertiary)' }}>
-                        <polygon points="23 7 16 12 23 17 23 7" />
-                        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
-                      </svg>
+                    <div className="absolute top-4 right-4 z-10">
+                      <button
+                        onClick={() => {
+                          const newSidebarOpen = !sidebarOpen;
+                          setSidebarOpen(newSidebarOpen);
+                          setShowToolbar(newSidebarOpen);
+                        }}
+                        className="flex items-center justify-center w-10 h-10 rounded-full transition-all duration-300 hover:scale-105"
+                        style={{ 
+                          backgroundColor: 'var(--bg-tertiary)', 
+                          color: 'var(--text-secondary)',
+                          border: '1px solid var(--border-color)'
+                        }}
+                        title={sidebarOpen ? '隐藏侧边栏' : '显示侧边栏'}
+                      >
+                        {sidebarOpen ? (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M12 17.25h8.25" />
+                          </svg>
+                        ) : (
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                          </svg>
+                        )}
+                      </button>
                     </div>
-                    <h3 className="text-xl font-semibold mb-3" style={{ color: 'var(--text-secondary)' }}>暂无视频文件</h3>
-                    <p className="text-center max-w-md mb-6" style={{ color: 'var(--text-tertiary)' }}>
-                      拖放视频文件到窗口中，或点击下方按钮选择文件
-                    </p>
-                    <button
-                      onClick={openFilePicker}
-                      className="px-6 py-3 rounded-full font-medium transition-all duration-300 shadow-lg shadow-[var(--primary-color)]/25"
-                      style={{ 
-                        background: 'linear-gradient(to right, var(--primary-color), var(--primary-dark))',
-                        color: 'white'
-                      }}
-                    >
-                      添加视频文件
-                    </button>
+                    <div className="w-full h-full flex flex-col items-center justify-center">
+                      <div className="mb-8 relative">
+                        <div className="absolute inset-0 rounded-full blur-2xl opacity-30" style={{ backgroundColor: 'var(--primary-color)' }} />
+                        <div className="relative w-24 h-24 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                          <svg className="w-12 h-12" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" style={{ color: 'var(--primary-color)' }}>
+                            <polygon points="23 7 16 12 23 17 23 7" />
+                            <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+                          </svg>
+                        </div>
+                      </div>
+                      <h3 className="text-2xl font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>暂无视频文件</h3>
+                      <p className="text-center max-w-md mb-8" style={{ color: 'var(--text-tertiary)' }}>
+                        拖放视频文件到窗口中，或点击下方按钮选择文件
+                      </p>
+                      <button
+                        onClick={openFilePicker}
+                        className="group relative flex items-center gap-2.5 px-6 py-3 font-medium transition-all duration-300 hover:opacity-80"
+                        style={{ 
+                          backgroundColor: 'var(--text-primary)',
+                          color: 'var(--bg-primary)'
+                        }}
+                      >
+                        <svg className="w-5 h-5 transition-transform duration-300 group-hover:-translate-y-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                        </svg>
+                        <span>添加视频文件</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
