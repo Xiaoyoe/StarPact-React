@@ -938,24 +938,6 @@ export function SettingsPage() {
 
 
 
-
-
-
-              {/* Security */}
-              <div
-                className="rounded-xl p-4"
-                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
-              >
-                <h3 className="mb-2 text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                  <Shield size={14} className="mr-1 inline" /> 安全
-                </h3>
-                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                  所有 API Key 均使用 AES-256 加密存储在本地设备，不会上传至任何远程服务器。
-                  对话记录仅保存在本地 SQLite 数据库中。
-                </p>
-              </div>
-
-
             </motion.div>
           )}
 

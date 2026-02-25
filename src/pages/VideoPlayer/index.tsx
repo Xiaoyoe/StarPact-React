@@ -588,31 +588,40 @@ function VideoPlayerPage() {
                       </button>
                     </div>
                     <div className="w-full h-full flex flex-col items-center justify-center">
-                      <div className="mb-8 relative">
-                        <div className="absolute inset-0 rounded-full blur-2xl opacity-30" style={{ backgroundColor: 'var(--primary-color)' }} />
-                        <div className="relative w-24 h-24 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-                          <svg className="w-12 h-12" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24" style={{ color: 'var(--primary-color)' }}>
+                      <div className="mb-10 relative">
+                        <div className="absolute inset-0 rounded-full blur-3xl opacity-20" style={{ backgroundColor: 'var(--primary-color)' }} />
+                        <div className="relative w-28 h-28 rounded-full flex items-center justify-center transition-transform duration-500 hover:scale-105" style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)' }}>
+                          <svg className="w-14 h-14 transition-all duration-300" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24" style={{ color: 'var(--primary-color)' }}>
                             <polygon points="23 7 16 12 23 17 23 7" />
                             <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
                           </svg>
                         </div>
                       </div>
                       <h3 className="text-2xl font-semibold mb-3" style={{ color: 'var(--text-primary)' }}>暂无视频文件</h3>
-                      <p className="text-center max-w-md mb-8" style={{ color: 'var(--text-tertiary)' }}>
+                      <p className="text-center max-w-md mb-10" style={{ color: 'var(--text-tertiary)' }}>
                         拖放视频文件到窗口中，或点击下方按钮选择文件
                       </p>
                       <button
                         onClick={openFilePicker}
-                        className="group relative flex items-center gap-2.5 px-6 py-3 font-medium transition-all duration-300 hover:opacity-80"
+                        className="group flex items-center gap-3 px-6 py-3.5 rounded-xl font-medium transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-lg"
                         style={{ 
-                          backgroundColor: 'var(--text-primary)',
-                          color: 'var(--bg-primary)'
+                          backgroundColor: 'var(--primary-color)',
+                          color: 'white',
+                          boxShadow: '0 2px 12px color-mix(in srgb, var(--primary-color) 25%, transparent)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.backgroundColor = 'color-mix(in srgb, var(--primary-color) 85%, white)';
+                          e.currentTarget.style.boxShadow = '0 12px 32px color-mix(in srgb, var(--primary-color) 40%, transparent)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.backgroundColor = 'var(--primary-color)';
+                          e.currentTarget.style.boxShadow = '0 2px 12px color-mix(in srgb, var(--primary-color) 25%, transparent)';
                         }}
                       >
-                        <svg className="w-5 h-5 transition-transform duration-300 group-hover:-translate-y-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 transition-transform duration-300 ease-out group-hover:scale-125 group-hover:-translate-y-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
                         </svg>
-                        <span>添加视频文件</span>
+                        <span className="transition-transform duration-300 ease-out group-hover:translate-x-1">添加视频文件</span>
                       </button>
                     </div>
                   </div>

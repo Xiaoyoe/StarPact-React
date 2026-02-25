@@ -1,8 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  Upload, FileText, Download, Save, RotateCcw, Copy, Info,
-  Sun, Moon, HelpCircle, AlertCircle, CheckCircle,
-  X, SlidersHorizontal, Eye, Play, Braces
+  Upload, FileText, Download, Save, RotateCcw, Copy,
+  HelpCircle, AlertCircle, CheckCircle,
+  X, SlidersHorizontal, Eye, Play, Braces, Trash2
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { CodeEditor } from '@/components/CodeEditor';
@@ -272,6 +272,79 @@ function HelpSection({ title, children }: { title: string; children: React.React
       <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-heading)', marginBottom: 4 }}>{title}</h3>
       <ul style={{ paddingLeft: 18, listStyle: 'disc' }}>{children}</ul>
     </div>
+  );
+}
+
+// ===================== CONFIRM MODAL =====================
+interface ConfirmModalProps {
+  visible: boolean;
+  title: string;
+  message: string;
+  confirmText?: string;
+  cancelText?: string;
+  variant?: 'warning' | 'danger';
+  type?: 'reset' | 'clear' | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}
+
+function ConfirmModal({ visible, title, message, confirmText = '确定', cancelText = '取消', variant = 'warning', onConfirm, onCancel }: ConfirmModalProps) {
+  if (!visible) return null;
+  
+  const variantColors = {
+    warning: { bg: 'var(--btn-warning-bg)', hover: 'var(--btn-warning-hover)', icon: '#f59e0b' },
+    danger: { bg: 'var(--btn-danger-bg)', hover: 'var(--btn-danger-hover)', icon: '#ef4444' },
+  };
+  
+  const colors = variantColors[variant];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 10000, background: 'var(--bg-modal-overlay)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      onClick={onCancel}
+    >
+      <motion.div
+        initial={{ scale: 0.92, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.92, opacity: 0 }}
+        onClick={e => e.stopPropagation()}
+        style={{ background: 'var(--bg-modal)', borderRadius: 12, padding: 24, maxWidth: 400, width: '90%', boxShadow: 'var(--shadow-xl)', border: '1px solid var(--border-primary)' }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 20 }}>
+          <div style={{
+            width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+            background: `${colors.icon}20`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <AlertCircle size={20} style={{ color: colors.icon }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-heading)', margin: 0, marginBottom: 8 }}>{title}</h2>
+            <p style={{ fontSize: 13, color: 'var(--text-secondary)', margin: 0, lineHeight: 1.6 }}>{message}</p>
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              padding: '8px 16px', borderRadius: 6, border: '1px solid var(--border-primary)',
+              background: 'var(--bg-secondary)', color: 'var(--text-secondary)',
+              fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            {cancelText}
+          </button>
+          <button
+            onClick={onConfirm}
+            style={{
+              padding: '8px 16px', borderRadius: 6, border: 'none',
+              background: colors.bg, color: 'white',
+              fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            {confirmText}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
   );
 }
 
@@ -545,7 +618,6 @@ export function IniConfigPage() {
   const [originalRaw, setOriginalRaw] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [fontSize, setFontSize] = useState(13);
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const [helpVisible, setHelpVisible] = useState(false);
   const [highlightLine, setHighlightLine] = useState<number | null>(null);
   const [leftPanelWidth, setLeftPanelWidth] = useState(55);
@@ -553,14 +625,12 @@ export function IniConfigPage() {
   const [editorContent, setEditorContent] = useState('');
   const [currentFileName, setCurrentFileName] = useState('');
   const [isModified, setIsModified] = useState(false);
+  const [confirmModal, setConfirmModal] = useState<{ visible: boolean; type: 'reset' | 'clear' | null }>({ visible: false, type: null });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const syncFromEditor = useRef(true);
   const syncFromPanel = useRef(false);
-
-  // ---- Theme ----
-  useEffect(() => { document.documentElement.setAttribute('data-theme', theme); }, [theme]);
 
   // ---- Sync editor content -> iniData ----
   useEffect(() => {
@@ -687,13 +757,17 @@ export function IniConfigPage() {
   // ---- Reset ----
   const handleReset = useCallback(() => {
     if (!originalRaw) { toast.error('没有原始内容可重置'); return; }
-    if (!confirm('确定要重置所有修改吗？')) return;
+    setConfirmModal({ visible: true, type: 'reset' });
+  }, [originalRaw]);
+
+  const confirmReset = useCallback(() => {
     const data = parseIniContent(originalRaw);
     syncFromPanel.current = false;
     setIniData(data);
     setEditorContent(originalRaw);
     setHighlightLine(null);
     setIsModified(false);
+    setConfirmModal({ visible: false, type: null });
     toast.success('已重置为原始内容');
     addLog({ id: generateId(), level: 'info', message: '重置INI配置', timestamp: Date.now(), module: 'IniConfig' });
   }, [originalRaw, addLog]);
@@ -748,6 +822,25 @@ export function IniConfigPage() {
     }
   }, [iniData, editorContent, originalRaw, addLog]);
 
+  // ---- Clear ----
+  const handleClear = useCallback(() => {
+    setConfirmModal({ visible: true, type: 'clear' });
+  }, []);
+
+  const confirmClear = useCallback(() => {
+    setIniData(null);
+    setOriginalRaw('');
+    setEditorContent('');
+    setEnabled(false);
+    setCurrentFileName('');
+    setIsModified(false);
+    setHighlightLine(null);
+    setConfirmModal({ visible: false, type: null });
+    localStorage.removeItem('ini_config_autosave');
+    toast.success('已清空所有内容');
+    addLog({ id: generateId(), level: 'info', message: '清空INI配置', timestamp: Date.now(), module: 'IniConfig' });
+  }, [addLog]);
+
   // ---- Splitter ----
   const handleSplitterDrag = useCallback((dx: number) => {
     if (!containerRef.current) return;
@@ -771,94 +864,20 @@ export function IniConfigPage() {
       <AnimatePresence>
         {helpVisible && <HelpModal visible={helpVisible} onClose={() => setHelpVisible(false)} />}
       </AnimatePresence>
-
-      {/* ======= TOP HEADER BAR ======= */}
-      <div style={{
-        background: 'var(--bg-toolbar)', borderBottom: '1px solid var(--border-primary)',
-        padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexShrink: 0, gap: 8,
-      }}>
-        {/* Left: Logo & file info */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{
-            width: 32, height: 32, borderRadius: 8,
-            background: 'linear-gradient(135deg, var(--primary-color), var(--primary-dark))',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Braces size={16} color="white" />
-          </div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)', lineHeight: 1.2 }}>
-              INI Config Editor
-            </div>
-            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {currentFileName ? (
-                <>
-                  <FileText size={10} />
-                  <span>{currentFileName}</span>
-                  {isModified && <span style={{ color: 'var(--ini-value)', fontWeight: 600 }}>● 已修改</span>}
-                </>
-              ) : (
-                <span>未加载文件</span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Center: Action buttons */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          <ToolBtn onClick={handleUpload} variant="primary" title="上传文件">
-            <Upload size={13} /> 上传
-          </ToolBtn>
-          <ToolBtn onClick={handleLoadSample} variant="ghost" title="加载示例">
-            <Play size={13} /> 示例
-          </ToolBtn>
-          <div style={{ width: 1, height: 20, background: 'var(--border-primary)', margin: '0 4px' }} />
-          <ToolBtn onClick={handleSave} variant="secondary" disabled={!enabled} title="保存">
-            <Save size={13} /> 保存
-          </ToolBtn>
-          <ToolBtn onClick={handleExport} variant="success" disabled={!enabled} title="导出">
-            <Download size={13} /> 导出
-          </ToolBtn>
-          <ToolBtn onClick={handleCopy} variant="secondary" disabled={!enabled} title="复制">
-            <Copy size={13} />
-          </ToolBtn>
-          <ToolBtn onClick={handleReset} variant="warning" disabled={!enabled} title="重置">
-            <RotateCcw size={13} />
-          </ToolBtn>
-        </div>
-
-        {/* Right: Settings */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          {/* Font size selector */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-secondary)', borderRadius: 6, padding: '2px 4px' }}>
-            {[12, 13, 14, 16].map(s => (
-              <button key={s} onClick={() => setFontSize(s)} style={{
-                padding: '3px 7px', borderRadius: 4, border: 'none', fontSize: 10, fontWeight: fontSize === s ? 600 : 400,
-                background: fontSize === s ? 'var(--bg-accent-subtle)' : 'transparent',
-                color: fontSize === s ? 'var(--text-accent)' : 'var(--text-tertiary)',
-                cursor: 'pointer',
-              }}>
-                {s}
-              </button>
-            ))}
-          </div>
-          <button onClick={() => setTheme(t => t === 'light' ? 'dark' : 'light')} title="切换主题" style={{
-            width: 30, height: 30, borderRadius: 8, border: '1px solid var(--border-primary)',
-            background: 'var(--bg-secondary)', cursor: 'pointer', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)',
-          }}>
-            {theme === 'light' ? <Moon size={14} /> : <Sun size={14} />}
-          </button>
-          <button onClick={() => setHelpVisible(true)} title="帮助" style={{
-            width: 30, height: 30, borderRadius: 8, border: '1px solid var(--border-primary)',
-            background: 'var(--bg-secondary)', cursor: 'pointer', display: 'flex',
-            alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)',
-          }}>
-            <HelpCircle size={14} />
-          </button>
-        </div>
-      </div>
+      <AnimatePresence>
+        {confirmModal.visible && (
+          <ConfirmModal
+            visible={confirmModal.visible}
+            type={confirmModal.type}
+            title={confirmModal.type === 'reset' ? '重置确认' : '清空确认'}
+            message={confirmModal.type === 'reset' ? '确定要重置所有修改吗？此操作将恢复为上次上传的原始内容。' : '确定要清空所有内容吗？此操作不可撤销。'}
+            confirmText={confirmModal.type === 'reset' ? '重置' : '清空'}
+            variant={confirmModal.type === 'reset' ? 'warning' : 'danger'}
+            onConfirm={confirmModal.type === 'reset' ? confirmReset : confirmClear}
+            onCancel={() => setConfirmModal({ visible: false, type: null })}
+          />
+        )}
+      </AnimatePresence>
 
       {/* ======= MAIN CONTENT ======= */}
       <div ref={containerRef} style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
@@ -875,12 +894,7 @@ export function IniConfigPage() {
             flexShrink: 0,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#ff5f57' }} />
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#febc2e' }} />
-                <div style={{ width: 10, height: 10, borderRadius: '50%', background: '#28c840' }} />
-              </div>
-              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)', marginLeft: 4 }}>
+              <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>
                 {currentFileName || 'untitled.modelfile'}
               </span>
             </div>
@@ -1069,6 +1083,91 @@ export function IniConfigPage() {
               </div>
             )}
           </div>
+        </div>
+      </div>
+
+      {/* ======= BOTTOM TOOLBAR BAR ======= */}
+      <div style={{
+        background: 'var(--bg-toolbar)', borderTop: '1px solid var(--border-primary)',
+        padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        flexShrink: 0, gap: 8,
+      }}>
+        {/* Left: Logo & status */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{
+            width: 32, height: 32, borderRadius: 8,
+            background: 'linear-gradient(135deg, var(--primary-color), var(--primary-dark))',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Braces size={16} color="white" />
+          </div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-heading)', lineHeight: 1.2 }}>
+              INI Config Editor
+            </div>
+            <div style={{ fontSize: 11, color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {enabled ? (
+                <>
+                  <span>{lineCount} 行</span>
+                  <span>·</span>
+                  <span>{charCount} 字符</span>
+                  {isModified && <span style={{ color: 'var(--ini-value)', fontWeight: 600 }}>● 已修改</span>}
+                </>
+              ) : (
+                <span>未加载文件</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Center: Action buttons */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <ToolBtn onClick={handleUpload} variant="primary" title="上传文件">
+            <Upload size={13} /> 上传
+          </ToolBtn>
+          <ToolBtn onClick={handleLoadSample} variant="ghost" title="加载示例">
+            <Play size={13} /> 示例
+          </ToolBtn>
+          <div style={{ width: 1, height: 20, background: 'var(--border-primary)', margin: '0 4px' }} />
+          <ToolBtn onClick={handleSave} variant="secondary" disabled={!enabled} title="保存">
+            <Save size={13} /> 保存
+          </ToolBtn>
+          <ToolBtn onClick={handleExport} variant="success" disabled={!enabled} title="导出">
+            <Download size={13} /> 导出
+          </ToolBtn>
+          <ToolBtn onClick={handleCopy} variant="secondary" disabled={!enabled} title="复制">
+            <Copy size={13} />
+          </ToolBtn>
+          <ToolBtn onClick={handleReset} variant="warning" disabled={!enabled} title="重置">
+            <RotateCcw size={13} />
+          </ToolBtn>
+          <ToolBtn onClick={handleClear} variant="danger" disabled={!enabled} title="清空">
+            <Trash2 size={13} />
+          </ToolBtn>
+        </div>
+
+        {/* Right: Settings */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          {/* Font size selector */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: 'var(--bg-secondary)', borderRadius: 6, padding: '2px 4px' }}>
+            {[12, 13, 14, 16].map(s => (
+              <button key={s} onClick={() => setFontSize(s)} style={{
+                padding: '3px 7px', borderRadius: 4, border: 'none', fontSize: 10, fontWeight: fontSize === s ? 600 : 400,
+                background: fontSize === s ? 'var(--bg-accent-subtle)' : 'transparent',
+                color: fontSize === s ? 'var(--text-accent)' : 'var(--text-tertiary)',
+                cursor: 'pointer',
+              }}>
+                {s}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setHelpVisible(true)} title="帮助" style={{
+            width: 30, height: 30, borderRadius: 8, border: '1px solid var(--border-primary)',
+            background: 'var(--bg-secondary)', cursor: 'pointer', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)',
+          }}>
+            <HelpCircle size={14} />
+          </button>
         </div>
       </div>
     </div>

@@ -679,7 +679,7 @@ export function CodeEditor({
         minHeight,
         maxHeight: maxHeight || '100%',
         background: 'var(--bg-editor, #1e1e1e)',
-        borderRadius: 'var(--border-radius, 6px)',
+        borderRadius: 0,
         border: `1.5px solid ${isFocused ? 'var(--border-focus, #61afef)' : 'var(--border-color, #3c3c3c)'}`,
         overflow: 'hidden',
         transition: 'border-color 0.2s ease',
