@@ -178,9 +178,26 @@ const CustomTitleBar: React.FC<CustomTitleBarProps> = ({
         aria-live="polite" 
         style={{ maxWidth: 'calc(100% - 120px)' }}
       >
-        <h1 className="font-medium truncate text-sm transition-opacity duration-500" aria-level="1">
-          {dailyQuoteEnabled ? currentQuote : (appNameDisplay === 'chinese' ? DEFAULT_TITLE_CN : DEFAULT_TITLE_EN)}
-        </h1>
+        <AnimatePresence mode="wait">
+          <motion.h1
+            key={dailyQuoteEnabled ? quoteIndex : 'title'}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            transition={{ duration: 0.3, ease: 'easeOut' }}
+            className="truncate transition-all duration-300"
+            style={{
+              fontSize: dailyQuoteEnabled ? '13px' : '14px',
+              fontWeight: dailyQuoteEnabled ? 400 : 500,
+              fontStyle: dailyQuoteEnabled ? 'italic' : 'normal',
+              color: dailyQuoteEnabled ? 'var(--text-secondary)' : 'var(--text-primary)',
+              letterSpacing: dailyQuoteEnabled ? '0.02em' : 'normal',
+            }}
+            aria-level={1}
+          >
+            {dailyQuoteEnabled ? currentQuote : (appNameDisplay === 'chinese' ? DEFAULT_TITLE_CN : DEFAULT_TITLE_EN)}
+          </motion.h1>
+        </AnimatePresence>
       </div>
       
       {showWindowControls && (
