@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import {
-  Play, Square, RefreshCw, Download, Trash2, Check, AlertCircle,
-  Activity, HardDrive, Clock, Zap, Settings2, ChevronDown
+  Play, Square, RefreshCw, Download, Trash2, AlertCircle,
+  Activity, HardDrive, Clock, Zap, Settings2, Copy, X
 } from 'lucide-react';
 import { useStore } from '@/store';
 import { motion, AnimatePresence } from 'framer-motion';
-import type { OllamaModel, OllamaPullProgress } from '@/shared/types/ollama';
+import type { OllamaPullProgress } from '@/shared/types/ollama';
 
 export function OllamaManager() {
   const {
@@ -21,6 +21,10 @@ export function OllamaManager() {
   const [pullProgress, setPullProgress] = useState<OllamaPullProgress | null>(null);
   const [showConfig, setShowConfig] = useState(false);
   const [config, setConfig] = useState({ host: 'localhost', port: 11434 });
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copySource, setCopySource] = useState<string>('');
+  const [copyDestination, setCopyDestination] = useState<string>('');
+  const [copying, setCopying] = useState(false);
 
   useEffect(() => {
     if (!window.electronAPI?.ollama) return;
@@ -131,6 +135,30 @@ export function OllamaManager() {
       await loadOllamaModels();
     } catch (error) {
       addOllamaLog({ type: 'error', message: `删除模型 ${modelName} 失败` });
+    }
+  };
+
+  const handleOpenCopyModal = (modelName: string) => {
+    setCopySource(modelName);
+    setCopyDestination(`${modelName}-copy`);
+    setShowCopyModal(true);
+  };
+
+  const handleCopyModel = async () => {
+    if (!copySource || !copyDestination || !window.electronAPI?.ollama) return;
+    
+    setCopying(true);
+    addOllamaLog({ type: 'info', message: `正在复制模型 ${copySource} 到 ${copyDestination}...` });
+    
+    try {
+      await window.electronAPI.ollama.copyModel(copySource, copyDestination);
+      addOllamaLog({ type: 'info', message: `模型已复制: ${copySource} -> ${copyDestination}` });
+      setShowCopyModal(false);
+      await loadOllamaModels();
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `复制模型失败` });
+    } finally {
+      setCopying(false);
     }
   };
 
@@ -378,6 +406,14 @@ export function OllamaManager() {
 
                     <div className="flex gap-2">
                       <button
+                        onClick={() => handleOpenCopyModal(model.name)}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+                        style={{ color: 'var(--text-tertiary)' }}
+                        title="复制模型"
+                      >
+                        <Copy size={14} />
+                      </button>
+                      <button
                         onClick={() => handleDeleteModel(model.name)}
                         className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
                         style={{ color: 'var(--text-tertiary)' }}
@@ -514,6 +550,105 @@ export function OllamaManager() {
           )}
         </div>
       </div>
+
+      <AnimatePresence>
+        {showCopyModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+            onClick={() => setShowCopyModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="w-full max-w-md rounded-xl p-6"
+              style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="mb-4 flex items-center justify-between">
+                <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  复制模型
+                </h3>
+                <button
+                  onClick={() => setShowCopyModal(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    源模型
+                  </label>
+                  <input
+                    type="text"
+                    value={copySource}
+                    onChange={(e) => setCopySource(e.target.value)}
+                    className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                    style={{
+                      backgroundColor: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-primary)',
+                    }}
+                    placeholder="源模型名称"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    新模型名称
+                  </label>
+                  <input
+                    type="text"
+                    value={copyDestination}
+                    onChange={(e) => setCopyDestination(e.target.value)}
+                    className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                    style={{
+                      backgroundColor: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-primary)',
+                    }}
+                    placeholder="新模型名称"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => setShowCopyModal(false)}
+                    className="rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                    style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleCopyModel}
+                    disabled={copying || !copySource || !copyDestination}
+                    className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-all disabled:opacity-50"
+                    style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+                  >
+                    {copying ? (
+                      <>
+                        <RefreshCw size={14} className="animate-spin" /> 复制中...
+                      </>
+                    ) : (
+                      <>
+                        <Copy size={14} /> 复制
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

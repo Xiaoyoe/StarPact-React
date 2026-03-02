@@ -4,11 +4,61 @@ import dailyQuotes from '@/styles/themes/quotes/daily_quotes.json';
 import { configStorage } from '@/services/storage/ConfigStorage';
 
 interface ElectronAPI {
+  ollama: {
+    checkStatus: () => Promise<any>;
+    start: () => Promise<void>;
+    stop: () => Promise<void>;
+    restart: () => Promise<void>;
+    getConfig: () => Promise<any>;
+    updateConfig: (config: any) => Promise<any>;
+    getModels: () => Promise<any[]>;
+    chat: (options: any) => Promise<any>;
+    streamChat: (options: any) => Promise<any>;
+    pullModel: (modelName: string) => Promise<void>;
+    deleteModel: (modelName: string) => Promise<void>;
+    getModelInfo: (modelName: string) => Promise<any>;
+    copyModel: (source: string, destination: string) => Promise<void>;
+    generateEmbedding: (text: string, model?: string) => Promise<number[]>;
+    ps: () => Promise<any>;
+    createModel: (name: string, modelfile: string) => Promise<any>;
+    onStatus: (callback: (status: any) => void) => () => void;
+    onLog: (callback: (log: any) => void) => () => void;
+    onChatChunk: (callback: (chunk: string) => void) => () => void;
+    onPullProgress: (callback: (progress: any) => void) => () => void;
+  };
+  file: {
+    selectFolder: (options?: {
+      title?: string;
+      defaultPath?: string;
+    }) => Promise<{
+      success: boolean;
+      path: string | null;
+      error?: string;
+    }>;
+    selectFile: (options?: {
+      title?: string;
+      defaultPath?: string;
+      filters?: Array<{ name: string; extensions: string[] }>;
+      multi?: boolean;
+    }) => Promise<{
+      success: boolean;
+      filePath: string | null;
+      filePaths?: string[] | null;
+      error?: string;
+    }>;
+    readFile: (filePath: string, encoding?: string) => Promise<{
+      success: boolean;
+      content: string | null;
+      error?: string;
+    }>;
+  };
   window: {
     minimize: () => Promise<void>;
     maximize: () => Promise<void>;
     close: () => Promise<void>;
     getMaximized: () => Promise<boolean>;
+    resize: (width: number, height: number) => Promise<{ success: boolean; width?: number; height?: number }>;
+    getSize: () => Promise<{ width: number; height: number } | null>;
   };
 }
 

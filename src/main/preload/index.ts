@@ -69,7 +69,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resize: (width: number, height: number) => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.RESIZE, width, height),
     getSize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.GET_SIZE),
   },
-};
 });
 
 declare global {

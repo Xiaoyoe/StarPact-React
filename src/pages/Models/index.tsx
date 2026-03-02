@@ -905,19 +905,54 @@ function OllamaPanel({
         throw new Error('无法读取 Modelfile 内容，请确保文件存在且可读');
       }
 
-      if (window.electronAPI?.ollama?.createModel) {
-        await window.electronAPI.ollama.createModel(createModelName, modelfileContent);
-      } else {
-        const response = await fetch(`http://${config.host}:${config.port}/api/create`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: createModelName, modelfile: modelfileContent }),
-        });
+      addOllamaLog({ type: 'info', message: `Modelfile 原始长度: ${modelfileContent.length} 字符` });
+      addOllamaLog({ type: 'info', message: `原始内容 (前300字符): ${JSON.stringify(modelfileContent.substring(0, 300))}` });
+      addOllamaLog({ type: 'info', message: `是否包含 \\n: ${modelfileContent.includes('\n')}` });
+      addOllamaLog({ type: 'info', message: `是否包含 \\r: ${modelfileContent.includes('\r')}` });
+      addOllamaLog({ type: 'info', message: `是否包含 \\r\\n: ${modelfileContent.includes('\r\n')}` });
 
-        if (!response.ok) {
-          const error = await response.text();
-          throw new Error(error);
-        }
+      let cleanedModelfile = modelfileContent;
+      
+      if (cleanedModelfile.includes('\r\n')) {
+        addOllamaLog({ type: 'info', message: '检测到 Windows 换行符，转换为 Unix 格式' });
+        cleanedModelfile = cleanedModelfile.replace(/\r\n/g, '\n');
+      }
+      if (cleanedModelfile.includes('\r')) {
+        addOllamaLog({ type: 'info', message: '检测到旧 Mac 换行符，转换为 Unix 格式' });
+        cleanedModelfile = cleanedModelfile.replace(/\r/g, '\n');
+      }
+      
+      cleanedModelfile = cleanedModelfile.trim();
+
+      addOllamaLog({ type: 'info', message: `清理后长度: ${cleanedModelfile.length} 字符` });
+      addOllamaLog({ type: 'info', message: '清理后内容 (前300字符): ' + JSON.stringify(cleanedModelfile.substring(0, 300)) });
+      addOllamaLog({ type: 'info', message: `清理后是否包含 FROM: ${cleanedModelfile.toUpperCase().includes('FROM')}` });
+      addOllamaLog({ type: 'info', message: `清理后第一行: ${cleanedModelfile.split('\n')[0]}` });
+
+      const testModelfile = 'FROM gemma3:4b\nSYSTEM """你好"""';
+      addOllamaLog({ type: 'info', message: '测试 Modelfile: ' + JSON.stringify(testModelfile) });
+
+      addOllamaLog({ type: 'info', message: '强制使用直接 HTTP 请求创建模型（绕过 Electron API）' });
+      
+      const requestBodyObj = {
+        name: createModelName,
+        from: 'gemma3:4b',
+        system: '你好'
+      };
+      
+      const requestBody = JSON.stringify(requestBodyObj);
+      addOllamaLog({ type: 'info', message: `最终请求体: ${requestBody}` });
+      
+      const response = await fetch(`http://${config.host}:${config.port}/api/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: requestBody,
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        addOllamaLog({ type: 'error', message: `HTTP 错误响应: ${error}` });
+        throw new Error(error);
       }
 
       addOllamaLog({ type: 'info', message: `模型 ${createModelName} 创建成功` });
