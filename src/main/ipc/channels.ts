@@ -37,4 +37,11 @@ export const IPC_CHANNELS = {
     RESIZE: 'window:resize',
     GET_SIZE: 'window:getSize',
   },
+  FFMPEG: {
+    EXECUTE: 'ffmpeg:execute',
+    EXECUTE_WITH_PROGRESS: 'ffmpeg:executeWithProgress',
+    STOP: 'ffmpeg:stop',
+    GET_MEDIA_INFO: 'ffmpeg:getMediaInfo',
+    VALIDATE_PATH: 'ffmpeg:validatePath',
+  },
 } as const;

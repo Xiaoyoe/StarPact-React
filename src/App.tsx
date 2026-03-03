@@ -9,6 +9,7 @@ import { IniConfigPage } from '@/pages/IniConfig';
 import { GalleryPage } from '@/pages/Gallery';
 import VideoPlayerPage from '@/pages/VideoPlayer';
 import PromptTemplatesPage from '@/pages/PromptTemplates';
+import { MediaToolsPage } from '@/pages/MediaTools';
 import { LogsPanel } from '@/components/LogsPanel';
 import { OllamaModal } from '@/components/OllamaModal';
 import { WebShortcutPopup } from '@/components/WebShortcutPopup';
@@ -38,6 +39,7 @@ function PageContent() {
         {activePage === 'gallery' && <GalleryPage />}
         {activePage === 'video-player' && <VideoPlayerPage />}
         {activePage === 'prompt-templates' && <PromptTemplatesPage />}
+        {activePage === 'media-tools' && <MediaToolsPage />}
       </motion.div>
     </AnimatePresence>
   );

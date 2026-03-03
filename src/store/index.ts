@@ -89,8 +89,8 @@ interface AppState {
   setChatWallpaper: (wallpaper: string) => void;
 
   // Navigation
-  activePage: 'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates';
-  setActivePage: (page: 'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates') => void;
+  activePage: 'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates' | 'media-tools';
+  setActivePage: (page: 'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates' | 'media-tools') => void;
 
   // Sidebar
   sidebarCollapsed: boolean;

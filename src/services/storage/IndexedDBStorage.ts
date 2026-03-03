@@ -13,7 +13,7 @@ export class IndexedDBStorage {
    */
   private constructor() {
     this.dbName = 'starpact-db';
-    this.dbVersion = 7; // 增加版本号，添加 text-contrast 表
+    this.dbVersion = 8; // 增加版本号，添加 ffmpeg-config 表
     this.initDatabase();
   }
 
@@ -104,6 +104,11 @@ export class IndexedDBStorage {
     // 创建文本对比存储
     if (!db.objectStoreNames.contains('text-contrast')) {
       db.createObjectStore('text-contrast', { keyPath: 'id' });
+    }
+
+    // 创建 FFmpeg 配置存储
+    if (!db.objectStoreNames.contains('ffmpeg-config')) {
+      db.createObjectStore('ffmpeg-config', { keyPath: 'key' });
     }
 
     console.log('IndexedDB数据库结构更新成功');

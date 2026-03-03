@@ -31,6 +31,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resize: (width, height) => ipcRenderer.invoke('window:resize', width, height),
     getSize: () => ipcRenderer.invoke('window:getSize'),
   },
+
+  // FFmpeg 相关 API
+  ffmpeg: {
+    validatePath: (binPath) => ipcRenderer.invoke('ffmpeg:validatePath', binPath),
+    execute: (options) => ipcRenderer.invoke('ffmpeg:execute', options),
+    executeWithProgress: (options) => ipcRenderer.invoke('ffmpeg:executeWithProgress', options),
+    stop: () => ipcRenderer.invoke('ffmpeg:stop'),
+    getMediaInfo: (ffprobePath, filePath) => ipcRenderer.invoke('ffmpeg:getMediaInfo', ffprobePath, filePath),
+    
+    onProgress: (callback) => {
+      const listener = (event, progress) => callback(progress);
+      ipcRenderer.on('ffmpeg:progress', listener);
+      return () => ipcRenderer.removeListener('ffmpeg:progress', listener);
+    },
+    
+    onLog: (callback) => {
+      const listener = (event, log) => callback(log);
+      ipcRenderer.on('ffmpeg:log', listener);
+      return () => ipcRenderer.removeListener('ffmpeg:log', listener);
+    },
+  },
   
   // 监听路径未配置通知
   onPathNotConfigured: (callback) => {

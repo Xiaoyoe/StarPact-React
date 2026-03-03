@@ -69,6 +69,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resize: (width: number, height: number) => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.RESIZE, width, height),
     getSize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.GET_SIZE),
   },
+  ffmpeg: {
+    validatePath: (binPath: string) => ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.VALIDATE_PATH, binPath),
+    execute: (options: { ffmpegPath: string; args: string[]; outputPath?: string }) => 
+      ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.EXECUTE, options),
+    executeWithProgress: (options: { ffmpegPath: string; args: string[]; outputPath?: string; duration?: number }) => 
+      ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.EXECUTE_WITH_PROGRESS, options),
+    stop: () => ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.STOP),
+    getMediaInfo: (ffprobePath: string, filePath: string) => 
+      ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.GET_MEDIA_INFO, ffprobePath, filePath),
+    
+    onProgress: (callback: (progress: any) => void) => {
+      const listener = (_event: any, progress: any) => callback(progress);
+      ipcRenderer.on('ffmpeg:progress', listener);
+      return () => ipcRenderer.removeListener('ffmpeg:progress', listener);
+    },
+    
+    onLog: (callback: (log: string) => void) => {
+      const listener = (_event: any, log: string) => callback(log);
+      ipcRenderer.on('ffmpeg:log', listener);
+      return () => ipcRenderer.removeListener('ffmpeg:log', listener);
+    },
+  },
 });
 
 declare global {
@@ -129,6 +151,60 @@ declare global {
         getMaximized: () => Promise<boolean>;
         resize: (width: number, height: number) => Promise<{ success: boolean; width?: number; height?: number }>;
         getSize: () => Promise<{ width: number; height: number } | null>;
+      };
+      ffmpeg: {
+        validatePath: (binPath: string) => Promise<{
+          valid: boolean;
+          ffmpegPath: string;
+          ffprobePath: string;
+          error?: string;
+        }>;
+        execute: (options: {
+          ffmpegPath: string;
+          args: string[];
+          outputPath?: string;
+        }) => Promise<{
+          success: boolean;
+          error?: string;
+          output?: string;
+        }>;
+        executeWithProgress: (options: {
+          ffmpegPath: string;
+          args: string[];
+          outputPath?: string;
+          duration?: number;
+        }) => Promise<{
+          success: boolean;
+          error?: string;
+        }>;
+        stop: () => Promise<boolean>;
+        getMediaInfo: (ffprobePath: string, filePath: string) => Promise<{
+          duration: number;
+          format: string;
+          video?: {
+            width: number;
+            height: number;
+            codec: string;
+            fps: number;
+            bitrate: number;
+          };
+          audio?: {
+            codec: string;
+            sampleRate: number;
+            channels: number;
+            bitrate: number;
+          };
+        } | null>;
+        onProgress: (callback: (progress: {
+          frame: number;
+          fps: number;
+          size: string;
+          time: string;
+          bitrate: string;
+          speed: string;
+          progress: number;
+        }) => void) => () => void;
+        onLog: (callback: (log: string) => void) => () => void;
       };
     };
   }

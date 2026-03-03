@@ -1,7 +1,274 @@
 const { app, BrowserWindow, dialog, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const isDev = require('electron-is-dev');
+
+let mainWindow = null;
+let currentProcess = null;
+
+// FFmpeg Service
+const ffmpegService = {
+  setMainWindow: (window) => {
+    mainWindow = window;
+  },
+
+  validatePath: (binPath) => {
+    const normalizedPath = binPath.replace(/\\/g, '/');
+    const ffmpegPath = path.join(normalizedPath, 'ffmpeg.exe');
+    const ffprobePath = path.join(normalizedPath, 'ffprobe.exe');
+    
+    const ffmpegExists = fs.existsSync(ffmpegPath);
+    const ffprobeExists = fs.existsSync(ffprobePath);
+    
+    if (!ffmpegExists) {
+      return { valid: false, ffmpegPath: '', ffprobePath: '', error: 'ffmpeg.exe not found' };
+    }
+    
+    return { 
+      valid: true, 
+      ffmpegPath: ffmpegPath, 
+      ffprobePath: ffprobeExists ? ffprobePath : '' 
+    };
+  },
+
+  execute: (options) => {
+    return new Promise((resolve) => {
+      if (!options.ffmpegPath) {
+        resolve({ success: false, error: 'FFmpeg path not configured' });
+        return;
+      }
+
+      const args = ['-y', ...options.args];
+      
+      currentProcess = spawn(options.ffmpegPath, args, {
+        windowsHide: true,
+      });
+
+      let stderr = '';
+      let stdout = '';
+
+      currentProcess.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      currentProcess.stderr?.on('data', (data) => {
+        stderr += data.toString();
+        ffmpegService.sendLog(data.toString());
+      });
+
+      currentProcess.on('error', (err) => {
+        currentProcess = null;
+        resolve({ success: false, error: err.message });
+      });
+
+      currentProcess.on('close', (code) => {
+        currentProcess = null;
+        if (code === 0) {
+          resolve({ success: true, output: stdout });
+        } else {
+          resolve({ success: false, error: stderr || `Process exited with code ${code}` });
+        }
+      });
+    });
+  },
+
+  executeWithProgress: (options, duration) => {
+    return new Promise((resolve) => {
+      if (!options.ffmpegPath) {
+        resolve({ success: false, error: 'FFmpeg path not configured' });
+        return;
+      }
+
+      const args = ['-y', ...options.args];
+      
+      currentProcess = spawn(options.ffmpegPath, args, {
+        windowsHide: true,
+      });
+
+      let stderr = '';
+
+      currentProcess.stderr?.on('data', (data) => {
+        stderr += data.toString();
+        ffmpegService.sendLog(data.toString());
+        ffmpegService.parseProgressFromStderr(data.toString(), duration);
+      });
+
+      currentProcess.on('error', (err) => {
+        currentProcess = null;
+        resolve({ success: false, error: err.message });
+      });
+
+      currentProcess.on('close', (code) => {
+        currentProcess = null;
+        if (code === 0) {
+          ffmpegService.sendProgress({ progress: 100 });
+          resolve({ success: true });
+        } else {
+          resolve({ success: false, error: stderr || `Process exited with code ${code}` });
+        }
+      });
+    });
+  },
+
+  stop: () => {
+    if (currentProcess) {
+      currentProcess.kill('SIGTERM');
+      currentProcess = null;
+      return true;
+    }
+    return false;
+  },
+
+  getMediaInfo: (ffprobePath, filePath) => {
+    return new Promise((resolve) => {
+      if (!ffprobePath || !fs.existsSync(ffprobePath)) {
+        resolve(null);
+        return;
+      }
+
+      const args = [
+        '-v', 'quiet',
+        '-print_format', 'json',
+        '-show_format',
+        '-show_streams',
+        filePath
+      ];
+
+      const proc = spawn(ffprobePath, args, { windowsHide: true });
+      let stdout = '';
+
+      proc.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      proc.on('close', (code) => {
+        if (code === 0 && stdout) {
+          try {
+            const info = JSON.parse(stdout);
+            const mediaInfo = {
+              duration: parseFloat(info.format?.duration) || 0,
+              format: info.format?.format_name || 'unknown',
+            };
+
+            for (const stream of info.streams || []) {
+              if (stream.codec_type === 'video' && !mediaInfo.video) {
+                mediaInfo.video = {
+                  width: stream.width || 0,
+                  height: stream.height || 0,
+                  codec: stream.codec_name || 'unknown',
+                  fps: ffmpegService.parseFps(stream.r_frame_rate) || 0,
+                  bitrate: stream.bit_rate || 0,
+                };
+              } else if (stream.codec_type === 'audio' && !mediaInfo.audio) {
+                mediaInfo.audio = {
+                  codec: stream.codec_name || 'unknown',
+                  sampleRate: stream.sample_rate || 0,
+                  channels: stream.channels || 0,
+                  bitrate: stream.bit_rate || 0,
+                };
+              }
+            }
+
+            resolve(mediaInfo);
+          } catch {
+            resolve(null);
+          }
+        } else {
+          resolve(null);
+        }
+      });
+
+      proc.on('error', () => {
+        resolve(null);
+      });
+    });
+  },
+
+  parseFps: (frameRate) => {
+    if (!frameRate) return 0;
+    const parts = frameRate.split('/');
+    if (parts.length === 2) {
+      return parseInt(parts[0]) / parseInt(parts[1]);
+    }
+    return parseFloat(frameRate) || 0;
+  },
+
+  parseProgressFromStderr: (data, duration) => {
+    const progress = {};
+    
+    const frameMatch = data.match(/frame=\s*(\d+)/);
+    const fpsMatch = data.match(/fps=\s*([\d.]+)/);
+    const sizeMatch = data.match(/size=\s*(\d+)(kB|mB)?/);
+    const timeMatch = data.match(/time=(\d+:\d+:\d+\.\d+)/);
+    const bitrateMatch = data.match(/bitrate=\s*([\d.]+)(kbits\/s|Mbits\/s)/);
+    const speedMatch = data.match(/speed=\s*([\d.]+)x/);
+
+    if (frameMatch) progress.frame = parseInt(frameMatch[1]);
+    if (fpsMatch) progress.fps = parseFloat(fpsMatch[1]);
+    if (sizeMatch) progress.size = sizeMatch[1] + (sizeMatch[2] || 'kB');
+    if (timeMatch) progress.time = timeMatch[1];
+    if (bitrateMatch) progress.bitrate = bitrateMatch[1] + bitrateMatch[2];
+    if (speedMatch) progress.speed = speedMatch[1] + 'x';
+
+    if (duration && timeMatch) {
+      const currentTime = ffmpegService.parseTimeToSeconds(timeMatch[1]);
+      progress.progress = Math.min(100, Math.round((currentTime / duration) * 100));
+    }
+
+    if (Object.keys(progress).length > 0) {
+      ffmpegService.sendProgress(progress);
+    }
+  },
+
+  parseTimeToSeconds: (timeStr) => {
+    const parts = timeStr.split(':');
+    if (parts.length === 3) {
+      const hours = parseInt(parts[0]);
+      const minutes = parseInt(parts[1]);
+      const seconds = parseFloat(parts[2]);
+      return hours * 3600 + minutes * 60 + seconds;
+    }
+    return 0;
+  },
+
+  sendProgress: (progress) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ffmpeg:progress', progress);
+    }
+  },
+
+  sendLog: (log) => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ffmpeg:log', log);
+    }
+  }
+};
+
+// 注册 FFmpeg 相关的 IPC 处理器
+function registerFFmpegHandlers() {
+  ffmpegService.setMainWindow(mainWindow);
+
+  ipcMain.handle('ffmpeg:validatePath', async (event, binPath) => {
+    return ffmpegService.validatePath(binPath);
+  });
+
+  ipcMain.handle('ffmpeg:execute', async (event, options) => {
+    return ffmpegService.execute(options);
+  });
+
+  ipcMain.handle('ffmpeg:executeWithProgress', async (event, options) => {
+    return ffmpegService.executeWithProgress(options, options.duration);
+  });
+
+  ipcMain.handle('ffmpeg:stop', async () => {
+    return ffmpegService.stop();
+  });
+
+  ipcMain.handle('ffmpeg:getMediaInfo', async (event, ffprobePath, filePath) => {
+    return ffmpegService.getMediaInfo(ffprobePath, filePath);
+  });
+}
 
 // 注册存储相关的 IPC 处理器
 function registerStorageHandlers() {
@@ -257,7 +524,7 @@ function registerWindowHandlers() {
 }
 
 function createWindow() {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 900,
@@ -280,6 +547,10 @@ function createWindow() {
   if (isDev) {
     mainWindow.webContents.openDevTools();
   }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 }
 
 app.whenReady().then(() => {
@@ -287,6 +558,7 @@ app.whenReady().then(() => {
   registerFileHandlers();
   registerWindowHandlers();
   createWindow();
+  registerFFmpegHandlers();
 });
 
 app.on('window-all-closed', () => {

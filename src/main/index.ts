@@ -4,6 +4,7 @@ import { registerOllamaHandlers } from './ipc/ollamaHandlers';
 import { registerFileHandlers } from './ipc/fileHandlers';
 import { registerStorageHandlers } from './ipc/storageHandlers';
 import { registerWindowHandlers } from './ipc/windowHandlers';
+import { registerFFmpegHandlers } from './ipc/ffmpegHandlers';
 
 export let mainWindow: BrowserWindow | null = null;
 
@@ -39,6 +40,7 @@ app.whenReady().then(() => {
   registerStorageHandlers();
   registerWindowHandlers();
   createWindow();
+  registerFFmpegHandlers();
 });
 
 app.on('window-all-closed', () => {

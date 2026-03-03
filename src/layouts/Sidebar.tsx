@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -259,6 +259,7 @@ export function Sidebar() {
     { id: 'models' as const, icon: Bot, label: '模型管理' },
     { id: 'gallery' as const, icon: Images, label: '图片管理' },
     { id: 'video-player' as const, icon: Play, label: '视频播放器' },
+    { id: 'media-tools' as const, icon: Clapperboard, label: '媒体工具' },
     { id: 'prompt-templates' as const, icon: BookOpen, label: '提示词模板' },
     { id: 'compare' as const, icon: FileText, label: '文本对比' },
     { id: 'ini-config' as const, icon: Settings2, label: 'INI配置' },
