@@ -1552,6 +1552,7 @@ export function ModelsPage() {
   const [createModelName, setCreateModelName] = useState('');
   const [createModelPath, setCreateModelPath] = useState('');
   const [isCreating, setIsCreating] = useState(false);
+  const [showFeatureModal, setShowFeatureModal] = useState(false);
 
   const toast = useToast();
 
@@ -1953,7 +1954,10 @@ export function ModelsPage() {
             Ollama
           </button>
           <button
-            onClick={() => setActiveMainTab('remote')}
+            onClick={() => {
+              setActiveMainTab('remote');
+              setShowFeatureModal(true);
+            }}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm transition-colors"
             style={{
               color: activeMainTab === 'remote' ? 'var(--primary-color)' : 'var(--text-secondary)',
@@ -2253,6 +2257,50 @@ export function ModelsPage() {
           </>
         )}
       </div>
+
+      <AnimatePresence>
+        {showFeatureModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            onClick={() => setShowFeatureModal(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="relative w-[400px] overflow-hidden rounded-2xl p-6"
+              style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex flex-col items-center text-center">
+                <div
+                  className="mb-4 flex h-14 w-14 items-center justify-center rounded-full"
+                  style={{ backgroundColor: 'var(--warning-light, rgba(245,158,11,0.1))' }}
+                >
+                  <AlertCircle size={28} style={{ color: 'var(--warning-color)' }} />
+                </div>
+                <h3 className="mb-2 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  功能开发中
+                </h3>
+                <p className="mb-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  远程模型管理功能暂未实现，敬请期待后续更新。
+                </p>
+                <button
+                  onClick={() => setShowFeatureModal(false)}
+                  className="w-full rounded-lg px-6 py-2.5 text-sm font-medium transition-all active:scale-95"
+                  style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+                >
+                  我知道了
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

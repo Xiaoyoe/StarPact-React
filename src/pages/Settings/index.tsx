@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, useMemo, memo } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import {
-  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, Shield, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid, Maximize2, Terminal, FolderOpen, CheckCircle
+  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid, Maximize2
 } from 'lucide-react';
 import { useStore } from '@/store';
-import type { ThemeType, LogEntry } from '@/store';
+import type { LogEntry } from '@/store';
 import { motion } from 'framer-motion';
 
 
@@ -93,11 +93,7 @@ const SettingsLogItem = memo(function SettingsLogItem({ log }: SettingsLogItemPr
     </div>
   );
 });
-import { configStorage, type AppConfig } from '@/services/storage/ConfigStorage';
-import { ffmpegConfigStorage, type FFmpegConfig } from '@/services/storage/FFmpegConfigStorage';
-import { PromptTemplateStorage } from '@/services/storage/PromptTemplateStorage';
-import { VideoPlaylistStorage } from '@/services/storage/VideoPlaylistStorage';
-import { VideoPlaylistStorageSync } from '@/services/storage/VideoPlaylistStorage';
+import { configStorage } from '@/services/storage/ConfigStorage';
 import { useToast } from '@/components/Toast';
 import { AboutSection } from './about';
 import { PathPage } from './path';
@@ -126,16 +122,6 @@ export function SettingsPage() {
   const [appNameDisplay, setAppNameDisplay] = useState<'chinese' | 'english'>('english');
   const [defaultPage, setDefaultPage] = useState<'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates' | 'media-tools'>('chat');
   const [configLoaded, setConfigLoaded] = useState(false);
-  const [ffmpegConfig, setFFmpegConfig] = useState<FFmpegConfig>({
-    binPath: '',
-    ffmpegPath: '',
-    ffprobePath: '',
-    ffplayPath: '',
-    lastChecked: 0,
-    isValid: false,
-  });
-  const [isEditingBinPath, setIsEditingBinPath] = useState(false);
-  const [tempBinPath, setTempBinPath] = useState('');
   const [logFilterLevel, setLogFilterLevel] = useState<string>('all');
   const [logSearchQuery, setLogSearchQuery] = useState('');
   const [logCurrentPage, setLogCurrentPage] = useState(1);
@@ -970,68 +956,6 @@ export function SettingsPage() {
                       <div className="text-[10px] opacity-70 mt-0.5">{option.desc}</div>
                     </button>
                   ))}
-                </div>
-              </div>
-
-              {/* FFmpeg Configuration */}
-              <div
-                className="rounded-xl p-4"
-                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
-              >
-                <div className="flex items-center gap-2 mb-3">
-                  <Terminal className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
-                  <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>FFmpeg bin 目录配置</div>
-                </div>
-                <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
-                  选择 FFmpeg bin 目录，系统会自动识别三个 exe 文件
-                </p>
-                <div className="space-y-3">
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={ffmpegConfig.binPath}
-                      readOnly
-                      placeholder="请选择 FFmpeg bin 目录"
-                      className="flex-1 rounded-lg px-3 py-2 text-xs outline-none"
-                      style={{ 
-                        backgroundColor: 'var(--bg-primary)', 
-                        border: '1px solid var(--border-color)',
-                        color: 'var(--text-primary)',
-                      }}
-                    />
-                    <button
-                      onClick={async () => {
-                        if (typeof window !== 'undefined' && window.electronAPI?.file?.selectFolder) {
-                          const result = await window.electronAPI.file.selectFolder({
-                            title: '选择 FFmpeg bin 目录',
-                          });
-                          if (result && result.success && result.path) {
-                            const newConfig = await ffmpegConfigStorage.setBinPath(result.path);
-                            setFFmpegConfig(newConfig);
-                            toast.success('已选择 FFmpeg bin 目录');
-                          }
-                        } else {
-                          setIsEditingBinPath(true);
-                          setTempBinPath(ffmpegConfig.binPath || '');
-                        }
-                      }}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all"
-                      style={{ 
-                        backgroundColor: 'var(--bg-tertiary)',
-                        color: 'var(--text-secondary)',
-                        border: '1px solid var(--border-color)',
-                      }}
-                    >
-                      <FolderOpen className="w-3.5 h-3.5" />
-                      选择
-                    </button>
-                  </div>
-                  {ffmpegConfig.binPath && (
-                    <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--success-color)' }}>
-                      <CheckCircle className="w-3.5 h-3.5" />
-                      <span>已识别三个 exe 文件</span>
-                    </div>
-                  )}
                 </div>
               </div>
 
