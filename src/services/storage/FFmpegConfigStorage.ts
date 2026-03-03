@@ -8,6 +8,7 @@ export interface FFmpegConfig {
   outputPath: string;
   lastChecked: number;
   isValid: boolean;
+  showVideoThumbnail: boolean;
 }
 
 export class FFmpegConfigStorage {
@@ -31,6 +32,7 @@ export class FFmpegConfigStorage {
       outputPath: '',
       lastChecked: 0,
       isValid: false,
+      showVideoThumbnail: true,
     };
   }
 
@@ -106,6 +108,17 @@ export class FFmpegConfigStorage {
       this.configCache.lastChecked = Date.now();
       await this.saveConfig();
     }
+  }
+
+  async setShowVideoThumbnail(show: boolean): Promise<void> {
+    if (this.configCache) {
+      this.configCache.showVideoThumbnail = show;
+      await this.saveConfig();
+    }
+  }
+
+  getShowVideoThumbnail(): boolean {
+    return this.configCache?.showVideoThumbnail ?? true;
   }
 
   async updateConfig(config: Partial<FFmpegConfig>): Promise<void> {

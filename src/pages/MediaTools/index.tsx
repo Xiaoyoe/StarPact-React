@@ -184,7 +184,7 @@ function TaskItem({
 
 export function MediaToolsPage() {
   const [activeTab, setActiveTab] = useState('format');
-  const [showTaskList, setShowTaskList] = useState(true);
+  const [showTaskList, setShowTaskList] = useState(false);
   const [showFFmpegConfig, setShowFFmpegConfig] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   

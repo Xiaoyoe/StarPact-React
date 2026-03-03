@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     executeWithProgress: (options) => ipcRenderer.invoke('ffmpeg:executeWithProgress', options),
     stop: () => ipcRenderer.invoke('ffmpeg:stop'),
     getMediaInfo: (ffprobePath, filePath) => ipcRenderer.invoke('ffmpeg:getMediaInfo', ffprobePath, filePath),
+    getVideoFrame: (ffmpegPath, filePath, timeSeconds) => ipcRenderer.invoke('ffmpeg:getVideoFrame', ffmpegPath, filePath, timeSeconds),
     
     onProgress: (callback) => {
       const listener = (event, data) => callback(data);

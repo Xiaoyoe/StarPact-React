@@ -21,6 +21,7 @@ export interface AppConfig {
   closeConfirm: boolean;
   galleryDefaultLayout: 'grid' | 'waterfall' | 'list';
   appNameDisplay: 'chinese' | 'english';
+  defaultPage: 'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates' | 'media-tools';
   [key: string]: any;
 }
 
@@ -57,7 +58,8 @@ export class ConfigStorage {
       videoAutoPlay: true,
       closeConfirm: true,
       galleryDefaultLayout: 'grid',
-      appNameDisplay: 'english'
+      appNameDisplay: 'english',
+      defaultPage: 'chat'
     };
   }
 

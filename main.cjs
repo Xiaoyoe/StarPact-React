@@ -285,6 +285,56 @@ function registerFFmpegHandlers() {
   ipcMain.handle('ffmpeg:getMediaInfo', async (event, ffprobePath, filePath) => {
     return ffmpegService.getMediaInfo(ffprobePath, filePath);
   });
+
+  ipcMain.handle('ffmpeg:getVideoFrame', async (event, ffmpegPath, filePath, timeSeconds) => {
+    try {
+      const os = require('os');
+      const path = require('path');
+      const fs = require('fs');
+      
+      const tempDir = os.tmpdir();
+      const outputFileName = `frame_${Date.now()}.jpg`;
+      const outputPath = path.join(tempDir, outputFileName);
+      
+      const args = [
+        '-ss', String(timeSeconds),
+        '-i', filePath,
+        '-vframes', '1',
+        '-q:v', '2',
+        '-y',
+        outputPath
+      ];
+      
+      const result = await new Promise((resolve) => {
+        const proc = spawn(ffmpegPath, args);
+        let stderr = '';
+        
+        proc.stderr.on('data', (data) => {
+          stderr += data.toString();
+        });
+        
+        proc.on('close', (code) => {
+          if (code === 0 && fs.existsSync(outputPath)) {
+            const imageData = fs.readFileSync(outputPath);
+            const base64 = imageData.toString('base64');
+            fs.unlinkSync(outputPath);
+            resolve(`data:image/jpeg;base64,${base64}`);
+          } else {
+            resolve(null);
+          }
+        });
+        
+        proc.on('error', () => {
+          resolve(null);
+        });
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('获取视频帧失败:', error);
+      return null;
+    }
+  });
 }
 
 // 注册存储相关的 IPC 处理器

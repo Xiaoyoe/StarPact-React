@@ -17,6 +17,7 @@ import { DataManager } from '@/components/DataManager';
 import { ToastProvider } from '@/components/Toast';
 import CustomTitleBar from '@/components/CustomTitleBar';
 import { motion, AnimatePresence } from 'framer-motion';
+import { configStorage } from '@/services/storage/ConfigStorage';
 
 function PageContent() {
   const { activePage } = useStore();
@@ -49,60 +50,60 @@ export function App() {
   const { activePage, setActivePage, webShortcutPopupOpen, setWebShortcutPopupOpen, dataManagerOpen, setDataManagerOpen } = useStore();
   const [showPathConfigModal, setShowPathConfigModal] = useState(false);
   const [pathsConfigured, setPathsConfigured] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
-  // 初始化持久化存储
+  // 初始化持久化存储和配置
   useEffect(() => {
-    const initStorage = async () => {
+    const initApp = async () => {
       try {
-        await initializeStoreFromStorage();
-        console.log('持久化存储初始化完成');
+        // 并行初始化存储和配置
+        await Promise.all([
+          initializeStoreFromStorage(),
+          configStorage.ready()
+        ]);
+        
+        // 检查路径配置
+        let configured = true;
+        if (window.electronAPI?.storage?.checkAllPaths) {
+          configured = await window.electronAPI.storage.checkAllPaths();
+        }
+        
+        if (!configured) {
+          // 路径未配置，跳转到设置页
+          setPathsConfigured(false);
+          setActivePage('settings');
+          setShowPathConfigModal(true);
+        } else {
+          // 路径已配置，加载默认功能页
+          setPathsConfigured(true);
+          const savedDefaultPage = configStorage.get('defaultPage');
+          if (savedDefaultPage) {
+            setActivePage(savedDefaultPage);
+          }
+        }
+        
+        setInitialized(true);
+        console.log('应用初始化完成');
       } catch (error) {
-        console.error('持久化存储初始化失败:', error);
+        console.error('应用初始化失败:', error);
+        setInitialized(true);
       }
     };
-    initStorage();
-  }, []);
+    initApp();
+  }, [setActivePage]);
 
-  // 初始化时检查路径配置
-  useEffect(() => {
-    checkPathsConfigured();
-  }, []);
-
-  // 监听路径未配置通知 - 实现启动检查
+  // 监听路径未配置通知
   useEffect(() => {
     if (window.electronAPI?.storage?.onPathNotConfigured) {
       const unsubscribe = window.electronAPI.storage.onPathNotConfigured(() => {
         setShowPathConfigModal(true);
         setPathsConfigured(false);
+        setActivePage('settings');
       });
 
       return () => unsubscribe();
     }
-  }, []);
-
-  // 检查所有路径是否配置完成
-  const checkPathsConfigured = async () => {
-    try {
-      if (window.electronAPI?.storage?.checkAllPaths) {
-        const configured = await window.electronAPI.storage.checkAllPaths();
-        setPathsConfigured(configured);
-      } else {
-        // 非Electron环境，默认设为已配置
-        setPathsConfigured(true);
-      }
-    } catch (error) {
-      console.error('Failed to check paths:', error);
-      setPathsConfigured(false);
-    }
-  };
-
-  // 路由守卫 - 未配置完路径时，禁止跳转到功能页
-  useEffect(() => {
-    if (!pathsConfigured && activePage !== 'settings') {
-      // 强制跳转到设置页
-      setActivePage('settings');
-    }
-  }, [activePage, pathsConfigured, setActivePage]);
+  }, [setActivePage]);
 
   // 去设置页
   const goToSettings = () => {
@@ -113,19 +114,30 @@ export function App() {
   return (
     <ToastProvider>
       <div className="flex h-screen overflow-hidden no-select" style={{ backgroundColor: 'var(--bg-primary)' }}>
-        <Sidebar />
-        <main className="min-w-0 flex-1 no-select flex flex-col">
-          <CustomTitleBar />
-          <PageContent />
-        </main>
-        <LogsPanel />
-        <OllamaModal />
-        <AnimatePresence>
-          {webShortcutPopupOpen && (
-            <WebShortcutPopup onClose={() => setWebShortcutPopupOpen(false)} />
-          )}
-        </AnimatePresence>
-        <DataManager isOpen={dataManagerOpen} onClose={() => setDataManagerOpen(false)} />
+        {!initialized ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: 'var(--primary-color)', borderTopColor: 'transparent' }} />
+              <span className="text-sm" style={{ color: 'var(--text-secondary)' }}>加载中...</span>
+            </div>
+          </div>
+        ) : (
+          <>
+            <Sidebar />
+            <main className="min-w-0 flex-1 no-select flex flex-col">
+              <CustomTitleBar />
+              <PageContent />
+            </main>
+            <LogsPanel />
+            <OllamaModal />
+            <AnimatePresence>
+              {webShortcutPopupOpen && (
+                <WebShortcutPopup onClose={() => setWebShortcutPopupOpen(false)} />
+              )}
+            </AnimatePresence>
+            <DataManager isOpen={dataManagerOpen} onClose={() => setDataManagerOpen(false)} />
+          </>
+        )}
         
         {/* 路径未配置提示弹窗 */}
         <AnimatePresence>

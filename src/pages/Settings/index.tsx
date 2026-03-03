@@ -124,6 +124,7 @@ export function SettingsPage() {
   const [closeConfirm, setCloseConfirm] = useState(true);
   const [galleryDefaultLayout, setGalleryDefaultLayout] = useState<'grid' | 'waterfall' | 'list'>('grid');
   const [appNameDisplay, setAppNameDisplay] = useState<'chinese' | 'english'>('english');
+  const [defaultPage, setDefaultPage] = useState<'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates' | 'media-tools'>('chat');
   const [configLoaded, setConfigLoaded] = useState(false);
   const [ffmpegConfig, setFFmpegConfig] = useState<FFmpegConfig>({
     binPath: '',
@@ -174,6 +175,7 @@ export function SettingsPage() {
       const savedCloseConfirm = configStorage.get('closeConfirm');
       const savedGalleryDefaultLayout = configStorage.get('galleryDefaultLayout');
       const savedAppNameDisplay = configStorage.get('appNameDisplay');
+      const savedDefaultPage = configStorage.get('defaultPage');
 
       if (savedTheme) setTheme(savedTheme);
       if (savedSendOnEnter !== undefined) setSendOnEnter(savedSendOnEnter);
@@ -188,6 +190,7 @@ export function SettingsPage() {
       if (savedCloseConfirm !== undefined) setCloseConfirm(savedCloseConfirm);
       if (savedGalleryDefaultLayout) setGalleryDefaultLayout(savedGalleryDefaultLayout);
       if (savedAppNameDisplay) setAppNameDisplay(savedAppNameDisplay);
+      if (savedDefaultPage) setDefaultPage(savedDefaultPage);
       setConfigLoaded(true);
     };
     loadSettings();
@@ -246,6 +249,12 @@ export function SettingsPage() {
       configStorage.set('appNameDisplay', appNameDisplay);
     }
   }, [appNameDisplay, configLoaded]);
+
+  useEffect(() => {
+    if (configLoaded) {
+      configStorage.set('defaultPage', defaultPage);
+    }
+  }, [defaultPage, configLoaded]);
 
 
 
@@ -780,6 +789,47 @@ export function SettingsPage() {
                         backgroundColor: appNameDisplay === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
                         color: appNameDisplay === option.value ? 'white' : 'var(--text-secondary)',
                         border: `1px solid ${appNameDisplay === option.value ? 'var(--primary-color)' : 'var(--border-color)'}`
+                      }}
+                    >
+                      <div className="font-medium">{option.label}</div>
+                      <div className="text-[10px] opacity-70 mt-0.5">{option.desc}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Default Page Settings */}
+              <div
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <LayoutGrid className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                  <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>默认功能页</div>
+                </div>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                  设置每次启动程序时默认显示的功能页面
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { value: 'chat', label: '聊天', desc: 'AI对话' },
+                    { value: 'models', label: '模型', desc: '模型管理' },
+                    { value: 'gallery', label: '图片', desc: '图片管理' },
+                    { value: 'video-player', label: '视频', desc: '视频播放' },
+                    { value: 'prompt-templates', label: '提示词', desc: '模板管理' },
+                    { value: 'compare', label: '对比', desc: '文本对比' },
+                    { value: 'media-tools', label: '媒体工具', desc: '音视频处理' },
+                    { value: 'ini-config', label: '配置', desc: 'INI配置' },
+                    { value: 'settings', label: '设置', desc: '系统设置' },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => setDefaultPage(option.value as typeof defaultPage)}
+                      className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                      style={{
+                        backgroundColor: defaultPage === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                        color: defaultPage === option.value ? 'white' : 'var(--text-secondary)',
+                        border: `1px solid ${defaultPage === option.value ? 'var(--primary-color)' : 'var(--border-color)'}`
                       }}
                     >
                       <div className="font-medium">{option.label}</div>

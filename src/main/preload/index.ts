@@ -82,6 +82,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stop: () => ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.STOP),
     getMediaInfo: (ffprobePath: string, filePath: string) => 
       ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.GET_MEDIA_INFO, ffprobePath, filePath),
+    getVideoFrame: (ffmpegPath: string, filePath: string, timeSeconds: number) => 
+      ipcRenderer.invoke('ffmpeg:getVideoFrame', ffmpegPath, filePath, timeSeconds),
     
     onProgress: (callback: (progress: any) => void) => {
       const listener = (_event: any, progress: any) => callback(progress);
@@ -207,6 +209,7 @@ declare global {
             bitrate: number;
           };
         } | null>;
+        getVideoFrame: (ffmpegPath: string, filePath: string, timeSeconds: number) => Promise<string | null>;
         onProgress: (callback: (progress: {
           frame: number;
           fps: number;

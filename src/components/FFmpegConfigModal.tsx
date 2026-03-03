@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, FolderOpen, CheckCircle, AlertCircle, Loader2, Terminal, FolderSync, Info, FolderOutput } from 'lucide-react';
+import { X, FolderOpen, CheckCircle, AlertCircle, Loader2, Terminal, FolderSync, Info, FolderOutput, Image as ImageIcon } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ffmpegConfigStorage, type FFmpegConfig } from '@/services/storage/FFmpegConfigStorage';
 import { useToast } from '@/components/Toast';
@@ -18,6 +18,7 @@ export function FFmpegConfigModal({ isOpen, onClose }: FFmpegConfigModalProps) {
     outputPath: '',
     lastChecked: 0,
     isValid: false,
+    showVideoThumbnail: true,
   });
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectResult, setDetectResult] = useState<'success' | 'error' | null>(null);
@@ -395,6 +396,41 @@ export function FFmpegConfigModal({ isOpen, onClose }: FFmpegConfigModalProps) {
                 )}
                 <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
                   转换后的文件将保存到此目录，如未设置则保存到源文件所在目录
+                </p>
+              </div>
+
+              <div 
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4" style={{ color: 'var(--success-color)' }} />
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      显示视频第一帧预览
+                    </span>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const newValue = !config.showVideoThumbnail;
+                      await ffmpegConfigStorage.setShowVideoThumbnail(newValue);
+                      setConfig(prev => ({ ...prev, showVideoThumbnail: newValue }));
+                    }}
+                    className="relative w-11 h-6 rounded-full transition-colors"
+                    style={{ 
+                      backgroundColor: config.showVideoThumbnail ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                    }}
+                  >
+                    <motion.div
+                      initial={false}
+                      animate={{ x: config.showVideoThumbnail ? 20 : 2 }}
+                      transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                      className="absolute top-1 w-4 h-4 rounded-full bg-white shadow"
+                    />
+                  </button>
+                </div>
+                <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
+                  开启后，选择视频文件时会自动显示视频第一帧画面预览
                 </p>
               </div>
 

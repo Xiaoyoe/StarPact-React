@@ -196,6 +196,24 @@ class FFmpegRendererService {
     return null;
   }
 
+  async getVideoFrame(filePath: string, timeSeconds: number = 0): Promise<string | null> {
+    if (!this.isElectronEnv) {
+      return null;
+    }
+    
+    const config = ffmpegConfigStorage.getConfig();
+    
+    if (!config.ffmpegPath) {
+      return null;
+    }
+
+    if (window.electronAPI?.ffmpeg) {
+      return window.electronAPI.ffmpeg.getVideoFrame(config.ffmpegPath, filePath, timeSeconds);
+    }
+
+    return null;
+  }
+
   getOutputPath(): string {
     return ffmpegConfigStorage.getOutputPath();
   }
@@ -551,24 +569,34 @@ class FFmpegRendererService {
       args.push('-i', options.imagePath);
     }
 
-    const positionMap: Record<string, string> = {
-      'topleft': '10:10',
-      'topright': 'W-tw-10:10',
-      'bottomleft': '10:H-th-10',
-      'bottomright': 'W-tw-10:H-th-10',
-      'center': '(W-tw)/2:(H-th)/2',
-    };
-
-    const pos = positionMap[options.position || 'bottomright'] || positionMap.bottomright;
-
     let filter: string;
 
     if (options.type === 'text' && options.text) {
-      const escapedText = options.text.replace(/'/g, "'\\''");
+      const escapedText = options.text.replace(/'/g, "'\\''").replace(/:/g, '\\:');
       const alpha = (options.opacity || 80) / 100;
-      filter = `drawtext=text='${escapedText}':fontsize=${options.fontSize || 24}:fontcolor=${options.color || 'white'}@${alpha}:x=${pos}`;
+      
+      const textPositionMap: Record<string, { x: string; y: string }> = {
+        'topleft': { x: '10', y: '10' },
+        'topright': { x: 'w-tw-10', y: '10' },
+        'bottomleft': { x: '10', y: 'h-th-10' },
+        'bottomright': { x: 'w-tw-10', y: 'h-th-10' },
+        'center': { x: '(w-tw)/2', y: '(h-th)/2' },
+      };
+      
+      const pos = textPositionMap[options.position || 'bottomright'] || textPositionMap.bottomright;
+      filter = `drawtext=text='${escapedText}':fontsize=${options.fontSize || 24}:fontcolor=${options.color || 'white'}@${alpha}:x=${pos.x}:y=${pos.y}`;
     } else if (options.type === 'image') {
       const alpha = (options.opacity || 80) / 100;
+      
+      const imagePositionMap: Record<string, string> = {
+        'topleft': '10:10',
+        'topright': 'W-w-10:10',
+        'bottomleft': '10:H-h-10',
+        'bottomright': 'W-w-10:H-h-10',
+        'center': '(W-w)/2:(H-h)/2',
+      };
+      
+      const pos = imagePositionMap[options.position || 'bottomright'] || imagePositionMap.bottomright;
       filter = `overlay=${pos}:format=auto:alpha=${alpha}`;
     } else {
       filter = 'null';
@@ -581,30 +609,7 @@ class FFmpegRendererService {
     return args;
   }
 
-  buildSubtitleArgs(
-    inputPath: string,
-    outputPath: string,
-    options: {
-      subtitlePath: string;
-      mode: 'burn' | 'embed';
-      fontSize?: number;
-    }
-  ): string[] {
-    const args: string[] = ['-i', inputPath];
 
-    if (options.mode === 'burn') {
-      const escapedPath = options.subtitlePath.replace(/:/g, '\\:').replace(/\\/g, '/');
-      args.push('-vf', `subtitles='${escapedPath}':force_style='FontSize=${options.fontSize || 24}'`);
-    } else {
-      args.push('-i', options.subtitlePath);
-      args.push('-c', 'copy');
-      args.push('-c:s', 'mov_text');
-    }
-
-    args.push(outputPath);
-
-    return args;
-  }
 
   buildCompressArgs(
     inputPath: string,
