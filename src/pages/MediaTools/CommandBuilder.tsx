@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Terminal as TerminalIcon, Copy, Play, BookOpen, Save, FolderOpen, Trash2, AlertCircle, Square } from 'lucide-react';
 import { SectionCard, Terminal, Badge, ProgressBar } from '@/components/ffmpeg';
-import { ffmpegRendererService, type FFmpegProgress } from '@/services/ffmpeg/FFmpegRendererService';
-import { ffmpegConfigStorage } from '@/services/storage/FFmpegConfigStorage';
+import { ffmpegRendererService } from '@/services/ffmpeg/FFmpegRendererService';
+import { useFFmpegStore } from '@/stores/ffmpegStore';
 import { useToast } from '@/components/Toast';
 
 const templates = [
@@ -34,44 +34,26 @@ const docs = [
 export function CommandBuilder() {
   const [command, setCommand] = useState('ffmpeg -i input.mp4 -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 192k output.mp4');
   const [savedCommands, setSavedCommands] = useState<{ name: string; cmd: string }[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [logs, setLogs] = useState<string[]>([]);
   const [showDocs, setShowDocs] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [isElectronEnv, setIsElectronEnv] = useState(false);
+  
+  const { 
+    isConfigured, 
+    isElectronEnv, 
+    tasks,
+    activeTaskIds,
+    checkConfig, 
+    startTask, 
+    completeTask, 
+    stopTask,
+    addTaskLog,
+  } = useFFmpegStore();
+  
   const toast = useToast();
 
   useEffect(() => {
-    const checkConfig = async () => {
-      await ffmpegConfigStorage.ready();
-      setIsConfigured(ffmpegConfigStorage.isValid());
-      setIsElectronEnv(ffmpegRendererService.isElectron());
-    };
     checkConfig();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribeProgress = ffmpegRendererService.onProgress((p: FFmpegProgress) => {
-      setProgress(p.progress);
-      if (p.frame > 0) {
-        setLogs(prev => [...prev.slice(-50), `[progress] frame=${p.frame} fps=${p.fps} size=${p.size} time=${p.time} bitrate=${p.bitrate} speed=${p.speed}`]);
-      }
-    });
-
-    const unsubscribeLog = ffmpegRendererService.onLog((log: string) => {
-      const cleanLog = log.trim();
-      if (cleanLog) {
-        setLogs(prev => [...prev.slice(-100), `[ffmpeg] ${cleanLog}`]);
-      }
-    });
-
-    return () => {
-      unsubscribeProgress();
-      unsubscribeLog();
-    };
-  }, []);
+  }, [checkConfig]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(command).catch(() => {});
@@ -136,45 +118,42 @@ export function CommandBuilder() {
       return;
     }
 
-    setIsProcessing(true);
-    setProgress(0);
-    setLogs([
-      `[info] $ ${command}`,
-      '[info] 开始执行...',
-    ]);
+    const args = parseCommand(command);
+    
+    if (args.length === 0) {
+      toast.error('无法解析命令');
+      return;
+    }
+
+    const taskId = startTask('commandBuilder', '自定义命令', '', 'output');
+    addTaskLog(taskId, `$ ${command}`);
+    addTaskLog(taskId, '[info] 开始执行...');
 
     try {
-      const args = parseCommand(command);
-      
-      if (args.length === 0) {
-        setLogs(prev => [...prev, '[error] 无法解析命令']);
-        setIsProcessing(false);
-        return;
-      }
+      const result = await ffmpegRendererService.executeWithProgress(args, undefined, taskId);
 
-      const result = await ffmpegRendererService.executeWithProgress(args);
-
+      completeTask(taskId, result.success, result.error);
       if (result.success) {
-        setLogs(prev => [...prev, '[done] ✅ 命令执行完成！']);
         toast.success('执行完成');
       } else {
-        setLogs(prev => [...prev, `[error] ❌ 执行失败: ${result.error}`]);
         toast.error('执行失败');
       }
     } catch (error) {
-      setLogs(prev => [...prev, `[error] 执行出错: ${error instanceof Error ? error.message : '未知错误'}`]);
+      completeTask(taskId, false, error instanceof Error ? error.message : '未知错误');
       toast.error('执行失败');
-    } finally {
-      setTimeout(() => setIsProcessing(false), 500);
     }
   };
 
   const handleStop = async () => {
-    await ffmpegRendererService.stop();
-    setIsProcessing(false);
-    setLogs(prev => [...prev, '[info] 已停止执行']);
-    toast.info('已停止');
+    const moduleTasks = tasks.filter(t => t.module === 'commandBuilder' && activeTaskIds.has(t.id));
+    if (moduleTasks.length > 0) {
+      await stopTask(moduleTasks[0].id);
+      toast.info('已停止');
+    }
   };
+
+  const currentModuleTask = tasks.find(t => t.module === 'commandBuilder' && activeTaskIds.has(t.id));
+  const isCurrentModuleProcessing = !!currentModuleTask;
 
   return (
     <div className="space-y-4">
@@ -183,6 +162,14 @@ export function CommandBuilder() {
           <TerminalIcon className="w-5 h-5" style={{ color: 'var(--error-color)' }} />
           <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>命令行构建器</h2>
           <Badge color="red">高级</Badge>
+          {isCurrentModuleProcessing && (
+            <Badge color="green">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                执行中
+              </span>
+            </Badge>
+          )}
         </div>
         <button onClick={() => setShowDocs(!showDocs)} className="px-3 py-1.5 rounded-lg text-xs flex items-center gap-1.5 transition-all" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}>
           <BookOpen className="w-3.5 h-3.5" /> {showDocs ? '隐藏文档' : '参考文档'}
@@ -223,13 +210,13 @@ export function CommandBuilder() {
               />
               <div className="flex gap-2">
                 <button 
-                  onClick={isProcessing ? handleStop : handleRun} 
+                  onClick={isCurrentModuleProcessing ? handleStop : handleRun} 
                   disabled={!isConfigured || !isElectronEnv} 
                   className="px-5 py-2 rounded-lg text-xs font-semibold text-white flex items-center gap-1.5 disabled:opacity-50 transition-all" 
-                  style={{ background: isProcessing ? 'linear-gradient(135deg, var(--error-color), #ef4444)' : 'linear-gradient(135deg, var(--primary-color), #8b5cf6)' }}
+                  style={{ background: isCurrentModuleProcessing ? 'linear-gradient(135deg, var(--error-color), #ef4444)' : 'linear-gradient(135deg, var(--primary-color), #8b5cf6)' }}
                 >
-                  {isProcessing ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />} 
-                  {isProcessing ? '停止' : '执行'}
+                  {isCurrentModuleProcessing ? <Square className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />} 
+                  {isCurrentModuleProcessing ? '停止' : '执行'}
                 </button>
                 <button onClick={handleCopy} className="px-4 py-2 rounded-lg text-xs flex items-center gap-1.5 transition-all" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}>
                   <Copy className="w-3.5 h-3.5" /> {copied ? '已复制!' : '复制'}
@@ -244,11 +231,11 @@ export function CommandBuilder() {
             </div>
           </SectionCard>
 
-          {(isProcessing || logs.length > 0) && (
+          {(isCurrentModuleProcessing || (currentModuleTask && currentModuleTask.logs.length > 0)) && (
             <div className="mt-4">
               <SectionCard title="执行输出" icon={<TerminalIcon className="w-4 h-4" />}>
-                {isProcessing && <div className="mb-3"><ProgressBar value={Math.floor(progress)} label="执行进度" /></div>}
-                <Terminal lines={logs} />
+                {isCurrentModuleProcessing && currentModuleTask && <div className="mb-3"><ProgressBar value={Math.floor(currentModuleTask.progress)} label="执行进度" /></div>}
+                {currentModuleTask && <Terminal lines={currentModuleTask.logs} />}
               </SectionCard>
             </div>
           )}

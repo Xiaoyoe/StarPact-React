@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { 
   FileType, Settings, Gauge, Film, Music2, MonitorPlay, 
   Upload, ChevronDown, ChevronRight, Sparkles, Zap, Info,
-  AlertCircle
+  AlertCircle, Square
 } from 'lucide-react';
 import { SectionCard, FileDropZone, FormRow, Toggle, Slider, Tabs, ProgressBar, Terminal, Badge } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ffmpegRendererService, type FFmpegProgress, type MediaInfo } from '@/services/ffmpeg/FFmpegRendererService';
-import { ffmpegConfigStorage } from '@/services/storage/FFmpegConfigStorage';
+import { ffmpegRendererService, type MediaInfo } from '@/services/ffmpeg/FFmpegRendererService';
+import { useFFmpegStore } from '@/stores/ffmpegStore';
 import { useToast } from '@/components/Toast';
 
 const videoFormats = ['MP4', 'AVI', 'MKV', 'MOV', 'WebM', 'FLV', 'WMV', 'MPEG', 'TS', '3GP', 'OGV'];
@@ -88,47 +88,30 @@ export function FormatConvert() {
   const [hwAccel, setHwAccel] = useState(false);
   const [twoPass, setTwoPass] = useState(false);
   const [fastStart, setFastStart] = useState(true);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [logs, setLogs] = useState<string[]>([]);
   const [inputFiles, setInputFiles] = useState<InputFile[]>([]);
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [isElectronEnv, setIsElectronEnv] = useState(false);
-  const [outputPath, setOutputPath] = useState('');
+  const [customFileName, setCustomFileName] = useState('');
+  
+  const { 
+    isConfigured, 
+    isElectronEnv, 
+    outputPath, 
+    tasks,
+    activeTaskIds,
+    checkConfig, 
+    startTask, 
+    completeTask, 
+    stopTask,
+    addTaskLog,
+    generateUniquePath,
+  } = useFFmpegStore();
+  
   const toast = useToast();
 
   const formats = mode === 'video' ? videoFormats : audioFormats;
 
   useEffect(() => {
-    const checkConfig = async () => {
-      await ffmpegConfigStorage.ready();
-      setIsConfigured(ffmpegConfigStorage.isValid());
-      setOutputPath(ffmpegConfigStorage.getOutputPath());
-      setIsElectronEnv(ffmpegRendererService.isElectron());
-    };
     checkConfig();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribeProgress = ffmpegRendererService.onProgress((p: FFmpegProgress) => {
-      setProgress(p.progress);
-      if (p.frame > 0) {
-        setLogs(prev => [...prev.slice(-50), `[progress] frame=${p.frame} fps=${p.fps} size=${p.size} time=${p.time} bitrate=${p.bitrate} speed=${p.speed}`]);
-      }
-    });
-
-    const unsubscribeLog = ffmpegRendererService.onLog((log: string) => {
-      const cleanLog = log.trim();
-      if (cleanLog) {
-        setLogs(prev => [...prev.slice(-100), `[ffmpeg] ${cleanLog}`]);
-      }
-    });
-
-    return () => {
-      unsubscribeProgress();
-      unsubscribeLog();
-    };
-  }, []);
+  }, [checkConfig]);
 
   const handleFilesSelected = useCallback(async (files: File[]) => {
     if (files.length === 0) return;
@@ -141,6 +124,7 @@ export function FormatConvert() {
     }));
 
     setInputFiles(inputFilesData);
+    setCustomFileName('');
 
     if (inputFilesData.length > 0 && inputFilesData[0].path) {
       const mediaInfo = await ffmpegRendererService.getMediaInfo(inputFilesData[0].path);
@@ -150,7 +134,7 @@ export function FormatConvert() {
     }
   }, []);
 
-  const getOutputFilePath = (inputFile: InputFile): string => {
+  const getOutputFilePath = (inputFile: InputFile, customName?: string): string => {
     const inputPath = inputFile.path;
     const lastSepIndex = Math.max(inputPath.lastIndexOf('/'), inputPath.lastIndexOf('\\'));
     const inputDir = lastSepIndex >= 0 ? inputPath.substring(0, lastSepIndex) : '';
@@ -161,10 +145,17 @@ export function FormatConvert() {
     const extension = targetFormat.toLowerCase();
     const sep = outputDir.includes('\\') ? '\\' : '/';
     
-    return outputDir ? `${outputDir}${sep}${inputName}_converted.${extension}` : `${inputName}_converted.${extension}`;
+    const finalName = customName && customName.trim() ? customName.trim() : `${inputName}_converted`;
+    
+    return outputDir ? `${outputDir}${sep}${finalName}.${extension}` : `${finalName}.${extension}`;
   };
 
   const handleStart = async () => {
+    if (!isElectronEnv) {
+      toast.error('请使用 Electron 模式运行此功能（运行 npm run electron:dev）');
+      return;
+    }
+
     if (!isConfigured) {
       toast.error('请先在配置中设置 FFmpeg bin 目录');
       return;
@@ -175,73 +166,65 @@ export function FormatConvert() {
       return;
     }
 
-    setIsProcessing(true);
-    setProgress(0);
-    setLogs([
-      '[info] FFmpeg Studio v1.0 - 格式转换模块',
-      `[info] 目标格式: ${targetFormat}`,
-      `[info] 视频编码: ${vCodec} | 音频编码: ${aCodec}`,
-      `[info] 预设: ${preset} | CRF: ${crf}`,
-      `[info] 分辨率: ${resolution} | 像素格式: ${pixFmt}`,
-      hwAccel ? '[info] 硬件加速: 已启用 (NVENC/QSV)' : '[info] 硬件加速: 未启用',
-      twoPass ? '[info] 二次编码: 已启用' : '',
-      '[info] 开始处理...',
-    ].filter(Boolean));
+    const inputFile = inputFiles[0];
+    const baseOutputPath = getOutputFilePath(inputFile, customFileName);
+    const outputFilePath = generateUniquePath(baseOutputPath);
+    const taskId = startTask('formatConvert', inputFile.name, inputFile.path, outputFilePath);
+
+    addTaskLog(taskId, '[info] FFmpeg Studio v1.0 - 格式转换模块');
+    addTaskLog(taskId, `[info] 目标格式: ${targetFormat}`);
+    addTaskLog(taskId, `[info] 视频编码: ${vCodec} | 音频编码: ${aCodec}`);
+    addTaskLog(taskId, `[info] 预设: ${preset} | CRF: ${crf}`);
+    addTaskLog(taskId, `[info] 分辨率: ${resolution} | 像素格式: ${pixFmt}`);
+    if (hwAccel) addTaskLog(taskId, '[info] 硬件加速: 已启用 (NVENC/QSV)');
+    if (twoPass) addTaskLog(taskId, '[info] 二次编码: 已启用');
 
     try {
-      for (const inputFile of inputFiles) {
-        const outputFilePath = getOutputFilePath(inputFile);
-        
-        setLogs(prev => [...prev, `[info] 处理文件: ${inputFile.name}`]);
-        setLogs(prev => [...prev, `[info] 输出到: ${outputFilePath}`]);
-
-        const args = ffmpegRendererService.buildConvertArgs(
-          inputFile.path,
-          outputFilePath,
-          {
-            videoCodec: vCodec,
-            audioCodec: aCodec,
-            preset,
-            crf,
-            resolution,
-            fps: changeFps ? fps : undefined,
-            audioBitrate,
-            sampleRate,
-            channels,
-            pixFmt,
-            hwAccel,
-            twoPass,
-            fastStart,
-          }
-        );
-
-        const duration = inputFile.mediaInfo?.duration;
-        const result = await ffmpegRendererService.executeWithProgress(args, duration);
-
-        if (result.success) {
-          setLogs(prev => [...prev, `[done] ✅ ${inputFile.name} 转换完成！`]);
-        } else {
-          setLogs(prev => [...prev, `[error] ❌ ${inputFile.name} 转换失败: ${result.error}`]);
+      const args = ffmpegRendererService.buildConvertArgs(
+        inputFile.path,
+        outputFilePath,
+        {
+          videoCodec: vCodec,
+          audioCodec: aCodec,
+          preset,
+          crf,
+          resolution,
+          fps: changeFps ? fps : undefined,
+          audioBitrate,
+          sampleRate,
+          channels,
+          pixFmt,
+          hwAccel,
+          twoPass,
+          fastStart,
         }
-      }
+      );
 
-      setProgress(100);
-      setLogs(prev => [...prev, '[done] ✅ 所有任务完成！']);
-      toast.success('转换完成！');
+      const duration = inputFile.mediaInfo?.duration;
+      const result = await ffmpegRendererService.executeWithProgress(args, duration, taskId);
+
+      completeTask(taskId, result.success, result.error);
+      if (result.success) {
+        toast.success('转换完成！');
+      } else {
+        toast.error('转换失败');
+      }
     } catch (error) {
-      setLogs(prev => [...prev, `[error] 处理出错: ${error instanceof Error ? error.message : '未知错误'}`]);
+      completeTask(taskId, false, error instanceof Error ? error.message : '未知错误');
       toast.error('转换失败');
-    } finally {
-      setTimeout(() => setIsProcessing(false), 500);
     }
   };
 
   const handleStop = async () => {
-    await ffmpegRendererService.stop();
-    setIsProcessing(false);
-    setLogs(prev => [...prev, '[info] 已停止处理']);
-    toast.info('已停止处理');
+    const moduleTasks = tasks.filter(t => t.module === 'formatConvert' && activeTaskIds.has(t.id));
+    if (moduleTasks.length > 0) {
+      await stopTask(moduleTasks[0].id);
+      toast.info('已停止处理');
+    }
   };
+
+  const currentModuleTask = tasks.find(t => t.module === 'formatConvert' && activeTaskIds.has(t.id));
+  const isCurrentModuleProcessing = !!currentModuleTask;
 
   return (
     <div className="space-y-4">
@@ -250,6 +233,14 @@ export function FormatConvert() {
           <FileType className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
           <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>格式转换</h2>
           <Badge color="blue">全格式</Badge>
+          {isCurrentModuleProcessing && (
+            <Badge color="green">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                处理中
+              </span>
+            </Badge>
+          )}
         </div>
         <Tabs
           tabs={[
@@ -305,6 +296,37 @@ export function FormatConvert() {
                     <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{(f.size / 1024 / 1024).toFixed(1)} MB</span>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          <div 
+            className="rounded-xl p-4"
+            style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <FileType className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>输出文件名</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                className="flex-1 rounded-lg px-3 py-2 text-xs outline-none"
+                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                placeholder="留空则使用默认名称（原文件名_converted）"
+                value={customFileName}
+                onChange={(e) => setCustomFileName(e.target.value)}
+              />
+              <span 
+                className="px-3 py-2 rounded-lg text-xs"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
+              >
+                .{targetFormat.toLowerCase()}
+              </span>
+            </div>
+            {customFileName && customFileName.trim() && inputFiles.length > 0 && (
+              <div className="mt-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                预览: {customFileName.trim()}.{targetFormat.toLowerCase()}
               </div>
             )}
           </div>
@@ -482,29 +504,29 @@ export function FormatConvert() {
           >
             <div className="flex items-center gap-4">
               <button 
-                onClick={isProcessing ? handleStop : handleStart} 
+                onClick={isCurrentModuleProcessing ? handleStop : handleStart} 
                 disabled={!isConfigured || !isElectronEnv}
                 className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all"
-                style={{ background: isProcessing ? 'linear-gradient(135deg, var(--error-color), #ef4444)' : 'linear-gradient(135deg, var(--primary-color), #8b5cf6)' }}
+                style={{ background: isCurrentModuleProcessing ? 'linear-gradient(135deg, var(--error-color), #ef4444)' : 'linear-gradient(135deg, var(--primary-color), #8b5cf6)' }}
               >
-                <Sparkles className="w-4 h-4" />
-                {isProcessing ? '停止' : '开始转换'}
+                {isCurrentModuleProcessing ? <Square className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+                {isCurrentModuleProcessing ? '停止' : '开始转换'}
               </button>
-              {isProcessing && (
+              {isCurrentModuleProcessing && currentModuleTask && (
                 <div className="flex-1">
-                  <ProgressBar value={Math.floor(progress)} label="转换进度" />
+                  <ProgressBar value={Math.floor(currentModuleTask.progress)} label="转换进度" />
                 </div>
               )}
-              {!isProcessing && (
+              {!isCurrentModuleProcessing && (
                 <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
                   <Info className="w-3.5 h-3.5" />
                   <span>点击开始按钮执行转换任务</span>
                 </div>
               )}
             </div>
-            {logs.length > 0 && (
+            {currentModuleTask && currentModuleTask.logs.length > 0 && (
               <div className="mt-4">
-                <Terminal lines={logs} />
+                <Terminal lines={currentModuleTask.logs} />
               </div>
             )}
           </div>

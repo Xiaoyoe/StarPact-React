@@ -60,6 +60,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }) => ipcRenderer.invoke(IPC_CHANNELS.FILE.SELECT_FILE, options),
     readFile: (filePath: string, encoding?: string) => 
       ipcRenderer.invoke(IPC_CHANNELS.FILE.READ_FILE, filePath, encoding),
+    showInFolder: (filePath: string) => 
+      ipcRenderer.invoke('file:showInFolder', filePath),
+    deleteFile: (filePath: string) => 
+      ipcRenderer.invoke('file:deleteFile', filePath),
   },
   window: {
     minimize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.MINIMIZE),
@@ -73,7 +77,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     validatePath: (binPath: string) => ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.VALIDATE_PATH, binPath),
     execute: (options: { ffmpegPath: string; args: string[]; outputPath?: string }) => 
       ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.EXECUTE, options),
-    executeWithProgress: (options: { ffmpegPath: string; args: string[]; outputPath?: string; duration?: number }) => 
+    executeWithProgress: (options: { ffmpegPath: string; args: string[]; outputPath?: string; duration?: number; taskId?: string }) => 
       ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.EXECUTE_WITH_PROGRESS, options),
     stop: () => ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.STOP),
     getMediaInfo: (ffprobePath: string, filePath: string) => 
@@ -85,8 +89,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('ffmpeg:progress', listener);
     },
     
-    onLog: (callback: (log: string) => void) => {
-      const listener = (_event: any, log: string) => callback(log);
+    onLog: (callback: (data: { log: string; taskId?: string }) => void) => {
+      const listener = (_event: any, data: { log: string; taskId?: string }) => callback(data);
       ipcRenderer.on('ffmpeg:log', listener);
       return () => ipcRenderer.removeListener('ffmpeg:log', listener);
     },
@@ -141,6 +145,14 @@ declare global {
         readFile: (filePath: string, encoding?: string) => Promise<{
           success: boolean;
           content: string | null;
+          error?: string;
+        }>;
+        showInFolder: (filePath: string) => Promise<{
+          success: boolean;
+          error?: string;
+        }>;
+        deleteFile: (filePath: string) => Promise<{
+          success: boolean;
           error?: string;
         }>;
       };

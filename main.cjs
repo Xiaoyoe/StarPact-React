@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
@@ -6,6 +6,7 @@ const isDev = require('electron-is-dev');
 
 let mainWindow = null;
 let currentProcess = null;
+let currentTaskId = null;
 
 // FFmpeg Service
 const ffmpegService = {
@@ -54,7 +55,7 @@ const ffmpegService = {
 
       currentProcess.stderr?.on('data', (data) => {
         stderr += data.toString();
-        ffmpegService.sendLog(data.toString());
+        ffmpegService.sendLog(data.toString(), options.taskId);
       });
 
       currentProcess.on('error', (err) => {
@@ -81,6 +82,8 @@ const ffmpegService = {
       }
 
       const args = ['-y', ...options.args];
+      const taskId = options.taskId;
+      currentTaskId = taskId;
       
       currentProcess = spawn(options.ffmpegPath, args, {
         windowsHide: true,
@@ -90,19 +93,21 @@ const ffmpegService = {
 
       currentProcess.stderr?.on('data', (data) => {
         stderr += data.toString();
-        ffmpegService.sendLog(data.toString());
-        ffmpegService.parseProgressFromStderr(data.toString(), duration);
+        ffmpegService.sendLog(data.toString(), taskId);
+        ffmpegService.parseProgressFromStderr(data.toString(), duration, taskId);
       });
 
       currentProcess.on('error', (err) => {
         currentProcess = null;
+        currentTaskId = null;
         resolve({ success: false, error: err.message });
       });
 
       currentProcess.on('close', (code) => {
         currentProcess = null;
+        currentTaskId = null;
         if (code === 0) {
-          ffmpegService.sendProgress({ progress: 100 });
+          ffmpegService.sendProgress({ progress: 100 }, taskId);
           resolve({ success: true });
         } else {
           resolve({ success: false, error: stderr || `Process exited with code ${code}` });
@@ -113,8 +118,20 @@ const ffmpegService = {
 
   stop: () => {
     if (currentProcess) {
-      currentProcess.kill('SIGTERM');
+      const pid = currentProcess.pid;
+      
+      currentProcess.kill('SIGKILL');
+      
+      if (process.platform === 'win32' && pid) {
+        try {
+          require('child_process').execSync(`taskkill /pid ${pid} /T /F`, { timeout: 2000 });
+        } catch (e) {
+          console.log('Taskkill error:', e.message);
+        }
+      }
+      
       currentProcess = null;
+      currentTaskId = null;
       return true;
     }
     return false;
@@ -194,7 +211,7 @@ const ffmpegService = {
     return parseFloat(frameRate) || 0;
   },
 
-  parseProgressFromStderr: (data, duration) => {
+  parseProgressFromStderr: (data, duration, taskId) => {
     const progress = {};
     
     const frameMatch = data.match(/frame=\s*(\d+)/);
@@ -217,7 +234,7 @@ const ffmpegService = {
     }
 
     if (Object.keys(progress).length > 0) {
-      ffmpegService.sendProgress(progress);
+      ffmpegService.sendProgress(progress, taskId);
     }
   },
 
@@ -232,15 +249,15 @@ const ffmpegService = {
     return 0;
   },
 
-  sendProgress: (progress) => {
+  sendProgress: (progress, taskId) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('ffmpeg:progress', progress);
+      mainWindow.webContents.send('ffmpeg:progress', { ...progress, taskId });
     }
   },
 
-  sendLog: (log) => {
+  sendLog: (log, taskId) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('ffmpeg:log', log);
+      mainWindow.webContents.send('ffmpeg:log', { log, taskId });
     }
   }
 };
@@ -427,6 +444,41 @@ function registerFileHandlers() {
         content: null,
         error: error.message,
       };
+    }
+  });
+
+  // 处理在文件管理器中显示文件的请求
+  ipcMain.handle('file:showInFolder', async (event, filePath) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        const dir = path.dirname(filePath);
+        if (fs.existsSync(dir)) {
+          await shell.openPath(dir);
+          return { success: true };
+        }
+        return { success: false, error: '文件或目录不存在' };
+      }
+      
+      await shell.openPath(path.dirname(filePath));
+      return { success: true };
+    } catch (error) {
+      console.error('打开文件夹失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 处理删除文件的请求
+  ipcMain.handle('file:deleteFile', async (event, filePath) => {
+    try {
+      if (!fs.existsSync(filePath)) {
+        return { success: true, message: '文件不存在' };
+      }
+      
+      await fs.promises.unlink(filePath);
+      return { success: true };
+    } catch (error) {
+      console.error('删除文件失败:', error);
+      return { success: false, error: error.message };
     }
   });
 }

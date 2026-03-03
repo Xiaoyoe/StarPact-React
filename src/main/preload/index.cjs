@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectFolder: (options) => ipcRenderer.invoke('file:selectFolder', options),
     selectFile: (options) => ipcRenderer.invoke('file:selectFile', options),
     readFile: (filePath, encoding) => ipcRenderer.invoke('file:readFile', filePath, encoding),
+    showInFolder: (filePath) => ipcRenderer.invoke('file:showInFolder', filePath),
+    deleteFile: (filePath) => ipcRenderer.invoke('file:deleteFile', filePath),
   },
   
   // 窗口控制API
@@ -41,13 +43,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getMediaInfo: (ffprobePath, filePath) => ipcRenderer.invoke('ffmpeg:getMediaInfo', ffprobePath, filePath),
     
     onProgress: (callback) => {
-      const listener = (event, progress) => callback(progress);
+      const listener = (event, data) => callback(data);
       ipcRenderer.on('ffmpeg:progress', listener);
       return () => ipcRenderer.removeListener('ffmpeg:progress', listener);
     },
     
     onLog: (callback) => {
-      const listener = (event, log) => callback(log);
+      const listener = (event, data) => callback(data);
       ipcRenderer.on('ffmpeg:log', listener);
       return () => ipcRenderer.removeListener('ffmpeg:log', listener);
     },

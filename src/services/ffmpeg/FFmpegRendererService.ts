@@ -8,6 +8,7 @@ export interface FFmpegProgress {
   bitrate: string;
   speed: string;
   progress: number;
+  taskId?: string;
 }
 
 export interface MediaInfo {
@@ -35,7 +36,7 @@ export interface ExecuteResult {
 }
 
 type ProgressCallback = (progress: FFmpegProgress) => void;
-type LogCallback = (log: string) => void;
+type LogCallback = (data: { log: string; taskId?: string }) => void;
 
 class FFmpegRendererService {
   private static instance: FFmpegRendererService;
@@ -44,6 +45,7 @@ class FFmpegRendererService {
   private unsubscribeProgress: (() => void) | null = null;
   private unsubscribeLog: (() => void) | null = null;
   private isElectronEnv: boolean = false;
+  private listenersSetup: boolean = false;
 
   private constructor() {
     this.checkEnvironment();
@@ -64,22 +66,30 @@ class FFmpegRendererService {
   }
 
   private setupListeners() {
+    if (this.listenersSetup) return;
+    
+    this.checkEnvironment();
+    
     if (this.isElectronEnv && window.electronAPI?.ffmpeg) {
       this.unsubscribeProgress = window.electronAPI.ffmpeg.onProgress((progress) => {
         this.progressCallbacks.forEach(cb => cb(progress));
       });
 
-      this.unsubscribeLog = window.electronAPI.ffmpeg.onLog((log) => {
-        this.logCallbacks.forEach(cb => cb(log));
+      this.unsubscribeLog = window.electronAPI.ffmpeg.onLog((data) => {
+        this.logCallbacks.forEach(cb => cb(data));
       });
+      
+      this.listenersSetup = true;
     }
   }
 
   isElectron(): boolean {
+    this.checkEnvironment();
     return this.isElectronEnv;
   }
 
   onProgress(callback: ProgressCallback): () => void {
+    this.setupListeners();
     this.progressCallbacks.add(callback);
     return () => {
       this.progressCallbacks.delete(callback);
@@ -87,6 +97,7 @@ class FFmpegRendererService {
   }
 
   onLog(callback: LogCallback): () => void {
+    this.setupListeners();
     this.logCallbacks.add(callback);
     return () => {
       this.logCallbacks.delete(callback);
@@ -129,7 +140,7 @@ class FFmpegRendererService {
     return { success: false, error: 'Electron API 不可用' };
   }
 
-  async executeWithProgress(args: string[], duration?: number): Promise<ExecuteResult> {
+  async executeWithProgress(args: string[], duration?: number, taskId?: string): Promise<ExecuteResult> {
     if (!this.isElectronEnv) {
       return { success: false, error: '请在 Electron 应用中使用此功能（运行 npm run electron:dev）' };
     }
@@ -150,6 +161,7 @@ class FFmpegRendererService {
         args,
         outputPath: config.outputPath,
         duration,
+        taskId,
       });
     }
 
@@ -199,6 +211,35 @@ class FFmpegRendererService {
   isConfigured(): boolean {
     return ffmpegConfigStorage.isValid();
   }
+
+  generateUniqueOutputPath(basePath: string): string {
+    const lastDotIndex = basePath.lastIndexOf('.');
+    if (lastDotIndex === -1) return basePath;
+    
+    const dir = basePath.substring(0, Math.max(basePath.lastIndexOf('/'), basePath.lastIndexOf('\\'), 0));
+    const fileName = basePath.substring(Math.max(basePath.lastIndexOf('/'), basePath.lastIndexOf('\\')) + 1);
+    
+    const extDotIndex = fileName.lastIndexOf('.');
+    const nameWithoutExt = extDotIndex >= 0 ? fileName.substring(0, extDotIndex) : fileName;
+    const ext = extDotIndex >= 0 ? fileName.substring(extDotIndex) : '';
+    
+    let counter = 1;
+    let newPath = basePath;
+    
+    while (this.fileExistsCache.has(newPath)) {
+      newPath = dir ? `${dir}${dir.includes('\\') ? '\\' : '/'}${nameWithoutExt}_${counter}${ext}` : `${nameWithoutExt}_${counter}${ext}`;
+      counter++;
+    }
+    
+    this.fileExistsCache.add(newPath);
+    return newPath;
+  }
+
+  clearFilePathCache(path: string): void {
+    this.fileExistsCache.delete(path);
+  }
+
+  private fileExistsCache: Set<string> = new Set();
 
   buildConvertArgs(
     inputPath: string,

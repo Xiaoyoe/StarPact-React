@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Zap, Stamp, Subtitles, GitMerge, SplitSquareVertical, ImageIcon, Camera, Radio, Clapperboard, AlertCircle } from 'lucide-react';
+import { Zap, Stamp, Subtitles, GitMerge, SplitSquareVertical, ImageIcon, Camera, Radio, Clapperboard, AlertCircle, Square } from 'lucide-react';
 import { SectionCard, FileDropZone, FormRow, Toggle, Slider, Tabs, ProgressBar, Terminal, Badge } from '@/components/ffmpeg';
-import { ffmpegRendererService, type FFmpegProgress, type MediaInfo } from '@/services/ffmpeg/FFmpegRendererService';
-import { ffmpegConfigStorage } from '@/services/storage/FFmpegConfigStorage';
+import { ffmpegRendererService, type MediaInfo } from '@/services/ffmpeg/FFmpegRendererService';
+import { useFFmpegStore } from '@/stores/ffmpegStore';
 import { useToast } from '@/components/Toast';
 
 interface InputFile {
@@ -15,13 +15,22 @@ interface InputFile {
 
 export function AdvancedTools() {
   const [tab, setTab] = useState('compress');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [logs, setLogs] = useState<string[]>([]);
   const [inputFiles, setInputFiles] = useState<InputFile[]>([]);
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [isElectronEnv, setIsElectronEnv] = useState(false);
-  const [outputPath, setOutputPath] = useState('');
+  
+  const { 
+    isConfigured, 
+    isElectronEnv, 
+    outputPath, 
+    tasks,
+    activeTaskIds,
+    checkConfig, 
+    startTask, 
+    completeTask, 
+    stopTask,
+    addTaskLog,
+    generateUniquePath,
+  } = useFFmpegStore();
+  
   const toast = useToast();
   
   const [targetSize, setTargetSize] = useState(50);
@@ -51,37 +60,11 @@ export function AdvancedTools() {
   
   const [streamUrl, setStreamUrl] = useState('rtmp://');
   const [streamBitrate, setStreamBitrate] = useState(2500);
+  const [customFileName, setCustomFileName] = useState('');
 
   useEffect(() => {
-    const checkConfig = async () => {
-      await ffmpegConfigStorage.ready();
-      setIsConfigured(ffmpegConfigStorage.isValid());
-      setOutputPath(ffmpegConfigStorage.getOutputPath());
-      setIsElectronEnv(ffmpegRendererService.isElectron());
-    };
     checkConfig();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribeProgress = ffmpegRendererService.onProgress((p: FFmpegProgress) => {
-      setProgress(p.progress);
-      if (p.frame > 0) {
-        setLogs(prev => [...prev.slice(-50), `[progress] frame=${p.frame} fps=${p.fps} size=${p.size} time=${p.time} bitrate=${p.bitrate} speed=${p.speed}`]);
-      }
-    });
-
-    const unsubscribeLog = ffmpegRendererService.onLog((log: string) => {
-      const cleanLog = log.trim();
-      if (cleanLog) {
-        setLogs(prev => [...prev.slice(-100), `[ffmpeg] ${cleanLog}`]);
-      }
-    });
-
-    return () => {
-      unsubscribeProgress();
-      unsubscribeLog();
-    };
-  }, []);
+  }, [checkConfig]);
 
   const handleFilesSelected = useCallback(async (files: File[]) => {
     if (files.length === 0) return;
@@ -94,6 +77,7 @@ export function AdvancedTools() {
     }));
 
     setInputFiles(inputFilesData);
+    setCustomFileName('');
 
     if (inputFilesData.length > 0 && inputFilesData[0].path) {
       const mediaInfo = await ffmpegRendererService.getMediaInfo(inputFilesData[0].path);
@@ -109,13 +93,19 @@ export function AdvancedTools() {
     }
   }, []);
 
-  const getOutputFilePath = (inputFile: InputFile, extension: string, suffix?: string): string => {
+  const getOutputFilePath = (inputFile: InputFile, extension: string, suffix?: string, customName?: string): string => {
     const inputPath = inputFile.path;
+    const lastSepIndex = Math.max(inputPath.lastIndexOf('/'), inputPath.lastIndexOf('\\'));
+    const inputDir = lastSepIndex >= 0 ? inputPath.substring(0, lastSepIndex) : '';
     const lastDotIndex = inputFile.name.lastIndexOf('.');
     const inputName = lastDotIndex >= 0 ? inputFile.name.substring(0, lastDotIndex) : inputFile.name;
-    const suffixStr = suffix ? `_${suffix}` : '';
     
-    return outputDir ? `${outputDir}${sep}${inputName}${suffixStr}.${extension}` : `${inputDir}${sep}${inputName}${suffixStr}`;
+    const outputDir = outputPath || inputDir;
+    const sep = outputDir.includes('\\') ? '\\' : '/';
+    
+    const finalName = customName && customName.trim() ? customName.trim() : `${inputName}${suffix ? `_${suffix}` : ''}`;
+    
+    return outputDir ? `${outputDir}${sep}${finalName}.${extension}` : `${finalName}.${extension}`;
   };
 
   const handleStart = async () => {
@@ -134,108 +124,101 @@ export function AdvancedTools() {
       return;
     }
 
-    setIsProcessing(true);
-    setProgress(0);
-    setLogs([`[info] FFmpeg Studio - ${tab} 模块`, '[info] 开始处理...']);
+    const inputFile = inputFiles[0];
+    let outputFilePath: string;
+    let args: string[];
+
+    switch (tab) {
+      case 'compress':
+        outputFilePath = generateUniquePath(getOutputFilePath(inputFile, 'mp4', 'compressed', customFileName));
+        args = ffmpegRendererService.buildCompressArgs(inputFile.path, outputFilePath, {
+          targetSizeMB: targetSize,
+          quality: compressQuality as 'quality' | 'balanced' | 'size',
+          keepAudio,
+        });
+        break;
+
+      case 'watermark':
+        outputFilePath = generateUniquePath(getOutputFilePath(inputFile, 'mp4', 'watermarked', customFileName));
+        args = ffmpegRendererService.buildWatermarkArgs(inputFile.path, outputFilePath, {
+          type: 'text',
+          text: wmText,
+          position: wmPosition,
+          opacity: wmOpacity,
+          fontSize: wmSize,
+          color: wmColor,
+        });
+        break;
+
+      case 'subtitle':
+        if (!subtitlePath) {
+          toast.error('请先选择字幕文件');
+          return;
+        }
+        outputFilePath = generateUniquePath(getOutputFilePath(inputFile, 'mp4', 'subtitled', customFileName));
+        args = ffmpegRendererService.buildSubtitleArgs(inputFile.path, outputFilePath, {
+          subtitlePath,
+          mode: subMode as 'burn' | 'embed',
+          fontSize: subFontSize,
+        });
+        break;
+
+      case 'gif':
+        outputFilePath = generateUniquePath(getOutputFilePath(inputFile, 'gif', undefined, customFileName));
+        args = ffmpegRendererService.buildGifArgs(inputFile.path, outputFilePath, {
+          startTime: gifStart,
+          duration: gifDuration,
+          fps: gifFps,
+          width: gifWidth,
+          loop: gifLoop,
+        });
+        break;
+
+      case 'screenshot':
+        const ext = ssFormat.toLowerCase();
+        outputFilePath = getOutputFilePath(inputFile, ext === 'jpg' ? 'jpg' : ext, 'frame_%04d');
+        args = ffmpegRendererService.buildScreenshotArgs(inputFile.path, outputFilePath, {
+          mode: ssMode as 'interval' | 'count' | 'single' | 'tile',
+          interval: ssInterval,
+          format: ssFormat,
+        });
+        break;
+
+      default:
+        toast.error('该功能暂未实现');
+        return;
+    }
+
+    const taskId = startTask('advancedTools', inputFile.name, inputFile.path, outputFilePath);
+    addTaskLog(taskId, `[info] FFmpeg Studio - ${tab} 模块`);
+    addTaskLog(taskId, `[info] FFmpeg 命令: ffmpeg ${args.join(' ')}`);
 
     try {
-      const inputFile = inputFiles[0];
-      let outputFilePath: string;
-      let args: string[];
-
-      switch (tab) {
-        case 'compress':
-          outputFilePath = getOutputFilePath(inputFile, 'mp4', 'compressed');
-          args = ffmpegRendererService.buildCompressArgs(inputFile.path, outputFilePath, {
-            targetSizeMB: targetSize,
-            quality: compressQuality as 'quality' | 'balanced' | 'size',
-            keepAudio,
-          });
-          break;
-
-        case 'watermark':
-          outputFilePath = getOutputFilePath(inputFile, 'mp4', 'watermarked');
-          args = ffmpegRendererService.buildWatermarkArgs(inputFile.path, outputFilePath, {
-            type: 'text',
-            text: wmText,
-            position: wmPosition,
-            opacity: wmOpacity,
-            fontSize: wmSize,
-            color: wmColor,
-          });
-          break;
-
-        case 'subtitle':
-          if (!subtitlePath) {
-            toast.error('请先选择字幕文件');
-            setIsProcessing(false);
-            return;
-          }
-          outputFilePath = getOutputFilePath(inputFile, 'mp4', 'subtitled');
-          args = ffmpegRendererService.buildSubtitleArgs(inputFile.path, outputFilePath, {
-            subtitlePath,
-            mode: subMode as 'burn' | 'embed',
-            fontSize: subFontSize,
-          });
-          break;
-
-        case 'gif':
-          outputFilePath = getOutputFilePath(inputFile, 'gif');
-          args = ffmpegRendererService.buildGifArgs(inputFile.path, outputFilePath, {
-            startTime: gifStart,
-            duration: gifDuration,
-            fps: gifFps,
-            width: gifWidth,
-            loop: gifLoop,
-          });
-          break;
-
-        case 'screenshot':
-          const ext = ssFormat.toLowerCase();
-          outputFilePath = getOutputFilePath(inputFile, ext === 'jpg' ? 'jpg' : ext, 'frame_%04d');
-          args = ffmpegRendererService.buildScreenshotArgs(inputFile.path, outputFilePath, {
-            mode: ssMode as 'interval' | 'count' | 'single' | 'tile',
-            interval: ssInterval,
-            format: ssFormat,
-          });
-          break;
-
-        default:
-          toast.error('该功能暂未实现');
-          setIsProcessing(false);
-          return;
-      }
-
-      setLogs(prev => [...prev, `[info] 处理文件: ${inputFile.name}`]);
-      setLogs(prev => [...prev, `[info] 输出到: ${outputFilePath}`]);
-      setLogs(prev => [...prev, `[info] FFmpeg 命令: ffmpeg ${args.join(' ')}`]);
-
       const duration = inputFile.mediaInfo?.duration;
-      const result = await ffmpegRendererService.executeWithProgress(args, duration);
+      const result = await ffmpegRendererService.executeWithProgress(args, duration, taskId);
 
+      completeTask(taskId, result.success, result.error);
       if (result.success) {
-        setLogs(prev => [...prev, `[done] ✅ 处理完成！`]);
         toast.success('处理完成！');
       } else {
-        setLogs(prev => [...prev, `[error] ❌ 处理失败: ${result.error}`]);
         toast.error('处理失败');
       }
-
-      setProgress(100);
     } catch (error) {
-      setLogs(prev => [...prev, `[error] 处理出错: ${error instanceof Error ? error.message : '未知错误'}`]);
+      completeTask(taskId, false, error instanceof Error ? error.message : '未知错误');
       toast.error('处理失败');
-    } finally {
-      setTimeout(() => setIsProcessing(false), 500);
     }
   };
 
   const handleStop = async () => {
-    await ffmpegRendererService.stop();
-    setIsProcessing(false);
-    setLogs(prev => [...prev, '[info] 已停止处理']);
-    toast.info('已停止处理');
+    const moduleTasks = tasks.filter(t => t.module === 'advancedTools' && activeTaskIds.has(t.id));
+    if (moduleTasks.length > 0) {
+      await stopTask(moduleTasks[0].id);
+      toast.info('已停止处理');
+    }
   };
+
+  const currentModuleTask = tasks.find(t => t.module === 'advancedTools' && activeTaskIds.has(t.id));
+  const isCurrentModuleProcessing = !!currentModuleTask;
 
   return (
     <div className="space-y-4">
@@ -244,6 +227,14 @@ export function AdvancedTools() {
           <Clapperboard className="w-5 h-5" style={{ color: 'var(--warning-color)' }} />
           <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>高级工具</h2>
           <Badge color="orange">Pro</Badge>
+          {isCurrentModuleProcessing && (
+            <Badge color="green">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                处理中
+              </span>
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -294,6 +285,24 @@ export function AdvancedTools() {
                     <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{(f.size / 1024 / 1024).toFixed(1)} MB</span>
                   </div>
                 ))}
+              </div>
+            )}
+          </SectionCard>
+
+          <SectionCard title="输出文件名" icon={<Zap className="w-4 h-4" />}>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                className="flex-1 rounded-lg px-3 py-2 text-xs outline-none"
+                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                placeholder="留空则使用默认名称（原文件名_功能后缀）"
+                value={customFileName}
+                onChange={(e) => setCustomFileName(e.target.value)}
+              />
+            </div>
+            {customFileName && customFileName.trim() && inputFiles.length > 0 && (
+              <div className="mt-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                预览: {customFileName.trim()}.{tab === 'gif' ? 'gif' : 'mp4'}
               </div>
             )}
           </SectionCard>
@@ -509,16 +518,17 @@ export function AdvancedTools() {
       <SectionCard title="" icon={null}>
         <div className="flex items-center gap-4 mb-3">
           <button 
-            onClick={isProcessing ? handleStop : handleStart} 
+            onClick={isCurrentModuleProcessing ? handleStop : handleStart} 
             disabled={!isConfigured || !isElectronEnv}
-            className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all" 
-            style={{ background: isProcessing ? 'linear-gradient(135deg, var(--error-color), #ef4444)' : 'linear-gradient(135deg, var(--warning-color), #f59e0b)' }}
+            className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all" 
+            style={{ background: isCurrentModuleProcessing ? 'linear-gradient(135deg, var(--error-color), #ef4444)' : 'linear-gradient(135deg, var(--warning-color), #f59e0b)' }}
           >
-            {isProcessing ? '停止' : '⚡ 开始处理'}
+            {isCurrentModuleProcessing ? <Square className="w-4 h-4" /> : <Zap className="w-4 h-4" />}
+            {isCurrentModuleProcessing ? '停止' : '⚡ 开始处理'}
           </button>
-          {isProcessing && <div className="flex-1"><ProgressBar value={Math.floor(progress)} label="处理进度" /></div>}
+          {isCurrentModuleProcessing && currentModuleTask && <div className="flex-1"><ProgressBar value={Math.floor(currentModuleTask.progress)} label="处理进度" /></div>}
         </div>
-        {logs.length > 0 && <Terminal lines={logs} />}
+        {currentModuleTask && currentModuleTask.logs.length > 0 && <Terminal lines={currentModuleTask.logs} />}
       </SectionCard>
     </div>
   );

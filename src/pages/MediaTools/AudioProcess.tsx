@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { 
   Music, Volume2, AudioLines, FileAudio, Disc3, 
   Upload, ChevronDown, ChevronRight, Sparkles, Info, 
-  Play, Pause, SkipBack, SkipForward, Waves, AlertCircle
+  Play, Pause, SkipBack, SkipForward, Waves, AlertCircle, Square
 } from 'lucide-react';
 import { SectionCard, FileDropZone, FormRow, Toggle, Slider, Tabs, ProgressBar, Terminal, Badge } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ffmpegRendererService, type FFmpegProgress, type MediaInfo } from '@/services/ffmpeg/FFmpegRendererService';
-import { ffmpegConfigStorage } from '@/services/storage/FFmpegConfigStorage';
+import { ffmpegRendererService, type MediaInfo } from '@/services/ffmpeg/FFmpegRendererService';
+import { useFFmpegStore } from '@/stores/ffmpegStore';
 import { useToast } from '@/components/Toast';
 
 interface CollapsibleSectionProps {
@@ -145,45 +145,28 @@ export function AudioProcess() {
   const [trebleBoost, setTrebleBoost] = useState(0);
   const [startTime, setStartTime] = useState('00:00:00');
   const [endTime, setEndTime] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [logs, setLogs] = useState<string[]>([]);
   const [inputFiles, setInputFiles] = useState<InputFile[]>([]);
-  const [isConfigured, setIsConfigured] = useState(false);
-  const [isElectronEnv, setIsElectronEnv] = useState(false);
-  const [outputPath, setOutputPath] = useState('');
+  const [customFileName, setCustomFileName] = useState('');
+  
+  const { 
+    isConfigured, 
+    isElectronEnv, 
+    outputPath, 
+    tasks,
+    activeTaskIds,
+    checkConfig, 
+    startTask, 
+    completeTask, 
+    stopTask,
+    addTaskLog,
+    generateUniquePath,
+  } = useFFmpegStore();
+  
   const toast = useToast();
 
   useEffect(() => {
-    const checkConfig = async () => {
-      await ffmpegConfigStorage.ready();
-      setIsConfigured(ffmpegConfigStorage.isValid());
-      setOutputPath(ffmpegConfigStorage.getOutputPath());
-      setIsElectronEnv(ffmpegRendererService.isElectron());
-    };
     checkConfig();
-  }, []);
-
-  useEffect(() => {
-    const unsubscribeProgress = ffmpegRendererService.onProgress((p: FFmpegProgress) => {
-      setProgress(p.progress);
-      if (p.frame > 0) {
-        setLogs(prev => [...prev.slice(-50), `[progress] frame=${p.frame} fps=${p.fps} size=${p.size} time=${p.time} bitrate=${p.bitrate} speed=${p.speed}`]);
-      }
-    });
-
-    const unsubscribeLog = ffmpegRendererService.onLog((log: string) => {
-      const cleanLog = log.trim();
-      if (cleanLog) {
-        setLogs(prev => [...prev.slice(-100), `[ffmpeg] ${cleanLog}`]);
-      }
-    });
-
-    return () => {
-      unsubscribeProgress();
-      unsubscribeLog();
-    };
-  }, []);
+  }, [checkConfig]);
 
   const handleFilesSelected = useCallback(async (files: File[]) => {
     if (files.length === 0) return;
@@ -196,6 +179,7 @@ export function AudioProcess() {
     }));
 
     setInputFiles(inputFilesData);
+    setCustomFileName('');
 
     if (inputFilesData.length > 0 && inputFilesData[0].path) {
       const mediaInfo = await ffmpegRendererService.getMediaInfo(inputFilesData[0].path);
@@ -205,7 +189,7 @@ export function AudioProcess() {
     }
   }, []);
 
-  const getOutputFilePath = (inputFile: InputFile): string => {
+  const getOutputFilePath = (inputFile: InputFile, customName?: string): string => {
     const inputPath = inputFile.path;
     const lastSepIndex = Math.max(inputPath.lastIndexOf('/'), inputPath.lastIndexOf('\\'));
     const inputDir = lastSepIndex >= 0 ? inputPath.substring(0, lastSepIndex) : '';
@@ -216,7 +200,9 @@ export function AudioProcess() {
     const extension = audioFormat.toLowerCase();
     const sep = outputDir.includes('\\') ? '\\' : '/';
     
-    return outputDir ? `${outputDir}${sep}${inputName}_audio.${extension}` : `${inputName}_audio.${extension}`;
+    const finalName = customName && customName.trim() ? customName.trim() : `${inputName}_audio`;
+    
+    return outputDir ? `${outputDir}${sep}${finalName}.${extension}` : `${finalName}.${extension}`;
   };
 
   const handleStart = async () => {
@@ -235,64 +221,56 @@ export function AudioProcess() {
       return;
     }
 
-    setIsProcessing(true);
-    setProgress(0);
-    setLogs([
-      '[info] FFmpeg Studio - 音频处理模块',
-      `[info] 模式: ${tab === 'extract' ? '提取音频' : tab === 'adjust' ? '音频调节' : tab === 'mix' ? '音频混合' : '音效处理'}`,
-      '[info] 开始处理...',
-    ]);
+    const inputFile = inputFiles[0];
+    const baseOutputPath = getOutputFilePath(inputFile, customFileName);
+    const outputFilePath = generateUniquePath(baseOutputPath);
+    const taskId = startTask('audioProcess', inputFile.name, inputFile.path, outputFilePath);
+
+    addTaskLog(taskId, '[info] FFmpeg Studio - 音频处理模块');
+    addTaskLog(taskId, `[info] 模式: ${tab === 'extract' ? '提取音频' : tab === 'adjust' ? '音频调节' : tab === 'mix' ? '音频混合' : '音效处理'}`);
 
     try {
-      for (const inputFile of inputFiles) {
-        const outputFilePath = getOutputFilePath(inputFile);
-        
-        setLogs(prev => [...prev, `[info] 处理文件: ${inputFile.name}`]);
-        setLogs(prev => [...prev, `[info] 输出到: ${outputFilePath}`]);
-
-        const args = ffmpegRendererService.buildAudioExtractArgs(
-          inputFile.path,
-          outputFilePath,
-          {
-            format: audioFormat,
-            bitrate,
-            sampleRate,
-            startTime: startTime || undefined,
-            endTime: endTime || undefined,
-            volume,
-            normalize,
-            fadeIn: fadeIn > 0 ? fadeIn : undefined,
-            fadeOut: fadeOut > 0 ? fadeOut : undefined,
-          }
-        );
-
-        const duration = inputFile.mediaInfo?.duration;
-        const result = await ffmpegRendererService.executeWithProgress(args, duration);
-
-        if (result.success) {
-          setLogs(prev => [...prev, `[done] ✅ ${inputFile.name} 处理完成！`]);
-        } else {
-          setLogs(prev => [...prev, `[error] ❌ ${inputFile.name} 处理失败: ${result.error}`]);
+      const args = ffmpegRendererService.buildAudioExtractArgs(
+        inputFile.path,
+        outputFilePath,
+        {
+          format: audioFormat,
+          bitrate,
+          sampleRate,
+          startTime: startTime || undefined,
+          endTime: endTime || undefined,
+          volume,
+          normalize,
+          fadeIn: fadeIn > 0 ? fadeIn : undefined,
+          fadeOut: fadeOut > 0 ? fadeOut : undefined,
         }
-      }
+      );
 
-      setProgress(100);
-      setLogs(prev => [...prev, '[done] ✅ 所有任务完成！']);
-      toast.success('处理完成！');
+      const duration = inputFile.mediaInfo?.duration;
+      const result = await ffmpegRendererService.executeWithProgress(args, duration, taskId);
+
+      completeTask(taskId, result.success, result.error);
+      if (result.success) {
+        toast.success('处理完成！');
+      } else {
+        toast.error('处理失败');
+      }
     } catch (error) {
-      setLogs(prev => [...prev, `[error] 处理出错: ${error instanceof Error ? error.message : '未知错误'}`]);
+      completeTask(taskId, false, error instanceof Error ? error.message : '未知错误');
       toast.error('处理失败');
-    } finally {
-      setTimeout(() => setIsProcessing(false), 500);
     }
   };
 
   const handleStop = async () => {
-    await ffmpegRendererService.stop();
-    setIsProcessing(false);
-    setLogs(prev => [...prev, '[info] 已停止处理']);
-    toast.info('已停止处理');
+    const moduleTasks = tasks.filter(t => t.module === 'audioProcess' && activeTaskIds.has(t.id));
+    if (moduleTasks.length > 0) {
+      await stopTask(moduleTasks[0].id);
+      toast.info('已停止处理');
+    }
   };
+
+  const currentModuleTask = tasks.find(t => t.module === 'audioProcess' && activeTaskIds.has(t.id));
+  const isCurrentModuleProcessing = !!currentModuleTask;
 
   const renderSettings = () => {
     switch (tab) {
@@ -425,6 +403,14 @@ export function AudioProcess() {
           <Music className="w-5 h-5" style={{ color: 'var(--success-color)' }} />
           <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>音频处理</h2>
           <Badge color="green">专业</Badge>
+          {isCurrentModuleProcessing && (
+            <Badge color="green">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                处理中
+              </span>
+            </Badge>
+          )}
         </div>
         <Tabs
           tabs={[
@@ -477,6 +463,37 @@ export function AudioProcess() {
                     <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{(f.size / 1024 / 1024).toFixed(1)} MB</span>
                   </div>
                 ))}
+              </div>
+            )}
+          </div>
+
+          <div 
+            className="rounded-xl p-4"
+            style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+          >
+            <div className="flex items-center gap-2 mb-3">
+              <FileAudio className="w-4 h-4" style={{ color: 'var(--success-color)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>输出文件名</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                className="flex-1 rounded-lg px-3 py-2 text-xs outline-none"
+                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                placeholder="留空则使用默认名称（原文件名_audio）"
+                value={customFileName}
+                onChange={(e) => setCustomFileName(e.target.value)}
+              />
+              <span 
+                className="px-3 py-2 rounded-lg text-xs"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
+              >
+                .{audioFormat.toLowerCase()}
+              </span>
+            </div>
+            {customFileName && customFileName.trim() && inputFiles.length > 0 && (
+              <div className="mt-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                预览: {customFileName.trim()}.{audioFormat.toLowerCase()}
               </div>
             )}
           </div>
@@ -537,29 +554,29 @@ export function AudioProcess() {
           >
             <div className="flex items-center gap-4">
               <button 
-                onClick={isProcessing ? handleStop : handleStart} 
+                onClick={isCurrentModuleProcessing ? handleStop : handleStart} 
                 disabled={!isConfigured || !isElectronEnv}
                 className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all"
-                style={{ background: isProcessing ? 'linear-gradient(135deg, var(--error-color), #ef4444)' : 'linear-gradient(135deg, var(--success-color), #10b981)' }}
+                style={{ background: isCurrentModuleProcessing ? 'linear-gradient(135deg, var(--error-color), #ef4444)' : 'linear-gradient(135deg, var(--success-color), #10b981)' }}
               >
-                <Sparkles className="w-4 h-4" />
-                {isProcessing ? '停止' : '开始处理'}
+                {isCurrentModuleProcessing ? <Square className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+                {isCurrentModuleProcessing ? '停止' : '开始处理'}
               </button>
-              {isProcessing && (
+              {isCurrentModuleProcessing && currentModuleTask && (
                 <div className="flex-1">
-                  <ProgressBar value={Math.floor(progress)} label="处理进度" />
+                  <ProgressBar value={Math.floor(currentModuleTask.progress)} label="处理进度" />
                 </div>
               )}
-              {!isProcessing && (
+              {!isCurrentModuleProcessing && (
                 <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
                   <Info className="w-3.5 h-3.5" />
                   <span>点击开始按钮执行音频处理任务</span>
                 </div>
               )}
             </div>
-            {logs.length > 0 && (
+            {currentModuleTask && currentModuleTask.logs.length > 0 && (
               <div className="mt-4">
-                <Terminal lines={logs} />
+                <Terminal lines={currentModuleTask.logs} />
               </div>
             )}
           </div>
