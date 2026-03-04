@@ -30,43 +30,66 @@
 
 ```
 React_UI_Web/
-├── .trae/                  # 开发工具配置
-│   └── documents/          # 项目文档
 ├── backend/                # 后端服务
 │   ├── main.py             # 后端入口
 │   └── requirements.txt    # 后端依赖
 ├── dist/                   # 构建输出
 ├── src/                    # 源代码
 │   ├── components/         # 可复用组件
+│   │   ├── ChatQuickNav/   # 聊天快捷导航
+│   │   ├── DataManager/    # 数据管理
+│   │   ├── ffmpeg/         # FFmpeg 相关组件
+│   │   │   ├── Badge.tsx
+│   │   │   ├── FileDropZone.tsx
+│   │   │   ├── FormRow.tsx
+│   │   │   ├── ProgressBar.tsx
+│   │   │   ├── SectionCard.tsx
+│   │   │   ├── Slider.tsx
+│   │   │   ├── Tabs.tsx
+│   │   │   ├── Terminal.tsx
+│   │   │   ├── Toggle.tsx
+│   │   │   └── index.ts
+│   │   ├── ChatWelcome.tsx # 聊天欢迎页面
 │   │   ├── CodeEditor.tsx  # 高级代码编辑器组件
+│   │   ├── CustomTitleBar.tsx # 自定义标题栏
+│   │   ├── FFmpegConfigModal.tsx # FFmpeg 配置弹窗
 │   │   ├── GalleryComponents.tsx # 图片管理组件
+│   │   ├── ImageViewer.tsx # 图片查看器组件
+│   │   ├── IndexedDBStorageStatus.tsx # IndexedDB 存储状态
 │   │   ├── LogsPanel.tsx   # 日志面板组件
 │   │   ├── NovelEditor.tsx # 小说编辑器组件
 │   │   ├── OllamaModal.tsx # Ollama 管理弹窗组件
+│   │   ├── PerformanceModal.tsx # 性能监控弹窗
 │   │   ├── Toast.tsx       # 提示组件
 │   │   ├── VideoPlayer.tsx # 视频播放器组件
 │   │   └── WebShortcutPopup.tsx # 网页快捷方式弹窗组件
 │   ├── constants/          # 常量定义
 │   │   ├── config.ts       # 配置常量
 │   │   └── themes.ts       # 主题常量
-│   ├── docs/               # 文档
-│   │   └── development-guide.md # 开发指南
 │   ├── hooks/              # 自定义 hooks
 │   │   ├── index.ts        # hooks 导出
 │   │   ├── useDebounce.ts  # 防抖 hook
 │   │   └── useTheme.ts     # 主题 hook
+│   ├── images/             # 图片资源
+│   │   └── background/     # 背景图片
 │   ├── layouts/            # 布局组件
 │   │   ├── styles/         # 布局样式
-│   │   │   └── index.module.css # 布局样式文件
+│   │   │   └── index.module.css
 │   │   └── Sidebar.tsx     # 侧边栏布局
 │   ├── main/               # Electron 主进程
 │   │   ├── ipc/            # IPC 通信
 │   │   │   ├── channels.ts # IPC 通道定义
-│   │   │   └── ollamaHandlers.ts # Ollama IPC 处理器
+│   │   │   ├── ffmpegHandlers.ts # FFmpeg IPC 处理器
+│   │   │   ├── fileHandlers.ts # 文件 IPC 处理器
+│   │   │   ├── ollamaHandlers.ts # Ollama IPC 处理器
+│   │   │   ├── storageHandlers.ts # 存储 IPC 处理器
+│   │   │   └── windowHandlers.ts # 窗口 IPC 处理器
 │   │   ├── preload/        # 预加载脚本
 │   │   │   ├── index.cjs   # 预加载入口 (CommonJS)
 │   │   │   └── index.ts    # 预加载入口 (TypeScript)
 │   │   ├── services/       # 后端服务
+│   │   │   ├── ffmpeg/     # FFmpeg 服务
+│   │   │   │   └── FFmpegService.ts
 │   │   │   └── ollama/     # Ollama 服务
 │   │   │       ├── OllamaAPIClient.ts       # API 客户端
 │   │   │       └── OllamaServiceManager.ts  # 服务管理
@@ -74,85 +97,123 @@ React_UI_Web/
 │   ├── pages/              # 页面组件
 │   │   ├── Chat/           # 聊天页面
 │   │   │   ├── styles/     # 聊天页面样式
-│   │   │   │   └── index.module.css # 聊天页面样式文件
+│   │   │   │   └── index.module.css
 │   │   │   └── index.tsx   # 聊天页面组件
 │   │   ├── Compare/        # 对比页面
+│   │   │   ├── components/ # 对比页面组件
+│   │   │   │   ├── CompareStats.tsx
+│   │   │   │   ├── DiffResultView.tsx
+│   │   │   │   ├── FloatingToolbar.tsx
+│   │   │   │   ├── SaveModal.tsx
+│   │   │   │   ├── SavedItem.tsx
+│   │   │   │   ├── Splitter.tsx
+│   │   │   │   └── ToolButton.tsx
+│   │   │   ├── hooks/      # 对比页面 hooks
+│   │   │   │   ├── useAutoSave.ts
+│   │   │   │   ├── useCompareState.ts
+│   │   │   │   ├── useKeyboardShortcuts.ts
+│   │   │   │   └── useSavedFiles.ts
 │   │   │   ├── styles/     # 对比页面样式
-│   │   │   │   └── index.module.css # 对比页面样式文件
+│   │   │   │   └── index.module.css
+│   │   │   ├── utils/      # 对比页面工具
+│   │   │   │   └── storage.ts
 │   │   │   └── index.tsx   # 对比页面组件
 │   │   ├── Gallery/        # 图片管理页面
-│   │   │   └── index.tsx   # 图片管理页面组件
+│   │   │   └── index.tsx
 │   │   ├── IniConfig/      # INI 配置页面
-│   │   │   ├── styles/     # INI 配置页面样式
-│   │   │   │   └── index.module.css # INI 配置页面样式文件
-│   │   │   └── index.tsx   # INI 配置页面组件
-│   │   ├── Logs/           # 日志页面
-│   │   │   ├── styles/     # 日志页面样式
-│   │   │   │   └── index.module.css # 日志页面样式文件
-│   │   │   └── index.tsx   # 日志页面组件
+│   │   │   ├── styles/
+│   │   │   │   └── index.module.css
+│   │   │   └── index.tsx
+│   │   ├── MediaTools/     # 媒体工具页面
+│   │   │   ├── AdvancedTools.tsx
+│   │   │   ├── AudioProcess.tsx
+│   │   │   ├── CommandBuilder.tsx
+│   │   │   ├── FormatConvert.tsx
+│   │   │   └── index.tsx
 │   │   ├── Models/         # 模型管理页面
-│   │   │   ├── styles/     # 模型管理页面样式
-│   │   │   │   └── index.module.css # 模型管理页面样式文件
-│   │   │   ├── OllamaManager.tsx # Ollama 管理组件
-│   │   │   └── index.tsx   # 模型配置页面组件
+│   │   │   ├── styles/
+│   │   │   │   └── index.module.css
+│   │   │   ├── OllamaManager.tsx
+│   │   │   └── index.tsx
 │   │   ├── PromptTemplates/ # 提示模板页面
-│   │   │   └── index.tsx   # 提示模板页面组件
+│   │   │   └── index.tsx
 │   │   ├── Settings/       # 设置页面
-│   │   │   ├── styles/     # 设置页面样式
-│   │   │   │   └── index.module.css # 设置页面样式文件
-│   │   │   ├── about.tsx   # 关于页面
-│   │   │   └── index.tsx   # 设置页面组件
+│   │   │   ├── styles/
+│   │   │   │   └── index.module.css
+│   │   │   ├── about.tsx
+│   │   │   ├── index.tsx
+│   │   │   └── path.tsx
 │   │   └── VideoPlayer/    # 视频播放器页面
-│   │       ├── styles/     # 视频播放器页面样式
-│   │       │   └── index.module.css # 视频播放器页面样式文件
-│   │       └── index.tsx   # 视频播放器页面组件
+│   │       ├── styles/
+│   │       │   ├── index.module.css
+│   │       │   └── scroll-title.css
+│   │       └── index.tsx
 │   ├── services/           # 前端服务
+│   │   ├── ffmpeg/         # FFmpeg 渲染服务
+│   │   │   └── FFmpegRendererService.ts
 │   │   └── storage/        # 存储服务
-│   │       ├── ConfigStorage.ts        # 配置存储
-│   │       ├── GalleryStorage.ts       # 图库存储
-│   │       ├── StorageManager.ts       # 存储管理
-│   │       ├── VideoPlaylistStorage.ts # 视频播放列表存储
-│   │       └── VideoStorage.ts         # 视频存储
+│   │       ├── ChatModelStorage.ts      # 聊天模型存储
+│   │       ├── ConfigStorage.ts         # 配置存储
+│   │       ├── FFmpegConfigStorage.ts   # FFmpeg 配置存储
+│   │       ├── GalleryStorage.ts        # 图库存储
+│   │       ├── IndexedDBStorage.ts      # IndexedDB 存储
+│   │       ├── IndexedDBStorageOptimized.ts # 优化版 IndexedDB 存储
+│   │       ├── LogStorage.ts            # 日志存储
+│   │       ├── MigrationTool.ts         # 迁移工具
+│   │       ├── OllamaModelStorage.ts    # Ollama 模型存储
+│   │       ├── PromptTemplateStorage.ts # 提示模板存储
+│   │       ├── StorageManager.ts        # 存储管理
+│   │       ├── StorageMonitor.ts        # 存储监控
+│   │       ├── StorageTest.ts           # 存储测试
+│   │       ├── TextContrastStorage.ts   # 文本对比存储
+│   │       ├── VideoPlaylistStorage.ts  # 视频播放列表存储
+│   │       ├── VideoStorage.ts          # 视频存储
+│   │       ├── VideoStorageTest.ts      # 视频存储测试
+│   │       └── WebShortcutStorage.ts    # 网页快捷方式存储
 │   ├── shared/             # 共享代码
 │   │   └── types/          # 类型定义
 │   │       └── ollama.ts   # Ollama 类型
 │   ├── store/              # 状态管理
-│   │   └── index.ts        # Zustand store
+│   │   ├── index.ts        # Zustand store
+│   │   └── webShortcutStore.ts # 网页快捷方式 store
+│   ├── stores/             # 其他状态管理
+│   │   └── ffmpegStore.ts  # FFmpeg store
 │   ├── styles/             # 样式文件
 │   │   ├── themes/         # 主题样式
-│   │   │   ├── amber-gold.css # 琥珀金主题
+│   │   │   ├── quotes/     # 每日名言
+│   │   │   │   └── daily_quotes.json
+│   │   │   ├── amber-gold.css    # 琥珀金主题
 │   │   │   ├── caramel-brown.css # 焦糖棕主题
-│   │   │   ├── coral-orange.css # 珊瑚橙主题
-│   │   │   ├── dark.css    # 暗色主题
-│   │   │   ├── deep-sea-blue.css # 深海蓝主题
-│   │   │   ├── eye-care.css # 护眼主题
-│   │   │   ├── forest-green.css # 森林绿主题
+│   │   │   ├── coral-orange.css  # 珊瑚橙主题
+│   │   │   ├── dark.css           # 暗色主题
+│   │   │   ├── deep-sea-blue.css  # 深海蓝主题
+│   │   │   ├── eye-care.css       # 护眼主题
+│   │   │   ├── forest-green.css   # 森林绿主题
 │   │   │   ├── lavender-purple.css # 薰衣草紫主题
-│   │   │   ├── light.css   # 亮色主题
-│   │   │   ├── midnight-blue.css # 午夜蓝主题
-│   │   │   ├── mint-cyan.css # 薄荷青主题
-│   │   │   ├── sakura-pink.css # 樱花粉主题
-│   │   │   └── tech-blue.css # 科技蓝主题
-│   │   └── index.css       # 全局样式
+│   │   │   ├── light.css          # 亮色主题
+│   │   │   ├── midnight-blue.css  # 午夜蓝主题
+│   │   │   ├── mint-cyan.css      # 薄荷青主题
+│   │   │   ├── sakura-pink.css    # 樱花粉主题
+│   │   │   └── tech-blue.css      # 科技蓝主题
 │   ├── types/              # 类型定义
 │   │   ├── gallery.ts      # 图片管理类型
 │   │   ├── index.ts        # 类型导出
 │   │   └── video.ts        # 视频管理类型
 │   ├── utils/              # 工具函数
 │   │   ├── cn.ts           # 类名工具
-│   │   └── diffEngine.ts   # 差异比较引擎
+│   │   ├── diffEngine.ts   # 差异比较引擎
+│   │   ├── formatters.ts   # 格式化工具
+│   │   └── notification.ts # 通知工具
 │   ├── App.tsx             # 应用根组件
 │   ├── index.css           # 全局样式
 │   └── main.tsx            # 应用入口
-├── starpact-local/         # 本地数据
-│   └── gallery/            # 图库数据
-│       └── default.json    # 默认图库配置
 ├── .gitignore              # Git 忽略文件
 ├── README.md               # 项目文档
 ├── index.html              # HTML 入口
 ├── main.cjs                # Electron 主入口
 ├── package-lock.json       # npm 锁定文件
 ├── package.json            # 项目配置
+├── storage-test.html       # 存储测试页面
 ├── tsconfig.json           # TypeScript 配置
 └── vite.config.ts          # Vite 配置
 ```
@@ -177,6 +238,9 @@ React_UI_Web/
 - **配置管理**：自定义 Ollama 主机地址和端口
 - **聊天功能**：与本地 AI 模型进行对话（支持流式输出）
 - **操作日志**：记录所有 Ollama 相关操作
+- **思考模式控制**：支持开启/关闭模型的思考模式（--think 参数）
+- **思考内容显示**：在聊天中显示模型的思考过程
+- **多模态支持**：支持图片上传和多模态模型对话
 
 ### 3. 智能聊天系统
 - **多模型切换**：在对话中快速切换不同 AI 模型
@@ -185,6 +249,10 @@ React_UI_Web/
 - **对话历史**：保存和管理历史对话记录
 - **对话标题**：自动生成对话标题，便于识别
 - **收藏对话**：标记重要对话以便快速访问
+- **文件上传**：支持图片文件上传（适配多模态模型）
+- **全屏图片查看器**：点击图片可全屏查看，支持缩放、旋转、拖拽
+- **欢迎页面**：精美的欢迎页面，包含快捷建议和统计数据
+- **欢迎页面开关**：可控制是否每次进入聊天时显示欢迎页面（IndexedDB 持久化）
 
 ### 4. 高级代码编辑器
 - **语法高亮**：支持 INI 文件和普通文本的语法高亮
@@ -215,25 +283,34 @@ React_UI_Web/
 - **文本对比**：比较两个文本内容的差异
 - **高亮显示**：清晰标记添加、删除和修改的内容
 - **实时对比**：编辑时实时更新对比结果
+- **自动保存**：支持自动保存对比内容
+- **文件管理**：保存和管理多个对比文件
 
-### 8. 日志系统
+### 8. 媒体工具（FFmpeg）
+- **格式转换**：支持多种音视频格式转换
+- **音频处理**：音频提取、音量调整等
+- **高级工具**：视频剪辑、合并、水印等功能
+- **命令生成器**：可视化生成 FFmpeg 命令
+- **进度监控**：实时显示处理进度
+
+### 9. 日志系统
 - **多级日志**：info、warn、error、debug 等级别
 - **模块化日志**：按功能模块分类记录
 - **日志面板**：可折叠的实时日志查看面板
 - **日志清空**：一键清空日志记录
 
-### 9. 提示模板管理
+### 10. 提示模板管理
 - **模板库**：预设常用提示模板
 - **模板编辑**：创建和修改自定义模板
 - **快速应用**：在聊天中快速插入模板
 
-### 10. 主题系统
+### 11. 主题系统
 - **13 种主题**：亮色、暗色、科技蓝、护眼、午夜蓝、森林绿、珊瑚橙、薰衣草紫、薄荷青、焦糖棕、樱花粉、深海蓝、琥珀金
 - **CSS 变量**：统一的主题变量管理
 - **实时切换**：无需重启即可切换主题
 - **组件适配**：所有组件自动适配当前主题
 
-### 11. 网页快捷方式
+### 12. 网页快捷方式
 - **快捷访问**：快速打开常用网页
 - **分类管理**：支持添加、编辑、删除网页快捷方式
 - **收藏功能**：标记常用网页为星标
@@ -242,10 +319,12 @@ React_UI_Web/
 - **主题适配**：自动适配应用主题颜色
 - **默认浏览器打开**：使用系统默认浏览器打开网页
 
-### 12. 存储管理
+### 13. 存储管理
 - **配置存储**：保存应用配置和用户偏好
 - **路径配置**：自定义各模块的存储路径
 - **数据持久化**：确保数据在应用重启后保持
+- **IndexedDB 优化**：优化的数据存储和访问
+- **存储监控**：实时监控存储状态
 
 ## 安装和运行
 
@@ -253,6 +332,7 @@ React_UI_Web/
 - **Node.js 18+**：运行时环境
 - **npm 或 yarn**：包管理工具
 - **Ollama**（可选）：用于本地 AI 功能
+- **FFmpeg**（可选）：用于媒体处理功能
 
 ### 安装依赖
 
@@ -332,13 +412,33 @@ npm run electron:build:portable
    - 删除不需要的模型
    - 查看模型详细信息
 
+### 思考模式控制
+
+在侧边栏可以找到思考模式控制按钮：
+- **开启思考模式**：模型会显示思考过程（适用于支持思考功能的模型）
+- **关闭思考模式**：模型直接输出结果，不显示思考过程
+
+思考模式设置会保存到 IndexedDB 的 config 中，重启应用后保持设置。
+
+### 多模态功能
+
+对于支持多模态的模型（如 llava、moondream 等）：
+1. 在聊天页面点击输入框左侧的文件上传按钮
+2. 选择图片文件（支持 JPG、PNG、GIF 等格式）
+3. 输入文本提示
+4. 发送消息，模型会分析图片并回复
+
 ### 常用模型
 
 - `llama3.2` - Meta 的 Llama 3.2 模型
+- `llama3.2:3b` - 轻量级 Llama 3.2 模型
 - `qwen2.5` - 阿里通义千问
+- `qwen2.5:3b` - 轻量级通义千问
 - `mistral` - Mistral AI 模型
 - `codellama` - 代码专用模型
 - `gemma2` - Google 的 Gemma 2 模型
+- `llava` - 多模态视觉语言模型
+- `moondream` - 轻量级多模态模型
 
 ### Ollama API
 
@@ -407,6 +507,19 @@ import { VideoPlayer } from '@/components/VideoPlayer';
 />
 ```
 
+### 使用 ImageViewer 组件
+
+```tsx
+import { ImageViewer } from '@/components/ImageViewer';
+
+<ImageViewer
+  images={imageList}
+  initialIndex={0}
+  isOpen={isOpen}
+  onClose={() => setIsOpen(false)}
+/>
+```
+
 ### 扩展 Ollama 功能
 
 Ollama 集成采用模块化设计，易于扩展：
@@ -424,6 +537,7 @@ Ollama 集成采用模块化设计，易于扩展：
 - Ollama 服务状态和模型列表
 - 应用主题和布局设置
 - 存储路径配置
+- 网页快捷方式
 
 ### 存储管理
 
@@ -433,6 +547,7 @@ Ollama 集成采用模块化设计，易于扩展：
 3. **图库存储**：管理图片相关数据
 4. **视频存储**：管理视频播放列表
 5. **提示词模板存储**：管理预设和自定义提示词模板
+6. **网页快捷方式存储**：管理网页快捷方式数据
 
 ## 存储系统详解
 
@@ -450,6 +565,9 @@ Ollama 集成采用模块化设计，易于扩展：
 | `ConfigStorage` | 管理应用配置 | `src/services/storage/ConfigStorage.ts` |
 | `StorageManager` | 统一存储管理接口 | `src/services/storage/StorageManager.ts` |
 | `IndexedDBStorage` | 管理网页快捷方式 | `src/services/storage/IndexedDBStorage.ts` |
+| `ChatModelStorage` | 管理聊天模型配置 | `src/services/storage/ChatModelStorage.ts` |
+| `OllamaModelStorage` | 管理 Ollama 模型 | `src/services/storage/OllamaModelStorage.ts` |
+| `LogStorage` | 管理日志记录 | `src/services/storage/LogStorage.ts` |
 
 ### 存储位置
 
@@ -570,6 +688,14 @@ Ollama 集成采用模块化设计，易于扩展：
 - `saveTemplate(template: PromptTemplate): Promise<void>` - 保存提示词模板
 - `getAllTemplates(): Promise<PromptTemplate[]>` - 获取所有提示词模板
 - `deleteTemplate(id: string): Promise<void>` - 删除提示词模板
+
+#### ConfigStorage
+
+- `getConfig(): Promise<Config>` - 获取配置
+- `saveConfig(config: Partial<Config>): Promise<void>` - 保存配置
+- `ollamaVerboseMode: boolean` - Ollama 详细模式
+- `ollamaThinkMode: boolean` - Ollama 思考模式
+- `showChatWelcome: boolean` - 是否显示聊天欢迎页面
 
 ### 常见存储问题
 
@@ -706,6 +832,12 @@ A: 确保：
 2. 应用有足够的权限
 3. 路径格式正确
 
+### Q: 如何关闭欢迎页面？
+A: 在侧边栏找到欢迎页面开关按钮，点击即可关闭。设置会自动保存到 IndexedDB。
+
+### Q: 图片查看器如何使用？
+A: 点击聊天中的图片即可打开全屏查看器。支持滚轮缩放、鼠标拖拽、左右切换图片。
+
 ## 性能优化
 
 1. **组件懒加载**：使用 React.lazy 和 Suspense 延迟加载大型组件
@@ -713,6 +845,7 @@ A: 确保：
 3. **图片优化**：使用 sharp 处理图片，减少内存使用
 4. **缓存策略**：缓存模型配置和常用数据
 5. **批量更新**：使用 React 的自动批处理功能
+6. **IndexedDB 优化**：使用优化的存储实现提高读写性能
 
 ## 安全注意事项
 
@@ -730,6 +863,18 @@ MIT License
 欢迎提交 Issue 和 Pull Request！
 
 ## 更新日志
+
+### v1.1.0
+- 新增 Ollama 思考模式控制功能
+- 新增聊天中显示 think 内容功能，适配所有 Ollama 模型
+- 完善消息发送栏左边的文件上传功能，适配 Ollama 多模态模型
+- 重新设计点击查看图片功能为全屏效果
+- 图片查看器支持缩放、旋转、拖动功能
+- 重新设计欢迎页面布局样式
+- 新增欢迎页面开关按钮，支持 IndexedDB 数据持久化
+- 新增 MediaTools 页面，集成 FFmpeg 媒体处理功能
+- 优化 IndexedDB 存储性能
+- 新增多个存储服务和工具组件
 
 ### v1.0.0
 - 初始版本发布
