@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -36,6 +36,7 @@ export function Sidebar() {
     ollamaStatus,
     performanceModalOpen, setPerformanceModalOpen,
     ollamaVerboseMode, setOllamaVerboseMode,
+    ollamaThinkMode, setOllamaThinkMode,
   } = useStore();
 
   const toast = useToast();
@@ -58,6 +59,16 @@ export function Sidebar() {
       const savedAppNameDisplay = configStorage.get('appNameDisplay');
       if (savedAppNameDisplay) {
         setAppNameDisplay(savedAppNameDisplay);
+      }
+      
+      const savedVerboseMode = configStorage.get('ollamaVerboseMode');
+      const savedThinkMode = configStorage.get('ollamaThinkMode');
+      
+      if (savedVerboseMode !== undefined) {
+        setOllamaVerboseMode(savedVerboseMode);
+      }
+      if (savedThinkMode !== undefined) {
+        setOllamaThinkMode(savedThinkMode);
       }
     };
     loadConfig();
@@ -360,8 +371,10 @@ export function Sidebar() {
                 </div>
                 <button
                   onClick={() => {
-                    setOllamaVerboseMode(!ollamaVerboseMode);
-                    toast.info(ollamaVerboseMode ? '已关闭详细模式' : '已开启详细模式，下次请求将显示性能指标', { duration: 2000 });
+                    const newValue = !ollamaVerboseMode;
+                    setOllamaVerboseMode(newValue);
+                    configStorage.set('ollamaVerboseMode', newValue);
+                    toast.info(newValue ? '已开启详细模式，下次请求将显示性能指标' : '已关闭详细模式', { duration: 2000 });
                   }}
                   className="relative flex h-6 w-11 items-center rounded-full transition-colors"
                   style={{ 
@@ -374,6 +387,39 @@ export function Sidebar() {
                     style={{
                       left: '2px',
                       transform: ollamaVerboseMode ? 'translateX(20px)' : 'translateX(0)',
+                    }}
+                  />
+                </button>
+              </div>
+
+              {/* Think Mode Toggle */}
+              <div 
+                className="flex items-center justify-between px-5 py-3 border-b"
+                style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <Brain size={14} style={{ color: 'var(--primary-color)' }} />
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>思考模式</span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>启用模型思考能力</span>
+                </div>
+                <button
+                  onClick={() => {
+                    const newValue = !ollamaThinkMode;
+                    setOllamaThinkMode(newValue);
+                    configStorage.set('ollamaThinkMode', newValue);
+                    toast.info(newValue ? '已开启思考模式' : '已关闭思考模式', { duration: 2000 });
+                  }}
+                  className="relative flex h-6 w-11 items-center rounded-full transition-colors"
+                  style={{ 
+                    backgroundColor: ollamaThinkMode ? 'var(--success-color)' : 'var(--bg-tertiary)',
+                  }}
+                  title={ollamaThinkMode ? '关闭思考模式' : '开启思考模式'}
+                >
+                  <span
+                    className="absolute h-5 w-5 rounded-full bg-white shadow transition-transform"
+                    style={{
+                      left: '2px',
+                      transform: ollamaThinkMode ? 'translateX(20px)' : 'translateX(0)',
                     }}
                   />
                 </button>

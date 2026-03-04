@@ -22,6 +22,9 @@ export interface AppConfig {
   galleryDefaultLayout: 'grid' | 'waterfall' | 'list';
   appNameDisplay: 'chinese' | 'english';
   defaultPage: 'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates' | 'media-tools';
+  ollamaVerboseMode: boolean;
+  ollamaThinkMode: boolean;
+  showChatWelcome: boolean;
   [key: string]: any;
 }
 
@@ -59,7 +62,10 @@ export class ConfigStorage {
       closeConfirm: true,
       galleryDefaultLayout: 'grid',
       appNameDisplay: 'english',
-      defaultPage: 'chat'
+      defaultPage: 'chat',
+      ollamaVerboseMode: false,
+      ollamaThinkMode: true,
+      showChatWelcome: true,
     };
   }
 

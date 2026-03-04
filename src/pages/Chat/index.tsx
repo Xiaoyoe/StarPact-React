@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
-  Star, ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer
+  Star, ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -16,6 +16,8 @@ import { configStorage } from '@/services/storage/ConfigStorage';
 import { useToast } from '@/components/Toast';
 import { notificationService } from '@/utils/notification';
 import { PerformanceModal } from '@/components/PerformanceModal';
+import { ImageViewer } from '@/components/ImageViewer';
+import { ChatWelcome } from '@/components/ChatWelcome';
 
 function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = useState(false);
@@ -54,7 +56,12 @@ function CodeBlock({ language, children }: { language: string; children: string 
   );
 }
 
-function MessageBubble({ message, isLast, compactMode }: { message: ChatMessage; isLast: boolean; compactMode: boolean }) {
+function MessageBubble({ message, isLast, compactMode, onImageClick }: { 
+  message: ChatMessage; 
+  isLast: boolean; 
+  compactMode: boolean;
+  onImageClick: (images: string[], index: number) => void;
+}) {
   const isUser = message.role === 'user';
   const [showActions, setShowActions] = useState(true);
   const [showThinking, setShowThinking] = useState(true);
@@ -110,22 +117,46 @@ function MessageBubble({ message, isLast, compactMode }: { message: ChatMessage;
           }}
         >
           {isUser ? (
-            <p className="whitespace-pre-wrap text-sm leading-relaxed copy-allowed" style={{ userSelect: 'text' }}>{message.content}</p>
+            <div className="space-y-2">
+              {message.images && message.images.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {message.images.map((img, idx) => (
+                    <img 
+                      key={idx}
+                      src={img} 
+                      alt={`图片 ${idx + 1}`}
+                      className="max-w-[200px] max-h-[200px] object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                      style={{ borderColor: 'var(--border-color)' }}
+                      onClick={() => onImageClick(message.images!, idx)}
+                    />
+                  ))}
+                </div>
+              )}
+              <p className="whitespace-pre-wrap text-sm leading-relaxed copy-allowed" style={{ userSelect: 'text' }}>{message.content}</p>
+            </div>
           ) : (
             <>
               {/* Thinking Section */}
               {message.thinking && (
-                <div className="mb-3">
+                <div className="mb-4">
                   <button
                     onClick={() => setShowThinking(!showThinking)}
-                    className="flex items-center gap-1.5 text-xs font-medium mb-2 transition-colors"
-                    style={{ color: 'var(--primary-color)' }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all w-full"
+                    style={{ 
+                      color: showThinking ? 'var(--primary-color)' : 'var(--text-secondary)',
+                      backgroundColor: showThinking ? 'var(--primary-light)' : 'var(--bg-secondary)',
+                      border: '1px solid var(--border-color)',
+                    }}
                   >
-                    <Brain size={12} />
-                    <span>思考过程</span>
+                    <Brain size={14} style={{ color: 'var(--primary-color)' }} />
+                    <span className="flex-1 text-left">思考过程</span>
+                    <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      {message.thinking.length} 字符
+                    </span>
                     <ChevronRight 
-                      size={12} 
+                      size={14} 
                       style={{ 
+                        color: 'var(--text-tertiary)',
                         transform: showThinking ? 'rotate(90deg)' : 'rotate(0deg)',
                         transition: 'transform 0.2s'
                       }} 
@@ -134,21 +165,37 @@ function MessageBubble({ message, isLast, compactMode }: { message: ChatMessage;
                   <AnimatePresence>
                     {showThinking && (
                       <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
+                        initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                        animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
+                        exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                        transition={{ duration: 0.2 }}
                         className="overflow-hidden"
                       >
                         <div 
-                          className="rounded-lg p-3 text-xs leading-relaxed"
+                          className="rounded-xl p-4 text-sm leading-relaxed max-h-80 overflow-y-auto"
                           style={{ 
                             backgroundColor: 'var(--bg-secondary)',
                             border: '1px solid var(--border-color)',
                             color: 'var(--text-secondary)'
                           }}
                         >
+                          <div className="flex items-center gap-2 mb-3 pb-2 border-b" style={{ borderColor: 'var(--border-color)' }}>
+                            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--primary-color)' }} />
+                            <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>AI 正在思考...</span>
+                          </div>
                           <ReactMarkdown
                             remarkPlugins={[remarkGfm]}
+                            components={{
+                              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                              code: ({ className, children, ...props }) => {
+                                const match = /language-(\w+)/.exec(className || '');
+                                const codeString = String(children).replace(/\n$/, '');
+                                if (match) {
+                                  return <CodeBlock language={match[1]}>{codeString}</CodeBlock>;
+                                }
+                                return <code className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor: 'var(--bg-tertiary)' }} {...props}>{children}</code>;
+                              },
+                            }}
                           >
                             {message.thinking}
                           </ReactMarkdown>
@@ -224,6 +271,7 @@ export function ChatPage() {
     ollamaModels, activeOllamaModel, setActiveOllamaModel,
     ollamaStatus,
     ollamaVerboseMode, setPerformanceMetrics,
+    ollamaThinkMode,
   } = useStore();
 
   const toast = useToast();
@@ -237,9 +285,22 @@ export function ChatPage() {
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
   const [showPerfPanel, setShowPerfPanel] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<{ id: string; data: string; preview: string }[]>([]);
+  const [imageViewerState, setImageViewerState] = useState<{
+    isOpen: boolean;
+    images: string[];
+    currentIndex: number;
+  }>({
+    isOpen: false,
+    images: [],
+    currentIndex: 0,
+  });
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [showChatWelcome, setShowChatWelcome] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   const activeModel = models.find(m => m.id === activeModelId);
@@ -252,14 +313,20 @@ export function ChatPage() {
     scrollToBottom();
   }, [activeConversation?.messages, scrollToBottom]);
 
-  // 从配置加载壁纸设置
   useEffect(() => {
     const savedWallpaper = configStorage.get('chatWallpaper');
     if (savedWallpaper) {
       setChatWallpaper(savedWallpaper);
     }
     
-    // 仅在启用桌面通知时请求权限
+    const savedShowWelcome = configStorage.get('showChatWelcome');
+    if (savedShowWelcome !== undefined) {
+      setShowChatWelcome(savedShowWelcome);
+      setShowWelcome(savedShowWelcome);
+    } else {
+      setShowWelcome(true);
+    }
+    
     const chatNotification = configStorage.get('chatNotification');
     if (chatNotification?.enabled) {
       notificationService.requestPermission();
@@ -358,9 +425,13 @@ export function ChatPage() {
       role: 'user',
       content: userInput,
       timestamp: Date.now(),
+      images: uploadedImages.length > 0 ? uploadedImages.map(img => img.data) : undefined,
     };
     addMessage(convId, userMsg);
     setInputValue('');
+    
+    const currentImages = [...uploadedImages];
+    setUploadedImages([]);
     
     // Reset input height
     if (inputRef.current) {
@@ -391,6 +462,11 @@ export function ChatPage() {
     // If Ollama model is selected, call Ollama API
     if (activeOllamaModel && ollamaStatus?.isRunning) {
       try {
+        const imageBase64List = currentImages.map(img => {
+          const base64Match = img.data.match(/^data:image\/\w+;base64,(.+)$/);
+          return base64Match ? base64Match[1] : img.data;
+        });
+
         const response = await fetch('http://localhost:11434/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -398,6 +474,8 @@ export function ChatPage() {
             model: activeOllamaModel,
             prompt: userInput,
             stream: true,
+            think: ollamaThinkMode,
+            images: imageBase64List.length > 0 ? imageBase64List : undefined,
           }),
         });
 
@@ -407,7 +485,6 @@ export function ChatPage() {
           const decoder = new TextDecoder();
           let fullResponse = '';
           let thinkingContent = '';
-          let isInThinking = false;
           let startTime = Date.now();
           let firstTokenTime = 0;
           let lastPerfData: any = null;
@@ -431,25 +508,26 @@ export function ChatPage() {
                       firstTokenTime = (Date.now() - startTime) / 1000;
                     }
                     
-                    if (token.includes('<think&gt;')) {
-                      isInThinking = true;
-                    }
-                    if (token.includes('</think&gt;')) {
-                      isInThinking = false;
-                    }
-
                     fullResponse += token;
-
+                  }
+                  
+                  if (data.thinking) {
+                    thinkingContent += data.thinking;
+                  }
+                  
+                  if (data.response || data.thinking) {
                     let displayContent = fullResponse;
-                    let currentThinking = '';
-
-                    const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)(<\/think&gt;|$)/);
-                    if (thinkMatch) {
-                      currentThinking = thinkMatch[1];
-                      if (fullResponse.includes('</think&gt;')) {
-                        displayContent = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
-                      } else {
-                        displayContent = '';
+                    let currentThinking = thinkingContent;
+                    
+                    if (!currentThinking) {
+                      const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)(<\/think&gt;|$)/);
+                      if (thinkMatch) {
+                        currentThinking = thinkMatch[1];
+                        if (fullResponse.includes('</think&gt;')) {
+                          displayContent = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
+                        } else {
+                          displayContent = '';
+                        }
                       }
                     }
 
@@ -471,12 +549,14 @@ export function ChatPage() {
           }
 
           let finalResponse = fullResponse;
-          let finalThinking = '';
+          let finalThinking = thinkingContent;
           
-          const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)<\/think&gt;/);
-          if (thinkMatch) {
-            finalThinking = thinkMatch[1].trim();
-            finalResponse = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
+          if (!finalThinking) {
+            const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)<\/think&gt;/);
+            if (thinkMatch) {
+              finalThinking = thinkMatch[1].trim();
+              finalResponse = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
+            }
           }
 
           updateMessage(convId, aiMsgId, {
@@ -591,6 +671,79 @@ export function ChatPage() {
     }
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      if (!file.type.startsWith('image/')) {
+        toast.error('只支持图片文件', { duration: 2000 });
+        return;
+      }
+
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error('图片大小不能超过 10MB', { duration: 2000 });
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const data = event.target?.result as string;
+        setUploadedImages(prev => [...prev, {
+          id: generateId(),
+          data: data,
+          preview: data,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleRemoveImage = (id: string) => {
+    setUploadedImages(prev => prev.filter(img => img.id !== id));
+  };
+
+  const handleClearImages = () => {
+    setUploadedImages([]);
+  };
+
+  const openImageViewer = (images: string[], index: number) => {
+    setImageViewerState({
+      isOpen: true,
+      images,
+      currentIndex: index,
+    });
+  };
+
+  const closeImageViewer = () => {
+    setImageViewerState(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const handlePrevImage = () => {
+    setImageViewerState(prev => ({
+      ...prev,
+      currentIndex: prev.currentIndex > 0 ? prev.currentIndex - 1 : prev.images.length - 1,
+    }));
+  };
+
+  const handleNextImage = () => {
+    setImageViewerState(prev => ({
+      ...prev,
+      currentIndex: prev.currentIndex < prev.images.length - 1 ? prev.currentIndex + 1 : 0,
+    }));
+  };
+
+  const handleJumpToImage = (index: number) => {
+    setImageViewerState(prev => ({
+      ...prev,
+      currentIndex: index,
+    }));
+  };
+
   const handleStartEditTitle = () => {
     if (activeConversation) {
       setEditingTitle(activeConversation.title);
@@ -623,6 +776,18 @@ export function ChatPage() {
       handleCancelEditTitle();
     }
   };
+
+  const handleStartChat = () => {
+    setShowWelcome(false);
+  };
+
+  if (showWelcome && showChatWelcome) {
+    return (
+      <div className="flex h-full flex-col no-select" style={{ backgroundColor: 'var(--bg-primary)' }}>
+        <ChatWelcome onStartChat={handleStartChat} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col no-select" style={{ backgroundColor: compactMode ? 'transparent' : 'var(--bg-primary)', backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
@@ -724,6 +889,27 @@ export function ChatPage() {
               <span>{hoveredMessage}</span>
             </div>
           )}
+
+          {/* Welcome Page Toggle Button */}
+          <button
+            onClick={() => {
+              const newValue = !showChatWelcome;
+              setShowChatWelcome(newValue);
+              setShowWelcome(newValue);
+              configStorage.set('showChatWelcome', newValue);
+              toast.info(newValue ? '已开启欢迎页面' : '已关闭欢迎页面', { duration: 2000 });
+            }}
+            className="mr-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
+            style={{
+              backgroundColor: showChatWelcome ? 'var(--primary-color)' : 'var(--bg-secondary)',
+              color: showChatWelcome ? 'white' : 'var(--text-primary)',
+              border: '1px solid var(--border-color)',
+            }}
+            title={showChatWelcome ? '关闭欢迎页面' : '开启欢迎页面'}
+          >
+            <MessageSquare size={14} />
+            欢迎
+          </button>
 
           {/* Compact Mode Button */}
           <button
@@ -979,6 +1165,7 @@ export function ChatPage() {
                 message={msg}
                 isLast={idx === activeConversation.messages.length - 1}
                 compactMode={compactMode}
+                onImageClick={openImageViewer}
               />
             ))}
             <div ref={messagesEndRef} />
@@ -994,6 +1181,47 @@ export function ChatPage() {
         }}
       >
         <div className="mx-auto max-w-4xl">
+          {/* Image Preview Area */}
+          {uploadedImages.length > 0 && (
+            <div 
+              className="mb-2 flex flex-wrap gap-2 p-2 rounded-xl"
+              style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+            >
+              {uploadedImages.map((img) => (
+                <div 
+                  key={img.id} 
+                  className="relative group"
+                >
+                  <img 
+                    src={img.preview} 
+                    alt="上传的图片" 
+                    className="h-16 w-16 object-cover rounded-lg border"
+                    style={{ borderColor: 'var(--border-color)' }}
+                  />
+                  <button
+                    onClick={() => handleRemoveImage(img.id)}
+                    className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ backgroundColor: 'var(--error-color)', color: 'white' }}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={handleClearImages}
+                className="h-16 px-3 flex items-center gap-1 rounded-lg text-xs transition-colors"
+                style={{ 
+                  color: 'var(--text-tertiary)', 
+                  backgroundColor: 'var(--bg-tertiary)',
+                  border: '1px solid var(--border-color)'
+                }}
+              >
+                <X size={14} />
+                清空
+              </button>
+            </div>
+          )}
+
           <div
             className="flex items-end gap-2 rounded-2xl p-3"
             style={{
@@ -1001,19 +1229,31 @@ export function ChatPage() {
               border: '1px solid var(--border-color)',
             }}
           >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleImageUpload}
+              className="hidden"
+            />
             <button
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors"
-              style={{ color: 'var(--text-tertiary)' }}
-              title="上传附件"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-opacity-80"
+              style={{ 
+                color: uploadedImages.length > 0 ? 'var(--primary-color)' : 'var(--text-tertiary)',
+                backgroundColor: uploadedImages.length > 0 ? 'var(--primary-light)' : 'transparent'
+              }}
+              title="上传图片"
             >
-              <Paperclip size={18} />
+              <ImageIcon size={18} />
             </button>
             <textarea
               ref={inputRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="输入消息... (Shift+Enter 换行)"
+              placeholder={uploadedImages.length > 0 ? "描述图片内容或输入问题..." : "输入消息... (Shift+Enter 换行)"}
               rows={1}
               className="max-h-32 min-h-[36px] flex-1 resize-none bg-transparent py-2 text-sm outline-none copy-allowed"
               style={{
@@ -1036,12 +1276,12 @@ export function ChatPage() {
             </button>
             <button
               onClick={isStreaming ? () => setIsStreaming(false) : handleSend}
-              disabled={!inputValue.trim() && !isStreaming}
+              disabled={(!inputValue.trim() && uploadedImages.length === 0) && !isStreaming}
               className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95"
               style={{
-                backgroundColor: (inputValue.trim() || isStreaming) ? 'var(--primary-color)' : 'var(--bg-tertiary)',
-                color: (inputValue.trim() || isStreaming) ? 'white' : 'var(--text-tertiary)',
-                cursor: (!inputValue.trim() && !isStreaming) ? 'not-allowed' : 'pointer',
+                backgroundColor: (inputValue.trim() || isStreaming || uploadedImages.length > 0) ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                color: (inputValue.trim() || isStreaming || uploadedImages.length > 0) ? 'white' : 'var(--text-tertiary)',
+                cursor: (!inputValue.trim() && uploadedImages.length === 0 && !isStreaming) ? 'not-allowed' : 'pointer',
               }}
             >
               {isStreaming ? <Square size={16} /> : <Send size={16} />}
@@ -1049,6 +1289,17 @@ export function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* Image Viewer */}
+      <ImageViewer
+        images={imageViewerState.images}
+        currentIndex={imageViewerState.currentIndex}
+        isOpen={imageViewerState.isOpen}
+        onClose={closeImageViewer}
+        onPrev={handlePrevImage}
+        onNext={handleNextImage}
+        onJumpTo={handleJumpToImage}
+      />
     </div>
   );
 }

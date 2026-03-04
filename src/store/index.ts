@@ -50,6 +50,7 @@ export interface ChatMessage {
   isFavorite?: boolean;
   thinking?: string;
   showThinking?: boolean;
+  images?: string[];
 }
 
 export interface Conversation {
@@ -164,6 +165,8 @@ interface AppState {
   setActiveOllamaModel: (modelName: string | null) => void;
   ollamaVerboseMode: boolean;
   setOllamaVerboseMode: (verbose: boolean) => void;
+  ollamaThinkMode: boolean;
+  setOllamaThinkMode: (think: boolean) => void;
 
   // Performance Metrics
   performanceMetrics: {
@@ -699,6 +702,8 @@ export const useStore = create<AppState>((set, get) => {
   setActiveOllamaModel: (modelName) => set({ activeOllamaModel: modelName }),
   ollamaVerboseMode: false,
   setOllamaVerboseMode: (verbose) => set({ ollamaVerboseMode: verbose }),
+  ollamaThinkMode: true,
+  setOllamaThinkMode: (think) => set({ ollamaThinkMode: think }),
 
   // Performance Metrics
   performanceMetrics: null,
