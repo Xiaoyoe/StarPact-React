@@ -399,6 +399,8 @@ function OllamaPanel({
   setCreateModelName,
   createModelPath,
   setCreateModelPath,
+  createModelFile,
+  setCreateModelFile,
   isCreating,
   setIsCreating,
 }: {
@@ -408,6 +410,8 @@ function OllamaPanel({
   setCreateModelName: (v: string) => void;
   createModelPath: string;
   setCreateModelPath: (v: string) => void;
+  createModelFile: File | null;
+  setCreateModelFile: (v: File | null) => void;
   isCreating: boolean;
   setIsCreating: (v: boolean) => void;
 }) {
@@ -864,6 +868,7 @@ function OllamaPanel({
         if (file) {
           console.log('浏览器选择文件:', file.name);
           setCreateModelPath(file.name);
+          setCreateModelFile(file);
         }
       };
       input.click();
@@ -887,9 +892,14 @@ function OllamaPanel({
     try {
       let modelfileContent = '';
       
+      addOllamaLog({ type: 'info', message: `开始读取文件, createModelPath: ${createModelPath}, createModelFile: ${createModelFile ? createModelFile.name : 'null'}` });
+      addOllamaLog({ type: 'info', message: `electronAPI 可用: ${!!window.electronAPI}, file.readFile 可用: ${!!window.electronAPI?.file?.readFile}` });
+      
       if (window.electronAPI?.file?.readFile) {
         try {
+          addOllamaLog({ type: 'info', message: `使用 Electron API 读取文件: ${createModelPath}` });
           const result = await window.electronAPI.file.readFile(createModelPath, 'utf8');
+          addOllamaLog({ type: 'info', message: `Electron API 读取结果: ${JSON.stringify(result)}` });
           if (result.success && result.content) {
             modelfileContent = result.content;
             addOllamaLog({ type: 'info', message: '成功读取 Modelfile 内容' });
@@ -897,8 +907,14 @@ function OllamaPanel({
             addOllamaLog({ type: 'warning', message: '无法读取文件内容' });
           }
         } catch (e) {
-          addOllamaLog({ type: 'warning', message: '读取文件失败' });
+          addOllamaLog({ type: 'warning', message: `读取文件失败: ${e}` });
         }
+      } else if (createModelFile) {
+        addOllamaLog({ type: 'info', message: '使用浏览器 File API 读取文件' });
+        modelfileContent = await createModelFile.text();
+        addOllamaLog({ type: 'info', message: '成功读取 Modelfile 内容' });
+      } else {
+        addOllamaLog({ type: 'error', message: '没有可用的文件读取方式' });
       }
 
       if (!modelfileContent) {
@@ -929,19 +945,126 @@ function OllamaPanel({
       addOllamaLog({ type: 'info', message: `清理后是否包含 FROM: ${cleanedModelfile.toUpperCase().includes('FROM')}` });
       addOllamaLog({ type: 'info', message: `清理后第一行: ${cleanedModelfile.split('\n')[0]}` });
 
-      const testModelfile = 'FROM gemma3:4b\nSYSTEM """你好"""';
-      addOllamaLog({ type: 'info', message: '测试 Modelfile: ' + JSON.stringify(testModelfile) });
-
-      addOllamaLog({ type: 'info', message: '强制使用直接 HTTP 请求创建模型（绕过 Electron API）' });
+      addOllamaLog({ type: 'info', message: '解析 Modelfile 内容' });
       
-      const requestBodyObj = {
-        name: createModelName,
-        from: 'gemma3:4b',
-        system: '你好'
+      const parseModelfile = (content: string) => {
+        const result: {
+          from?: string;
+          system?: string;
+          template?: string;
+          parameters: Record<string, string | number | boolean | (string | number | boolean)[]>;
+        } = { parameters: {} };
+        
+        const lines = content.split('\n');
+        let currentSection: 'none' | 'system' | 'template' = 'none';
+        let sectionContent = '';
+        
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          const trimmedLine = line.trim();
+          
+          if (currentSection !== 'none') {
+            if (trimmedLine.endsWith('"""')) {
+              sectionContent += line.substring(0, line.lastIndexOf('"""'));
+              if (currentSection === 'system') {
+                result.system = sectionContent.trim();
+              } else if (currentSection === 'template') {
+                result.template = sectionContent.trim();
+              }
+              currentSection = 'none';
+              sectionContent = '';
+            } else {
+              sectionContent += line + '\n';
+            }
+            continue;
+          }
+          
+          if (trimmedLine.startsWith('FROM ')) {
+            result.from = trimmedLine.substring(5).trim();
+          } else if (trimmedLine.startsWith('SYSTEM """')) {
+            currentSection = 'system';
+            const afterMarker = trimmedLine.substring(9);
+            if (afterMarker.endsWith('"""')) {
+              result.system = afterMarker.substring(0, afterMarker.length - 3).trim();
+              currentSection = 'none';
+            } else {
+              sectionContent = afterMarker + '\n';
+            }
+          } else if (trimmedLine.startsWith('TEMPLATE """')) {
+            currentSection = 'template';
+            const afterMarker = trimmedLine.substring(12);
+            if (afterMarker.endsWith('"""')) {
+              result.template = afterMarker.substring(0, afterMarker.length - 3).trim();
+              currentSection = 'none';
+            } else {
+              sectionContent = afterMarker + '\n';
+            }
+          } else if (trimmedLine.startsWith('PARAMETER ')) {
+            const paramLine = trimmedLine.substring(10);
+            const spaceIndex = paramLine.indexOf(' ');
+            if (spaceIndex > 0) {
+              const paramName = paramLine.substring(0, spaceIndex);
+              let paramValue: string | number | boolean = paramLine.substring(spaceIndex + 1);
+              
+              if (paramValue.startsWith('"') && paramValue.endsWith('"')) {
+                paramValue = paramValue.slice(1, -1);
+              } else if (paramValue === 'true') {
+                paramValue = true;
+              } else if (paramValue === 'false') {
+                paramValue = false;
+              } else if (!isNaN(Number(paramValue))) {
+                const num = Number(paramValue);
+                if (Number.isInteger(num)) {
+                  paramValue = Math.floor(num);
+                } else {
+                  paramValue = num;
+                }
+              }
+              
+              if (result.parameters[paramName]) {
+                if (Array.isArray(result.parameters[paramName])) {
+                  (result.parameters[paramName] as (string | number | boolean)[]).push(paramValue);
+                } else {
+                  result.parameters[paramName] = [result.parameters[paramName] as string | number | boolean, paramValue];
+                }
+              } else {
+                result.parameters[paramName] = paramValue;
+              }
+            }
+          }
+        }
+        
+        return result;
       };
       
+      const parsed = parseModelfile(cleanedModelfile);
+      addOllamaLog({ type: 'info', message: `解析结果: FROM=${parsed.from}, SYSTEM长度=${parsed.system?.length || 0}, TEMPLATE长度=${parsed.template?.length || 0}, 参数数量=${Object.keys(parsed.parameters).length}` });
+      if (parsed.template) {
+        addOllamaLog({ type: 'info', message: `TEMPLATE 内容: ${JSON.stringify(parsed.template)}` });
+      }
+      
+      if (!parsed.from) {
+        throw new Error('Modelfile 中未找到 FROM 指令');
+      }
+      
+      const requestBodyObj: Record<string, any> = {
+        name: createModelName,
+        from: parsed.from,
+        stream: false
+      };
+      
+      if (parsed.system) {
+        requestBodyObj.system = parsed.system;
+      }
+      if (parsed.template) {
+        requestBodyObj.template = parsed.template;
+      }
+      if (Object.keys(parsed.parameters).length > 0) {
+        requestBodyObj.parameters = parsed.parameters;
+      }
+      
       const requestBody = JSON.stringify(requestBodyObj);
-      addOllamaLog({ type: 'info', message: `最终请求体: ${requestBody}` });
+      addOllamaLog({ type: 'info', message: `最终请求体: ${requestBody.substring(0, 500)}...` });
       
       const response = await fetch(`http://${config.host}:${config.port}/api/create`, {
         method: 'POST',
@@ -949,16 +1072,19 @@ function OllamaPanel({
         body: requestBody,
       });
 
+      const responseText = await response.text();
+      addOllamaLog({ type: 'info', message: `响应状态: ${response.status}, 响应内容: ${responseText}` });
+
       if (!response.ok) {
-        const error = await response.text();
-        addOllamaLog({ type: 'error', message: `HTTP 错误响应: ${error}` });
-        throw new Error(error);
+        addOllamaLog({ type: 'error', message: `HTTP 错误响应: ${responseText}` });
+        throw new Error(responseText);
       }
 
       addOllamaLog({ type: 'info', message: `模型 ${createModelName} 创建成功` });
       toast.success(`模型 ${createModelName} 创建成功`, { duration: 2000 });
       setCreateModelName('');
       setCreateModelPath('');
+      setCreateModelFile(null);
       setShowCreateModel(false);
       await loadOllamaModels();
     } catch (error) {
@@ -1258,6 +1384,7 @@ function OllamaPanel({
                       onClick={() => {
                         setCreateModelName('');
                         setCreateModelPath('');
+                        setCreateModelFile(null);
                       }}
                       className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
                       style={{ 
@@ -1551,6 +1678,7 @@ export function ModelsPage() {
   const [showCreateModel, setShowCreateModel] = useState(false);
   const [createModelName, setCreateModelName] = useState('');
   const [createModelPath, setCreateModelPath] = useState('');
+  const [createModelFile, setCreateModelFile] = useState<File | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [showFeatureModal, setShowFeatureModal] = useState(false);
 
@@ -1729,6 +1857,8 @@ export function ModelsPage() {
             setCreateModelName={setCreateModelName}
             createModelPath={createModelPath}
             setCreateModelPath={setCreateModelPath}
+            createModelFile={createModelFile}
+            setCreateModelFile={setCreateModelFile}
             isCreating={isCreating}
             setIsCreating={setIsCreating}
           />

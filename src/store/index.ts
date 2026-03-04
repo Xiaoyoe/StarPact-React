@@ -146,6 +146,10 @@ interface AppState {
   dataManagerOpen: boolean;
   setDataManagerOpen: (open: boolean) => void;
 
+  // Performance Modal
+  performanceModalOpen: boolean;
+  setPerformanceModalOpen: (open: boolean) => void;
+
   // Ollama
   ollamaModalOpen: boolean;
   setOllamaModalOpen: (open: boolean) => void;
@@ -158,6 +162,25 @@ interface AppState {
   setOllamaLogs: (logs: any[]) => void;
   activeOllamaModel: string | null;
   setActiveOllamaModel: (modelName: string | null) => void;
+  ollamaVerboseMode: boolean;
+  setOllamaVerboseMode: (verbose: boolean) => void;
+
+  // Performance Metrics
+  performanceMetrics: {
+    requestId: string;
+    modelLoadTime: number;
+    inferenceTime: number;
+    totalTokens: number;
+    throughput: number;
+    firstTokenTime: number;
+    promptTokens: number;
+    completionTokens: number;
+    memoryUsage: string;
+    gpuUsage: string;
+    temperature: number;
+    topP: number;
+  } | null;
+  setPerformanceMetrics: (metrics: any) => void;
 
   // Persistence
   isHydrated: boolean;
@@ -656,6 +679,10 @@ export const useStore = create<AppState>((set, get) => {
   dataManagerOpen: false,
   setDataManagerOpen: (open) => set({ dataManagerOpen: open }),
 
+  // Performance Modal
+  performanceModalOpen: false,
+  setPerformanceModalOpen: (open) => set({ performanceModalOpen: open }),
+
   // Ollama
   ollamaModalOpen: false,
   setOllamaModalOpen: (open) => set({ ollamaModalOpen: open }),
@@ -670,6 +697,12 @@ export const useStore = create<AppState>((set, get) => {
   setOllamaLogs: (logs) => set({ ollamaLogs: logs }),
   activeOllamaModel: null as string | null,
   setActiveOllamaModel: (modelName) => set({ activeOllamaModel: modelName }),
+  ollamaVerboseMode: false,
+  setOllamaVerboseMode: (verbose) => set({ ollamaVerboseMode: verbose }),
+
+  // Performance Metrics
+  performanceMetrics: null,
+  setPerformanceMetrics: (metrics) => set({ performanceMetrics: metrics }),
 
   // Persistence
   isHydrated: false,

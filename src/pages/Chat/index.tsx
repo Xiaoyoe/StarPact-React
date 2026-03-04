@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
-  Star, ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil
+  Star, ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,6 +15,7 @@ import { ChatQuickNav } from '@/components/ChatQuickNav';
 import { configStorage } from '@/services/storage/ConfigStorage';
 import { useToast } from '@/components/Toast';
 import { notificationService } from '@/utils/notification';
+import { PerformanceModal } from '@/components/PerformanceModal';
 
 function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = useState(false);
@@ -222,6 +223,7 @@ export function ChatPage() {
     compactMode, setCompactMode,
     ollamaModels, activeOllamaModel, setActiveOllamaModel,
     ollamaStatus,
+    ollamaVerboseMode, setPerformanceMetrics,
   } = useStore();
 
   const toast = useToast();
@@ -234,6 +236,7 @@ export function ChatPage() {
   const [switchingModel, setSwitchingModel] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
+  const [showPerfPanel, setShowPerfPanel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -405,6 +408,9 @@ export function ChatPage() {
           let fullResponse = '';
           let thinkingContent = '';
           let isInThinking = false;
+          let startTime = Date.now();
+          let firstTokenTime = 0;
+          let lastPerfData: any = null;
 
           if (reader) {
             while (true) {
@@ -417,10 +423,14 @@ export function ChatPage() {
               for (const line of lines) {
                 try {
                   const data = JSON.parse(line);
+                  
                   if (data.response) {
                     const token = data.response;
                     
-                    // 检测 <think&gt; 标签
+                    if (firstTokenTime === 0) {
+                      firstTokenTime = (Date.now() - startTime) / 1000;
+                    }
+                    
                     if (token.includes('<think&gt;')) {
                       isInThinking = true;
                     }
@@ -430,7 +440,6 @@ export function ChatPage() {
 
                     fullResponse += token;
 
-                    // 解析思考内容和回答内容
                     let displayContent = fullResponse;
                     let currentThinking = '';
 
@@ -444,12 +453,15 @@ export function ChatPage() {
                       }
                     }
 
-                    // 实时更新消息
                     updateMessage(convId, aiMsgId, {
                       content: displayContent,
                       thinking: currentThinking,
                       isStreaming: true,
                     });
+                  }
+                  
+                  if (data.done && ollamaVerboseMode) {
+                    lastPerfData = data;
                   }
                 } catch (e) {
                   // 忽略解析错误
@@ -458,7 +470,6 @@ export function ChatPage() {
             }
           }
 
-          // 最终处理：清理标签
           let finalResponse = fullResponse;
           let finalThinking = '';
           
@@ -476,9 +487,35 @@ export function ChatPage() {
 
           setIsStreaming(false);
           
-          toast.success(`${activeOllamaModel} 回复完成`, { duration: 2000 });
+          if (ollamaVerboseMode && lastPerfData) {
+            const totalDuration = lastPerfData.total_duration ? lastPerfData.total_duration / 1e9 : 0;
+            const loadDuration = lastPerfData.load_duration ? lastPerfData.load_duration / 1e9 : 0;
+            const promptEvalDuration = lastPerfData.prompt_eval_duration ? lastPerfData.prompt_eval_duration / 1e9 : 0;
+            const evalDuration = lastPerfData.eval_duration ? lastPerfData.eval_duration / 1e9 : 0;
+            const evalCount = lastPerfData.eval_count || 0;
+            const promptEvalCount = lastPerfData.prompt_eval_count || 0;
+            const throughput = evalDuration > 0 ? evalCount / evalDuration : 0;
+            
+            setPerformanceMetrics({
+              requestId: `req-${Date.now().toString(36)}`,
+              modelLoadTime: loadDuration,
+              inferenceTime: evalDuration,
+              totalTokens: evalCount + promptEvalCount,
+              throughput: throughput,
+              firstTokenTime: firstTokenTime,
+              promptTokens: promptEvalCount,
+              completionTokens: evalCount,
+              memoryUsage: '-',
+              gpuUsage: '-',
+              temperature: 0.7,
+              topP: 0.9,
+            });
+            
+            toast.success(`${activeOllamaModel} 回复完成 (${throughput.toFixed(1)} tokens/s)`, { duration: 2000 });
+          } else {
+            toast.success(`${activeOllamaModel} 回复完成`, { duration: 2000 });
+          }
           
-          // 发送桌面通知（仅在启用时）
           const chatNotification = configStorage.get('chatNotification');
           if (chatNotification?.enabled) {
             const preview = finalResponse.slice(0, 100) + (finalResponse.length > 100 ? '...' : '');
@@ -869,8 +906,25 @@ export function ChatPage() {
           <RotateCcw size={14} />
           导航点
         </button>
+
+        {/* Performance Panel Toggle Button */}
+        <button
+          onClick={() => setShowPerfPanel(!showPerfPanel)}
+          className="ml-3 flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
+          style={{
+            backgroundColor: showPerfPanel ? 'var(--primary-color)' : (compactMode ? 'transparent' : 'var(--bg-secondary)'),
+            color: showPerfPanel ? 'white' : 'var(--text-primary)',
+            border: '1px solid var(--border-color)',
+          }}
+          title={showPerfPanel ? '隐藏性能面板' : '显示性能面板'}
+        >
+          <Timer size={14} />
+          性能
+        </button>
         </div>
       </header>
+
+      <PerformanceModal isOpen={showPerfPanel} onClose={() => setShowPerfPanel(false)} />
 
       {/* Messages */}
       <div

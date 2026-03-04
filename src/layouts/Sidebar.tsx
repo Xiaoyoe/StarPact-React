@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/components/Toast';
 import { configStorage } from '@/services/storage/ConfigStorage';
+import { PerformanceModal } from '@/components/PerformanceModal';
 
 interface PanelItem {
   id: string;
@@ -33,6 +34,8 @@ export function Sidebar() {
     chatWallpaper, setChatWallpaper,
     ollamaModels, activeOllamaModel, setActiveOllamaModel,
     ollamaStatus,
+    performanceModalOpen, setPerformanceModalOpen,
+    ollamaVerboseMode, setOllamaVerboseMode,
   } = useStore();
 
   const toast = useToast();
@@ -43,7 +46,7 @@ export function Sidebar() {
   const [showModelSelect, setShowModelSelect] = useState(false);
   const [switchingModel, setSwitchingModel] = useState(false);
   
-  const [panelOrder, setPanelOrder] = useState<string[]>(['model', 'logs', 'wallpaper', 'database']);
+  const [panelOrder, setPanelOrder] = useState<string[]>(['model', 'performance', 'logs', 'wallpaper', 'database']);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const dragNodeRef = useRef<HTMLDivElement | null>(null);
@@ -204,6 +207,13 @@ export function Sidebar() {
       onClick: () => setShowModelSelect(true),
     },
     {
+      id: 'performance',
+      icon: <Timer size={14} />,
+      title: '性能查看',
+      subtitle: '运行耗时与指标',
+      onClick: () => setPerformanceModalOpen(true),
+    },
+    {
       id: 'logs',
       icon: <FileText size={13} />,
       title: '系统日志',
@@ -336,6 +346,37 @@ export function Sidebar() {
                     <X size={16} />
                   </button>
                 </div>
+              </div>
+
+              {/* Verbose Mode Toggle */}
+              <div 
+                className="flex items-center justify-between px-5 py-3 border-b"
+                style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <Timer size={14} style={{ color: 'var(--primary-color)' }} />
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>详细模式</span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>开启后显示性能指标</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setOllamaVerboseMode(!ollamaVerboseMode);
+                    toast.info(ollamaVerboseMode ? '已关闭详细模式' : '已开启详细模式，下次请求将显示性能指标', { duration: 2000 });
+                  }}
+                  className="relative flex h-6 w-11 items-center rounded-full transition-colors"
+                  style={{ 
+                    backgroundColor: ollamaVerboseMode ? 'var(--success-color)' : 'var(--bg-tertiary)',
+                  }}
+                  title={ollamaVerboseMode ? '关闭详细模式' : '开启详细模式'}
+                >
+                  <span
+                    className="absolute h-5 w-5 rounded-full bg-white shadow transition-transform"
+                    style={{
+                      left: '2px',
+                      transform: ollamaVerboseMode ? 'translateX(20px)' : 'translateX(0)',
+                    }}
+                  />
+                </button>
               </div>
 
               {/* Content */}
@@ -546,6 +587,9 @@ export function Sidebar() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Performance Modal */}
+      <PerformanceModal isOpen={performanceModalOpen} onClose={() => setPerformanceModalOpen(false)} />
 
       <motion.aside
         initial={false}
