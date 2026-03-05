@@ -11,7 +11,7 @@ export function ChatWelcome({ onStartChat, onSuggestionClick }: ChatWelcomeProps
   const { activeOllamaModel, ollamaStatus, ollamaModels } = useStore();
 
   const suggestions = [
-    { icon: <Code size={16} />, text: '帮我写一个 Python 排序算法' },
+    { icon: <Code size={16} />, text: '你叫什么，你是谁？' },
     { icon: <BookOpen size={16} />, text: '解释一下量子计算的原理' },
     { icon: <PenTool size={16} />, text: '写一篇关于人工智能的文章' },
     { icon: <ImageIcon size={16} />, text: '分析这张图片的内容' },

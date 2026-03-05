@@ -18,6 +18,7 @@ import { notificationService } from '@/utils/notification';
 import { PerformanceModal } from '@/components/PerformanceModal';
 import { ImageViewer } from '@/components/ImageViewer';
 import { ChatWelcome } from '@/components/ChatWelcome';
+import { ollamaModelService } from '@/services/OllamaModelService';
 
 function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = useState(false);
@@ -338,60 +339,21 @@ export function ChatPage() {
   }, []);
 
   const handleSwitchOllamaModel = async (newModelName: string) => {
-    if (switchingModel) {
+    if (ollamaModelService.isSwitching()) {
       toast.info('正在切换模型中，请稍候', { duration: 2000 });
       return;
     }
 
-    if (newModelName === activeOllamaModel) {
-      setShowModelSelect(false);
-      return;
-    }
-
-    setSwitchingModel(true);
-    setShowModelSelect(false);
-
-    try {
-      if (activeOllamaModel) {
-        toast.info(`正在关闭 ${activeOllamaModel}...`, { duration: 2000 });
-        await fetch('http://localhost:11434/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: activeOllamaModel,
-            keep_alive: 0
-          })
-        });
+    await ollamaModelService.switchModel(
+      newModelName,
+      toast,
+      () => {
+        setShowModelSelect(false);
+      },
+      () => {
+        // 错误处理已在服务中完成
       }
-
-      setActiveOllamaModel(newModelName);
-      setActiveModel(null);
-      toast.info(`正在启动 ${newModelName}...`, { duration: 2000 });
-
-      const response = await fetch('http://localhost:11434/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: newModelName,
-          prompt: '',
-          keep_alive: '10m'
-        })
-      });
-
-      if (response.ok) {
-        setTimeout(() => {
-          toast.success(`已切换到 ${newModelName}`, { duration: 2000 });
-        }, 2000);
-      } else {
-        toast.error(`启动 ${newModelName} 失败`, { duration: 3000 });
-      }
-    } catch (error) {
-      toast.error('模型切换失败', { duration: 3000 });
-    } finally {
-      setTimeout(() => {
-        setSwitchingModel(false);
-      }, 3000);
-    }
+    );
   };
 
   const handleSend = async () => {

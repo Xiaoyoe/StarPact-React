@@ -4,13 +4,14 @@ import {
   Settings2, Check, X, AlertCircle, Zap, Globe, HardDrive,
   ChevronRight, BarChart3, Clock, Activity, Eye, EyeOff,
   Play, Square, RefreshCw, StopCircle, ChevronUp, ChevronDown,
-  Terminal, FileBox, FolderOpen, Info, Cpu, Database, FileText
+  Terminal, FileBox, FolderOpen, Info, Cpu, Database, FileText, CheckCircle2
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import type { ModelConfig } from '@/store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/components/Toast';
 import { ollamaModelStorage, type OllamaModelFile } from '@/services/storage/OllamaModelStorage';
+import { ollamaModelService } from '@/services/OllamaModelService';
 
 function ModelForm({
   model,
@@ -446,7 +447,7 @@ function OllamaPanel({
   const [selectedModelName, setSelectedModelName] = useState<string | null>(null);
   const [loadingModelInfo, setLoadingModelInfo] = useState(false);
   const [showLicense, setShowLicense] = useState(false);
-  const [showModelInfo, setShowModelInfo] = useState(true);
+  const [showModelInfo, setShowModelInfo] = useState(false);
 
   useEffect(() => {
     if (window.electronAPI?.ollama) {
@@ -746,135 +747,52 @@ function OllamaPanel({
   };
 
   const handleStopRunningModel = async (modelName: string) => {
-    toast.info(`正在卸载模型 ${modelName}...`, { duration: 2000 });
-    try {
-      const response = await fetch(`http://${config.host}:${config.port}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: modelName,
-          keep_alive: 0
-        })
-      });
-      
-      if (response.ok) {
-        addOllamaLog({ type: 'info', message: `正在停止模型 ${modelName}...` });
-        setTimeout(async () => {
-          await loadRunningModels();
-          addOllamaLog({ type: 'info', message: `模型 ${modelName} 已停止` });
-          toast.success(`模型 ${modelName} 已卸载完成`, { duration: 3000 });
-        }, 3000);
-      } else {
-        addOllamaLog({ type: 'error', message: `停止模型 ${modelName} 失败` });
-        toast.error(`卸载模型 ${modelName} 失败`, { duration: 3000 });
+    await ollamaModelService.stopModel(
+      modelName,
+      toast,
+      async () => {
+        await loadRunningModels();
+      },
+      () => {
+        // 错误处理已在服务中完成
       }
-    } catch (error) {
-      addOllamaLog({ type: 'error', message: `停止模型 ${modelName} 失败` });
-      toast.error(`卸载模型 ${modelName} 失败`, { duration: 3000 });
-    }
+    );
   };
 
   const handleStartModel = async (modelName: string) => {
-    if (startingModel) {
-      addOllamaLog({ type: 'warning', message: '已有模型正在启动中，请稍候' });
+    if (ollamaModelService.isSwitching()) {
       toast.info('已有模型正在加载中，请稍候', { duration: 2000 });
       return;
     }
     
-    setStartingModel(modelName);
-    addOllamaLog({ type: 'info', message: `正在启动模型 ${modelName}...` });
-    toast.info(`正在加载模型 ${modelName}...`, { duration: 2000 });
-    
-    try {
-      const response = await fetch(`http://${config.host}:${config.port}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: modelName,
-          prompt: '',
-          keep_alive: '10m'
-        })
-      });
-      
-      if (response.ok) {
-        addOllamaLog({ type: 'info', message: `模型 ${modelName} 已启动，等待加载完成...` });
-        setTimeout(async () => {
-          await loadRunningModels();
-          addOllamaLog({ type: 'info', message: `模型 ${modelName} 加载完成` });
-          toast.success(`模型 ${modelName} 加载完成`, { duration: 3000 });
-        }, 3000);
-      } else {
-        addOllamaLog({ type: 'error', message: `启动模型 ${modelName} 失败` });
-        toast.error(`加载模型 ${modelName} 失败`, { duration: 3000 });
+    await ollamaModelService.switchModel(
+      modelName,
+      toast,
+      async () => {
+        await loadRunningModels();
+      },
+      () => {
+        // 错误处理已在服务中完成
       }
-    } catch (error) {
-      addOllamaLog({ type: 'error', message: `启动模型 ${modelName} 失败` });
-      toast.error(`加载模型 ${modelName} 失败`, { duration: 3000 });
-    } finally {
-      setStartingModel(null);
-    }
+    );
   };
 
   const handleSelectAndSwitchModel = async (modelName: string) => {
-    if (startingModel) {
+    if (ollamaModelService.isSwitching()) {
       toast.info('已有模型正在加载中，请稍候', { duration: 2000 });
       return;
     }
 
-    if (modelName === activeOllamaModel) {
-      toast.info(`${modelName} 已是当前选中模型`, { duration: 2000 });
-      return;
-    }
-
-    setStartingModel(modelName);
-
-    try {
-      if (activeOllamaModel) {
-        const isRunning = runningModels.some(m => m.name === activeOllamaModel || m.model === activeOllamaModel);
-        if (isRunning) {
-          toast.info(`正在关闭 ${activeOllamaModel}...`, { duration: 2000 });
-          await fetch(`http://${config.host}:${config.port}/api/generate`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              model: activeOllamaModel,
-              keep_alive: 0
-            })
-          });
-        }
+    await ollamaModelService.switchModel(
+      modelName,
+      toast,
+      async () => {
+        await loadRunningModels();
+      },
+      () => {
+        // 错误处理已在服务中完成
       }
-
-      setActiveOllamaModel(modelName);
-      toast.info(`正在启动 ${modelName}...`, { duration: 2000 });
-
-      const response = await fetch(`http://${config.host}:${config.port}/api/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: modelName,
-          prompt: '',
-          keep_alive: '10m'
-        })
-      });
-
-      if (response.ok) {
-        addOllamaLog({ type: 'info', message: `模型 ${modelName} 已启动` });
-        setTimeout(async () => {
-          await loadRunningModels();
-          toast.success(`已切换到 ${modelName}`, { duration: 2000 });
-        }, 3000);
-      } else {
-        addOllamaLog({ type: 'error', message: `启动模型 ${modelName} 失败` });
-        toast.error(`启动 ${modelName} 失败`, { duration: 3000 });
-      }
-    } catch (error) {
-      addOllamaLog({ type: 'error', message: `切换模型失败` });
-      toast.error('模型切换失败', { duration: 3000 });
-    } finally {
-      setTimeout(() => {
-        setStartingModel(null);
-      }, 3000);
-    }
+    );
   };
 
   const handleSelectModelfile = async () => {
@@ -1630,39 +1548,44 @@ function OllamaPanel({
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <button
-                            onClick={(e) => { e.stopPropagation(); handleSelectAndSwitchModel(model.name); }}
-                            disabled={startingModel !== null}
+                            onClick={(e) => { 
+                              e.stopPropagation(); 
+                              if (isSelected && isRunning) {
+                                handleStopRunningModel(model.name);
+                              } else {
+                                handleSelectAndSwitchModel(model.name);
+                              }
+                            }}
+                            disabled={ollamaModelService.isSwitching()}
                             className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors disabled:opacity-50"
                             style={{ 
-                              color: isSelected ? 'var(--primary-color)' : 'var(--text-tertiary)', 
-                              backgroundColor: isSelected ? 'var(--primary-light)' : 'transparent' 
+                              color: isSelected && isRunning 
+                                ? 'var(--error-color)' 
+                                : (isSelected 
+                                    ? 'var(--primary-color)' 
+                                    : 'var(--success-color)'), 
+                              backgroundColor: isSelected && isRunning 
+                                ? 'rgba(245,63,63,0.1)' 
+                                : (isSelected 
+                                    ? 'var(--primary-light)' 
+                                    : 'rgba(0,180,42,0.1)') 
                             }}
-                            title="选择并切换模型"
+                            title={
+                              isSelected && isRunning 
+                                ? '停止运行' 
+                                : (isSelected 
+                                    ? '已选择，点击启动' 
+                                    : '选择并切换模型')
+                            }
                           >
-                            <Check size={14} />
-                          </button>
-                          {ollamaStatus?.isRunning && (
-                            isRunning ? (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleStopRunningModel(model.name); }}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
-                                style={{ color: 'var(--error-color)', backgroundColor: 'rgba(245,63,63,0.1)' }}
-                                title="停止运行"
-                              >
-                                <StopCircle size={14} />
-                              </button>
+                            {isSelected && isRunning ? (
+                              <StopCircle size={14} />
+                            ) : isSelected ? (
+                              <Play size={14} />
                             ) : (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); handleStartModel(model.name); }}
-                                disabled={isStarting || startingModel !== null}
-                                className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors disabled:opacity-50"
-                                style={{ color: 'var(--success-color)', backgroundColor: 'rgba(0,180,42,0.1)' }}
-                                title={isStarting ? '启动中...' : '启动模型'}
-                              >
-                                <Play size={14} className={isStarting ? 'animate-pulse' : ''} />
-                              </button>
-                            )
-                          )}
+                              <CheckCircle2 size={14} />
+                            )}
+                          </button>
                           <button
                             onClick={(e) => { e.stopPropagation(); handleDeleteModel(model.name); }}
                             className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-opacity-80"
