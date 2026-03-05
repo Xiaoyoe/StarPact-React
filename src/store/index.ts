@@ -50,6 +50,7 @@ export interface ChatMessage {
   isFavorite?: boolean;
   thinking?: string;
   showThinking?: boolean;
+  thinkingDuration?: number;
   images?: string[];
 }
 
@@ -170,6 +171,8 @@ interface AppState {
   setOllamaThinkMode: (think: boolean) => void;
   ollamaChatMode: 'single' | 'multi';
   setOllamaChatMode: (mode: 'single' | 'multi') => void;
+  showTokenEstimate: boolean;
+  setShowTokenEstimate: (show: boolean) => void;
 
   // Ollama Pull Tasks
   pullTasks: Map<string, import('@/services/OllamaPullService').PullTask>;
@@ -728,6 +731,8 @@ export const useStore = create<AppState>((set, get) => {
   setOllamaThinkMode: (think) => set({ ollamaThinkMode: think }),
   ollamaChatMode: 'multi' as 'single' | 'multi',
   setOllamaChatMode: (mode) => set({ ollamaChatMode: mode }),
+  showTokenEstimate: true,
+  setShowTokenEstimate: (show) => set({ showTokenEstimate: show }),
 
   // Ollama Pull Tasks
   pullTasks: new Map(),

@@ -1,19 +1,18 @@
 export function estimateTokens(text: string): number {
   if (!text) return 0;
   
-  const chineseChars = (text.match(/[\u4e00-\u9fa5]/g) || []).length;
-  const englishWords = (text.match(/[a-zA-Z]+/g) || []).length;
-  const numbers = (text.match(/\d+/g) || []).length;
-  const punctuation = (text.match(/[^\w\s\u4e00-\u9fa5]/g) || []).length;
-  const whitespace = (text.match(/\s+/g) || []).length;
+  const len = text.length;
+  let chineseCount = 0;
   
-  const chineseTokens = Math.ceil(chineseChars * 1.5);
-  const englishTokens = Math.ceil(englishWords * 1.3);
-  const numberTokens = Math.ceil(numbers * 0.5);
-  const punctuationTokens = Math.ceil(punctuation * 0.5);
-  const whitespaceTokens = Math.ceil(whitespace * 0.3);
+  for (let i = 0; i < len; i++) {
+    const code = text.charCodeAt(i);
+    if (code >= 0x4e00 && code <= 0x9fa5) {
+      chineseCount++;
+    }
+  }
   
-  return chineseTokens + englishTokens + numberTokens + punctuationTokens + whitespaceTokens;
+  const nonChineseLen = len - chineseCount;
+  return Math.ceil(chineseCount * 1.5 + nonChineseLen * 0.25);
 }
 
 export function estimateConversationTokens(messages: Array<{ content: string; images?: string[] }>): number {
@@ -26,8 +25,7 @@ export function estimateConversationTokens(messages: Array<{ content: string; im
       for (const img of msg.images) {
         const base64Match = img.match(/^data:image\/\w+;base64,(.+)$/);
         const base64Data = base64Match ? base64Match[1] : img;
-        const sizeInBytes = Math.ceil(base64Data.length * 0.75);
-        const sizeInKB = sizeInBytes / 1024;
+        const sizeInKB = (base64Data.length * 0.75) / 1024;
         totalTokens += Math.ceil(sizeInKB * 4);
       }
     }

@@ -155,6 +155,11 @@ function MessageBubble({ message, isLast, compactMode, onImageClick, onRegenerat
                   >
                     <Brain size={14} style={{ color: 'var(--primary-color)' }} />
                     <span className="flex-1 text-left">思考过程</span>
+                    {message.thinkingDuration && (
+                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: 'var(--success-color)', backgroundColor: 'rgba(34, 197, 94, 0.1)' }}>
+                        {message.thinkingDuration.toFixed(1)}s
+                      </span>
+                    )}
                     <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                       {message.thinking.length} 字符
                     </span>
@@ -289,6 +294,7 @@ export function ChatPage() {
     ollamaVerboseMode, setPerformanceMetrics,
     ollamaThinkMode,
     ollamaChatMode,
+    showTokenEstimate,
   } = useStore();
 
   const toast = useToast();
@@ -332,8 +338,9 @@ export function ChatPage() {
 
   const totalTokens = useMemo(() => {
     if (!activeConversation || activeConversation.messages.length === 0) return 0;
-    return estimateConversationTokens(activeConversation.messages);
-  }, [activeConversation?.messages]);
+    const stableMessages = activeConversation.messages.filter(msg => !msg.isStreaming);
+    return estimateConversationTokens(stableMessages);
+  }, [activeConversation?.messages.filter(msg => !msg.isStreaming).map(m => m.id + m.content.length).join(',')]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -507,6 +514,8 @@ export function ChatPage() {
             let fullResponse = '';
             let thinkingContent = '';
             let startTime = Date.now();
+            let thinkingStartTime = 0;
+            let thinkingDuration = 0;
             let firstTokenTime = 0;
             let lastPerfData: any = null;
 
@@ -532,11 +541,16 @@ export function ChatPage() {
                       fullResponse += token;
                     }
                     
-                    if (data.thinking) {
-                      thinkingContent += data.thinking;
+                    const thinkingData = data.thinking || data.message?.thinking;
+                    if (thinkingData) {
+                      if (thinkingStartTime === 0) {
+                        thinkingStartTime = Date.now();
+                      }
+                      thinkingContent += thinkingData;
+                      thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
                     }
                     
-                    if (data.message?.content || data.thinking) {
+                    if (data.message?.content || thinkingData) {
                       let displayContent = fullResponse;
                       let currentThinking = thinkingContent;
                       
@@ -552,9 +566,13 @@ export function ChatPage() {
                         }
                       }
 
+                      if (thinkingStartTime > 0 && !thinkingData && data.message?.content) {
+                      }
+
                       updateMessage(convId, aiMsgId, {
                         content: displayContent,
                         thinking: currentThinking,
+                        thinkingDuration: thinkingDuration > 0 ? thinkingDuration : undefined,
                         isStreaming: true,
                       });
                     }
@@ -571,6 +589,7 @@ export function ChatPage() {
 
             let finalResponse = fullResponse;
             let finalThinking = thinkingContent;
+            let finalThinkingDuration = thinkingDuration;
             
             if (!finalThinking) {
               const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)<\/think&gt;/);
@@ -583,6 +602,7 @@ export function ChatPage() {
             updateMessage(convId, aiMsgId, {
               content: finalResponse,
               thinking: finalThinking,
+              thinkingDuration: finalThinkingDuration > 0 ? finalThinkingDuration : undefined,
               isStreaming: false,
             });
 
@@ -669,6 +689,8 @@ export function ChatPage() {
           let fullResponse = '';
           let thinkingContent = '';
           let startTime = Date.now();
+          let thinkingStartTime = 0;
+          let thinkingDuration = 0;
           let firstTokenTime = 0;
           let lastPerfData: any = null;
 
@@ -694,11 +716,16 @@ export function ChatPage() {
                     fullResponse += token;
                   }
                   
-                  if (data.thinking) {
-                    thinkingContent += data.thinking;
+                  const thinkingData = data.thinking;
+                  if (thinkingData) {
+                    if (thinkingStartTime === 0) {
+                      thinkingStartTime = Date.now();
+                    }
+                    thinkingContent += thinkingData;
+                    thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
                   }
                   
-                  if (data.response || data.thinking) {
+                  if (data.response || thinkingData) {
                     let displayContent = fullResponse;
                     let currentThinking = thinkingContent;
                     
@@ -717,6 +744,7 @@ export function ChatPage() {
                     updateMessage(convId, aiMsgId, {
                       content: displayContent,
                       thinking: currentThinking,
+                      thinkingDuration: thinkingDuration > 0 ? thinkingDuration : undefined,
                       isStreaming: true,
                     });
                   }
@@ -733,6 +761,7 @@ export function ChatPage() {
 
           let finalResponse = fullResponse;
           let finalThinking = thinkingContent;
+          let finalThinkingDuration = thinkingDuration;
           
           if (!finalThinking) {
             const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)<\/think&gt;/);
@@ -745,6 +774,7 @@ export function ChatPage() {
           updateMessage(convId, aiMsgId, {
             content: finalResponse,
             thinking: finalThinking,
+            thinkingDuration: finalThinkingDuration > 0 ? finalThinkingDuration : undefined,
             isStreaming: false,
           });
 
@@ -1088,7 +1118,7 @@ export function ChatPage() {
               {activeConversation.messages.length} 条消息
             </span>
           )}
-          {activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (
+          {showTokenEstimate && activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (
             <span className="text-xs ml-2 px-2 py-0.5 rounded" style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}>
               {formatTokenCount(totalTokens)}
             </span>

@@ -25,6 +25,7 @@ export interface AppConfig {
   ollamaVerboseMode: boolean;
   ollamaThinkMode: boolean;
   ollamaChatMode: 'single' | 'multi';
+  showTokenEstimate: boolean;
   showChatWelcome: boolean;
   [key: string]: any;
 }
@@ -67,6 +68,7 @@ export class ConfigStorage {
       ollamaVerboseMode: false,
       ollamaThinkMode: true,
       ollamaChatMode: 'multi',
+      showTokenEstimate: true,
       showChatWelcome: true,
     };
   }

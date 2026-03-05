@@ -39,6 +39,7 @@ export function Sidebar() {
     ollamaVerboseMode, setOllamaVerboseMode,
     ollamaThinkMode, setOllamaThinkMode,
     ollamaChatMode, setOllamaChatMode,
+    showTokenEstimate, setShowTokenEstimate,
   } = useStore();
 
   const toast = useToast();
@@ -66,6 +67,7 @@ export function Sidebar() {
       const savedVerboseMode = configStorage.get('ollamaVerboseMode');
       const savedThinkMode = configStorage.get('ollamaThinkMode');
       const savedChatMode = configStorage.get('ollamaChatMode');
+      const savedShowTokenEstimate = configStorage.get('showTokenEstimate');
       
       if (savedVerboseMode !== undefined) {
         setOllamaVerboseMode(savedVerboseMode);
@@ -75,6 +77,9 @@ export function Sidebar() {
       }
       if (savedChatMode !== undefined) {
         setOllamaChatMode(savedChatMode);
+      }
+      if (savedShowTokenEstimate !== undefined) {
+        setShowTokenEstimate(savedShowTokenEstimate);
       }
     };
     loadConfig();
@@ -319,6 +324,39 @@ export function Sidebar() {
                     <X size={16} />
                   </button>
                 </div>
+              </div>
+
+              {/* Token Estimate Toggle */}
+              <div 
+                className="flex items-center justify-between px-5 py-3 border-b"
+                style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <Database size={14} style={{ color: 'var(--primary-color)' }} />
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>Token 估算</span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>显示对话 token 数</span>
+                </div>
+                <button
+                  onClick={() => {
+                    const newValue = !showTokenEstimate;
+                    setShowTokenEstimate(newValue);
+                    configStorage.set('showTokenEstimate', newValue);
+                    toast.info(newValue ? '已开启 Token 估算显示' : '已关闭 Token 估算显示', { duration: 2000 });
+                  }}
+                  className="relative flex h-6 w-11 items-center rounded-full transition-colors"
+                  style={{ 
+                    backgroundColor: showTokenEstimate ? 'var(--success-color)' : 'var(--bg-tertiary)',
+                  }}
+                  title={showTokenEstimate ? '关闭 Token 估算' : '开启 Token 估算'}
+                >
+                  <span
+                    className="absolute h-5 w-5 rounded-full bg-white shadow transition-transform"
+                    style={{
+                      left: '2px',
+                      transform: showTokenEstimate ? 'translateX(20px)' : 'translateX(0)',
+                    }}
+                  />
+                </button>
               </div>
 
               {/* Verbose Mode Toggle */}
