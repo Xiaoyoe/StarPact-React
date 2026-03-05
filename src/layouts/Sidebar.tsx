@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -38,6 +38,7 @@ export function Sidebar() {
     performanceModalOpen, setPerformanceModalOpen,
     ollamaVerboseMode, setOllamaVerboseMode,
     ollamaThinkMode, setOllamaThinkMode,
+    ollamaChatMode, setOllamaChatMode,
   } = useStore();
 
   const toast = useToast();
@@ -64,12 +65,16 @@ export function Sidebar() {
       
       const savedVerboseMode = configStorage.get('ollamaVerboseMode');
       const savedThinkMode = configStorage.get('ollamaThinkMode');
+      const savedChatMode = configStorage.get('ollamaChatMode');
       
       if (savedVerboseMode !== undefined) {
         setOllamaVerboseMode(savedVerboseMode);
       }
       if (savedThinkMode !== undefined) {
         setOllamaThinkMode(savedThinkMode);
+      }
+      if (savedChatMode !== undefined) {
+        setOllamaChatMode(savedChatMode);
       }
     };
     loadConfig();
@@ -377,6 +382,41 @@ export function Sidebar() {
                     style={{
                       left: '2px',
                       transform: ollamaThinkMode ? 'translateX(20px)' : 'translateX(0)',
+                    }}
+                  />
+                </button>
+              </div>
+
+              {/* Chat Mode Toggle */}
+              <div 
+                className="flex items-center justify-between px-5 py-3 border-b"
+                style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <MessageCircle size={14} style={{ color: 'var(--primary-color)' }} />
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>对话模式</span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    {ollamaChatMode === 'multi' ? '多轮对话(有记忆)' : '单轮对话(无记忆)'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    const newMode = ollamaChatMode === 'multi' ? 'single' : 'multi';
+                    setOllamaChatMode(newMode);
+                    configStorage.set('ollamaChatMode', newMode);
+                    toast.info(newMode === 'multi' ? '已切换到多轮对话模式，AI将记住上下文' : '已切换到单轮对话模式，每次对话独立', { duration: 2000 });
+                  }}
+                  className="relative flex h-6 w-11 items-center rounded-full transition-colors"
+                  style={{ 
+                    backgroundColor: ollamaChatMode === 'multi' ? 'var(--success-color)' : 'var(--bg-tertiary)',
+                  }}
+                  title={ollamaChatMode === 'multi' ? '切换到单轮对话' : '切换到多轮对话'}
+                >
+                  <span
+                    className="absolute h-5 w-5 rounded-full bg-white shadow transition-transform"
+                    style={{
+                      left: '2px',
+                      transform: ollamaChatMode === 'multi' ? 'translateX(20px)' : 'translateX(0)',
                     }}
                   />
                 </button>

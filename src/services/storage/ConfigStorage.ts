@@ -24,6 +24,7 @@ export interface AppConfig {
   defaultPage: 'chat' | 'models' | 'settings' | 'compare' | 'ini-config' | 'gallery' | 'video-player' | 'prompt-templates' | 'media-tools';
   ollamaVerboseMode: boolean;
   ollamaThinkMode: boolean;
+  ollamaChatMode: 'single' | 'multi';
   showChatWelcome: boolean;
   [key: string]: any;
 }
@@ -65,6 +66,7 @@ export class ConfigStorage {
       defaultPage: 'chat',
       ollamaVerboseMode: false,
       ollamaThinkMode: true,
+      ollamaChatMode: 'multi',
       showChatWelcome: true,
     };
   }

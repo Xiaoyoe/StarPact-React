@@ -168,6 +168,8 @@ interface AppState {
   setOllamaVerboseMode: (verbose: boolean) => void;
   ollamaThinkMode: boolean;
   setOllamaThinkMode: (think: boolean) => void;
+  ollamaChatMode: 'single' | 'multi';
+  setOllamaChatMode: (mode: 'single' | 'multi') => void;
 
   // Ollama Pull Tasks
   pullTasks: Map<string, import('@/services/OllamaPullService').PullTask>;
@@ -724,6 +726,8 @@ export const useStore = create<AppState>((set, get) => {
   setOllamaVerboseMode: (verbose) => set({ ollamaVerboseMode: verbose }),
   ollamaThinkMode: true,
   setOllamaThinkMode: (think) => set({ ollamaThinkMode: think }),
+  ollamaChatMode: 'multi' as 'single' | 'multi',
+  setOllamaChatMode: (mode) => set({ ollamaChatMode: mode }),
 
   // Ollama Pull Tasks
   pullTasks: new Map(),

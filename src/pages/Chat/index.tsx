@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
   ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare, Trash2
@@ -20,6 +20,7 @@ import { ImageViewer } from '@/components/ImageViewer';
 import { ChatWelcome } from '@/components/ChatWelcome';
 import { ollamaModelService } from '@/services/OllamaModelService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { estimateConversationTokens, formatTokenCount } from '@/utils/tokenEstimator';
 
 function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = useState(false);
@@ -287,6 +288,7 @@ export function ChatPage() {
     ollamaStatus,
     ollamaVerboseMode, setPerformanceMetrics,
     ollamaThinkMode,
+    ollamaChatMode,
   } = useStore();
 
   const toast = useToast();
@@ -327,6 +329,11 @@ export function ChatPage() {
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   const activeModel = models.find(m => m.id === activeModelId);
+
+  const totalTokens = useMemo(() => {
+    if (!activeConversation || activeConversation.messages.length === 0) return 0;
+    return estimateConversationTokens(activeConversation.messages);
+  }, [activeConversation?.messages]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -453,17 +460,207 @@ export function ChatPage() {
           return base64Match ? base64Match[1] : img.data;
         });
 
-        const response = await fetch('http://localhost:11434/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: activeOllamaModel,
-            prompt: userInput,
-            stream: true,
-            think: ollamaThinkMode,
+        if (ollamaChatMode === 'multi') {
+          const messages: Array<{ role: string; content: string; images?: string[] }> = [];
+          
+          const currentConv = conversations.find(c => c.id === convId);
+          if (currentConv) {
+            currentConv.messages.forEach(msg => {
+              if (!msg.isStreaming) {
+                let processedImages: string[] | undefined = undefined;
+                if (msg.images && msg.images.length > 0) {
+                  processedImages = msg.images.map(img => {
+                    const base64Match = img.match(/^data:image\/\w+;base64,(.+)$/);
+                    return base64Match ? base64Match[1] : img;
+                  });
+                }
+                messages.push({
+                  role: msg.role,
+                  content: msg.content,
+                  images: processedImages,
+                });
+              }
+            });
+          }
+          
+          messages.push({
+            role: 'user',
+            content: userInput,
             images: imageBase64List.length > 0 ? imageBase64List : undefined,
-          }),
-        });
+          });
+
+          const response = await fetch('http://localhost:11434/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: activeOllamaModel,
+              messages: messages,
+              stream: true,
+              think: ollamaThinkMode,
+            }),
+          });
+
+          if (response.ok) {
+            setIsStreaming(true);
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            let fullResponse = '';
+            let thinkingContent = '';
+            let startTime = Date.now();
+            let firstTokenTime = 0;
+            let lastPerfData: any = null;
+
+            if (reader) {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(line => line.trim());
+
+                for (const line of lines) {
+                  try {
+                    const data = JSON.parse(line);
+                    
+                    if (data.message?.content) {
+                      const token = data.message.content;
+                      
+                      if (firstTokenTime === 0) {
+                        firstTokenTime = (Date.now() - startTime) / 1000;
+                      }
+                      
+                      fullResponse += token;
+                    }
+                    
+                    if (data.thinking) {
+                      thinkingContent += data.thinking;
+                    }
+                    
+                    if (data.message?.content || data.thinking) {
+                      let displayContent = fullResponse;
+                      let currentThinking = thinkingContent;
+                      
+                      if (!currentThinking) {
+                        const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)(<\/think&gt;|$)/);
+                        if (thinkMatch) {
+                          currentThinking = thinkMatch[1];
+                          if (fullResponse.includes('</think&gt;')) {
+                            displayContent = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
+                          } else {
+                            displayContent = '';
+                          }
+                        }
+                      }
+
+                      updateMessage(convId, aiMsgId, {
+                        content: displayContent,
+                        thinking: currentThinking,
+                        isStreaming: true,
+                      });
+                    }
+                    
+                    if (data.done && ollamaVerboseMode) {
+                      lastPerfData = data;
+                    }
+                  } catch (e) {
+                    // 忽略解析错误
+                  }
+                }
+              }
+            }
+
+            let finalResponse = fullResponse;
+            let finalThinking = thinkingContent;
+            
+            if (!finalThinking) {
+              const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)<\/think&gt;/);
+              if (thinkMatch) {
+                finalThinking = thinkMatch[1].trim();
+                finalResponse = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
+              }
+            }
+
+            updateMessage(convId, aiMsgId, {
+              content: finalResponse,
+              thinking: finalThinking,
+              isStreaming: false,
+            });
+
+            setIsStreaming(false);
+            
+            if (ollamaVerboseMode && lastPerfData) {
+              const totalDuration = lastPerfData.total_duration ? lastPerfData.total_duration / 1e9 : 0;
+              const loadDuration = lastPerfData.load_duration ? lastPerfData.load_duration / 1e9 : 0;
+              const promptEvalDuration = lastPerfData.prompt_eval_duration ? lastPerfData.prompt_eval_duration / 1e9 : 0;
+              const evalDuration = lastPerfData.eval_duration ? lastPerfData.eval_duration / 1e9 : 0;
+              const evalCount = lastPerfData.eval_count || 0;
+              const promptEvalCount = lastPerfData.prompt_eval_count || 0;
+              const throughput = evalDuration > 0 ? evalCount / evalDuration : 0;
+              
+              setPerformanceMetrics({
+                requestId: `req-${Date.now().toString(36)}`,
+                modelLoadTime: loadDuration,
+                inferenceTime: evalDuration,
+                totalTokens: evalCount + promptEvalCount,
+                throughput: throughput,
+                firstTokenTime: firstTokenTime,
+                promptTokens: promptEvalCount,
+                completionTokens: evalCount,
+                memoryUsage: '-',
+                gpuUsage: '-',
+                temperature: 0.7,
+                topP: 0.9,
+              });
+              
+              toast.success(`${activeOllamaModel} 回复完成 (${throughput.toFixed(1)} tokens/s)`, { duration: 2000 });
+            } else {
+              toast.success(`${activeOllamaModel} 回复完成`, { duration: 2000 });
+            }
+            
+            const chatNotification = configStorage.get('chatNotification');
+            if (chatNotification?.enabled) {
+              const preview = finalResponse.slice(0, 100) + (finalResponse.length > 100 ? '...' : '');
+              notificationService.showChatComplete(activeOllamaModel, preview);
+            }
+            
+            addLog({
+              id: generateId(),
+              level: 'info',
+              message: `收到 ${activeOllamaModel} 响应 (${finalResponse.length} 字符)${finalThinking ? `, 思考内容 ${finalThinking.length} 字符` : ''}`,
+              timestamp: Date.now(),
+              module: 'Chat',
+            });
+          } else {
+            updateMessage(convId, aiMsgId, { 
+              content: '抱歉，Ollama 响应失败，请检查服务状态。',
+              isStreaming: false 
+            });
+            setIsStreaming(false);
+            toast.error('Ollama 响应失败', { duration: 3000 });
+            const chatNotification = configStorage.get('chatNotification');
+            if (chatNotification?.enabled) {
+              notificationService.showChatError(activeOllamaModel, `HTTP ${response.status}`);
+            }
+            addLog({
+              id: generateId(),
+              level: 'error',
+              message: `Ollama 响应失败: HTTP ${response.status}`,
+              timestamp: Date.now(),
+              module: 'Chat',
+            });
+          }
+        } else {
+          const response = await fetch('http://localhost:11434/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: activeOllamaModel,
+              prompt: userInput,
+              stream: true,
+              think: ollamaThinkMode,
+              images: imageBase64List.length > 0 ? imageBase64List : undefined,
+            }),
+          });
 
         if (response.ok) {
           setIsStreaming(true);
@@ -613,6 +810,7 @@ export function ChatPage() {
             timestamp: Date.now(),
             module: 'Chat',
           });
+        }
         }
       } catch (error) {
         updateMessage(convId, aiMsgId, { 
@@ -888,6 +1086,23 @@ export function ChatPage() {
           {activeConversation && !isEditingTitle && (
             <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
               {activeConversation.messages.length} 条消息
+            </span>
+          )}
+          {activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (
+            <span className="text-xs ml-2 px-2 py-0.5 rounded" style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}>
+              {formatTokenCount(totalTokens)}
+            </span>
+          )}
+          {activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (
+            <span className="text-xs ml-2 px-2 py-0.5 rounded flex items-center gap-1" style={{ color: ollamaThinkMode ? 'var(--success-color)' : 'var(--text-tertiary)', backgroundColor: ollamaThinkMode ? 'rgba(34, 197, 94, 0.1)' : 'var(--bg-tertiary)' }}>
+              <Brain size={10} />
+              {ollamaThinkMode ? '思考' : '无思考'}
+            </span>
+          )}
+          {activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (
+            <span className="text-xs ml-2 px-2 py-0.5 rounded flex items-center gap-1" style={{ color: ollamaChatMode === 'multi' ? 'var(--success-color)' : 'var(--text-tertiary)', backgroundColor: ollamaChatMode === 'multi' ? 'rgba(34, 197, 94, 0.1)' : 'var(--bg-tertiary)' }}>
+              <MessageSquare size={10} />
+              {ollamaChatMode === 'multi' ? '多轮' : '单轮'}
             </span>
           )}
         </div>
