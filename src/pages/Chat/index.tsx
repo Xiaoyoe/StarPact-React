@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
-  ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare
+  ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare, Trash2
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -19,6 +19,7 @@ import { PerformanceModal } from '@/components/PerformanceModal';
 import { ImageViewer } from '@/components/ImageViewer';
 import { ChatWelcome } from '@/components/ChatWelcome';
 import { ollamaModelService } from '@/services/OllamaModelService';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 function CodeBlock({ language, children }: { language: string; children: string }) {
   const [copied, setCopied] = useState(false);
@@ -57,12 +58,13 @@ function CodeBlock({ language, children }: { language: string; children: string 
   );
 }
 
-function MessageBubble({ message, isLast, compactMode, onImageClick, onRegenerate }: { 
+function MessageBubble({ message, isLast, compactMode, onImageClick, onRegenerate, onDelete }: { 
   message: ChatMessage; 
   isLast: boolean; 
   compactMode: boolean;
   onImageClick: (images: string[], index: number) => void;
   onRegenerate?: (content: string) => void;
+  onDelete?: (messageId: string) => void;
 }) {
   const isUser = message.role === 'user';
   const [showActions, setShowActions] = useState(true);
@@ -241,16 +243,24 @@ function MessageBubble({ message, isLast, compactMode, onImageClick, onRegenerat
             >
               <button
                 onClick={() => navigator.clipboard.writeText(message.content)}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors"
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors hover:bg-white/10"
                 style={{ color: 'var(--text-tertiary)' }}
                 title="复制"
               >
                 <Copy size={12} />
               </button>
+              <button
+                onClick={() => onDelete?.(message.id)}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors hover:bg-white/10"
+                style={{ color: 'var(--text-tertiary)' }}
+                title="删除"
+              >
+                <Trash2 size={12} />
+              </button>
               {isUser && onRegenerate && (
                 <button
                   onClick={() => onRegenerate(message.content)}
-                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors"
+                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors hover:bg-white/10"
                   style={{ color: 'var(--text-tertiary)' }}
                   title="重新生成"
                 >
@@ -269,7 +279,7 @@ export function ChatPage() {
   const {
     conversations, activeConversationId,
     models, activeModelId, setActiveModel,
-    addMessage, updateMessage, addConversation, updateConversation,
+    addMessage, updateMessage, deleteMessage, addConversation, updateConversation,
     addLog,
     chatWallpaper, setChatWallpaper,
     compactMode, setCompactMode,
@@ -302,10 +312,18 @@ export function ChatPage() {
   });
   const [showWelcome, setShowWelcome] = useState(true);
   const [showChatWelcome, setShowChatWelcome] = useState(true);
+  const [deleteConfirm, setDeleteConfirm] = useState<{
+    isOpen: boolean;
+    messageId: string | null;
+  }>({
+    isOpen: false,
+    messageId: null,
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const shouldScrollToBottomRef = useRef(true);
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   const activeModel = models.find(m => m.id === activeModelId);
@@ -315,7 +333,9 @@ export function ChatPage() {
   }, []);
 
   useEffect(() => {
-    scrollToBottom();
+    if (shouldScrollToBottomRef.current) {
+      scrollToBottom();
+    }
   }, [activeConversation?.messages, scrollToBottom]);
 
   useEffect(() => {
@@ -762,6 +782,29 @@ export function ChatPage() {
     }, 100);
   };
 
+  const handleDeleteMessage = (messageId: string) => {
+    setDeleteConfirm({
+      isOpen: true,
+      messageId,
+    });
+  };
+
+  const confirmDeleteMessage = () => {
+    if (deleteConfirm.messageId && activeConversationId) {
+      shouldScrollToBottomRef.current = false;
+      deleteMessage(activeConversationId, deleteConfirm.messageId);
+      toast.success('消息已删除');
+      setTimeout(() => {
+        shouldScrollToBottomRef.current = true;
+      }, 100);
+    }
+    setDeleteConfirm({ isOpen: false, messageId: null });
+  };
+
+  const cancelDeleteMessage = () => {
+    setDeleteConfirm({ isOpen: false, messageId: null });
+  };
+
   if (showWelcome && showChatWelcome) {
     return (
       <div className="flex h-full flex-col no-select" style={{ backgroundColor: 'var(--bg-primary)' }}>
@@ -1148,6 +1191,7 @@ export function ChatPage() {
                 compactMode={compactMode}
                 onImageClick={openImageViewer}
                 onRegenerate={handleRegenerate}
+                onDelete={handleDeleteMessage}
               />
             ))}
             <div ref={messagesEndRef} />
@@ -1281,6 +1325,17 @@ export function ChatPage() {
         onPrev={handlePrevImage}
         onNext={handleNextImage}
         onJumpTo={handleJumpToImage}
+      />
+
+      {/* Delete Confirm Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        title="删除消息"
+        message="确定要删除这条消息吗？删除后将无法恢复。"
+        confirmText="删除"
+        cancelText="取消"
+        onConfirm={confirmDeleteMessage}
+        onCancel={cancelDeleteMessage}
       />
     </div>
   );

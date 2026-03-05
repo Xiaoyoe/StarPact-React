@@ -115,6 +115,7 @@ interface AppState {
   setActiveConversation: (id: string | null) => void;
   addMessage: (conversationId: string, message: ChatMessage) => void;
   updateMessage: (conversationId: string, messageId: string, updates: Partial<ChatMessage>) => void;
+  deleteMessage: (conversationId: string, messageId: string) => void;
 
   // Logs
   logs: LogEntry[];
@@ -167,6 +168,10 @@ interface AppState {
   setOllamaVerboseMode: (verbose: boolean) => void;
   ollamaThinkMode: boolean;
   setOllamaThinkMode: (think: boolean) => void;
+
+  // Ollama Pull Tasks
+  pullTasks: Map<string, import('@/services/OllamaPullService').PullTask>;
+  setPullTasks: (tasks: Map<string, import('@/services/OllamaPullService').PullTask>) => void;
 
   // Performance Metrics
   performanceMetrics: {
@@ -636,6 +641,21 @@ export const useStore = create<AppState>((set, get) => {
       return { conversations: newConversations };
     });
   },
+  deleteMessage: (conversationId, messageId) => {
+    set((state) => {
+      const newConversations = state.conversations.map((c) =>
+        c.id === conversationId
+          ? {
+              ...c,
+              messages: c.messages.filter((m) => m.id !== messageId),
+              updatedAt: Date.now(),
+            }
+          : c
+      );
+      debouncedSaveConversations(newConversations);
+      return { conversations: newConversations };
+    });
+  },
 
   // Logs
   logs: [
@@ -704,6 +724,10 @@ export const useStore = create<AppState>((set, get) => {
   setOllamaVerboseMode: (verbose) => set({ ollamaVerboseMode: verbose }),
   ollamaThinkMode: true,
   setOllamaThinkMode: (think) => set({ ollamaThinkMode: think }),
+
+  // Ollama Pull Tasks
+  pullTasks: new Map(),
+  setPullTasks: (tasks) => set({ pullTasks: tasks }),
 
   // Performance Metrics
   performanceMetrics: null,

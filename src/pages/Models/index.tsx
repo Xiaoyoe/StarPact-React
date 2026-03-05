@@ -12,6 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from '@/components/Toast';
 import { ollamaModelStorage, type OllamaModelFile } from '@/services/storage/OllamaModelStorage';
 import { ollamaModelService } from '@/services/OllamaModelService';
+import { PullModelPanel } from '@/components/PullModelPanel';
 
 function ModelForm({
   model,
@@ -1208,287 +1209,187 @@ function OllamaPanel({
         )}
       </AnimatePresence>
 
-      <div className="mb-4 rounded-xl p-4 shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-        {!ollamaStatus?.isRunning ? (
-          <div className="flex items-center gap-3">
-            <AlertCircle size={24} style={{ color: 'var(--warning-color)' }} />
-            <div className="flex-1">
-              <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                未检测到 Ollama 服务
-              </p>
-              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                请在终端中运行 <code className="rounded px-1.5 py-0.5" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>ollama serve</code> 启动服务，然后点击右上角刷新按钮
-              </p>
-            </div>
-            {window.electronAPI?.ollama && (
-              <button
-                onClick={handleStart}
-                className="group flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
-                style={{ 
-                  backgroundColor: 'rgba(0,180,42,0.1)', 
-                  color: 'var(--success-color)',
-                  border: '1px solid rgba(0,180,42,0.2)'
-                }}
-              >
-                <Play size={14} className="transition-transform group-hover:scale-110" /> 
-                <span>启动服务</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div
-                className="flex h-10 w-10 items-center justify-center rounded-xl"
-                style={{ backgroundColor: 'var(--toast-success-bg)' }}
-              >
-                <Activity size={20} style={{ color: 'var(--toast-success-text)' }} />
-              </div>
-              <div>
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                  Ollama 服务运行中
-                </div>
-                <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                  服务地址: {config.host}:{ollamaStatus.port}
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={handleStop}
-                className="group flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
-                style={{ 
-                  backgroundColor: 'rgba(245,63,63,0.1)', 
-                  color: 'var(--error-color)',
-                  border: '1px solid rgba(245,63,63,0.2)'
-                }}
-              >
-                <Square size={14} className="transition-transform group-hover:scale-110" /> 
-                <span>停止服务</span>
-              </button>
-              <button
-                onClick={handleRestart}
-                className="group flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all duration-200 hover:scale-105 active:scale-95"
-                style={{ 
-                  backgroundColor: 'var(--primary-light)', 
-                  color: 'var(--primary-color)',
-                  border: '1px solid var(--primary-color)'
-                }}
-              >
-                <RefreshCw size={14} className="transition-transform group-hover:rotate-180" /> 
-                <span>重启服务</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Create Model Section */}
-      {ollamaStatus?.isRunning && (
-        <div className="mb-4 rounded-xl overflow-hidden shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-          <div
-            onClick={() => setShowCreateModel(!showCreateModel)}
-            className="w-full flex items-center justify-between px-4 py-3 transition-colors cursor-pointer"
-            style={{ backgroundColor: showCreateModel ? 'var(--bg-tertiary)' : 'transparent' }}
-          >
-            <div className="flex items-center gap-2">
-              <FileBox size={16} style={{ color: 'var(--primary-color)' }} />
+      {/* 服务状态和运行模型合并卡片 */}
+      <div className="mb-4 rounded-xl overflow-hidden shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+        <div className="grid grid-cols-2 gap-0" style={{ minHeight: 120 }}>
+          {/* 左侧：服务状态 */}
+          <div className="flex flex-col p-4" style={{ borderRight: '1px solid var(--border-color)' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <Activity size={14} style={{ color: 'var(--text-tertiary)' }} />
               <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                创建 Ollama 模型
+                服务状态
               </span>
             </div>
-            <ChevronDown 
-              size={16} 
-              style={{ 
-                color: 'var(--text-tertiary)',
-                transform: showCreateModel ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform 0.2s'
-              }} 
-            />
-          </div>
-          
-          <AnimatePresence>
-            {showCreateModel && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="border-t"
-                style={{ borderColor: 'var(--border-color)' }}
-              >
-                <div className="p-4 space-y-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                      模型名称
-                    </label>
-                    <input
-                      type="text"
-                      value={createModelName}
-                      onChange={(e) => setCreateModelName(e.target.value)}
-                      placeholder="例如：my-custom-model"
-                      className="w-full rounded-lg px-3 py-2 text-sm outline-none transition-colors"
-                      style={{
-                        backgroundColor: 'var(--bg-primary)',
-                        border: '1px solid var(--border-color)',
-                        color: 'var(--text-primary)',
-                      }}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="mb-1.5 block text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>
-                      模型文件 (Modelfile)
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={createModelPath}
-                        onChange={(e) => setCreateModelPath(e.target.value)}
-                        placeholder="选择或输入 Modelfile 路径"
-                        className="flex-1 rounded-lg px-3 py-2 text-sm outline-none transition-colors"
-                        style={{
-                          backgroundColor: 'var(--bg-primary)',
-                          border: '1px solid var(--border-color)',
-                          color: 'var(--text-primary)',
-                        }}
-                      />
-                      <button
-                        onClick={handleSelectModelfile}
-                        className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm transition-colors"
-                        style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
-                      >
-                        <FolderOpen size={14} /> 选择文件
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-end gap-2 pt-2">
-                    <button
-                      onClick={() => {
-                        setCreateModelName('');
-                        setCreateModelPath('');
-                        setCreateModelFile(null);
-                      }}
-                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors"
-                      style={{ 
-                        backgroundColor: 'rgba(245,63,63,0.1)', 
-                        color: 'var(--error-color)',
-                        border: '1px solid rgba(245,63,63,0.2)'
-                      }}
-                    >
-                      <X size={14} /> 清空内容
-                    </button>
-                    <button
-                      onClick={handleCreateModel}
-                      disabled={isCreating || !createModelName.trim() || !createModelPath.trim()}
-                      className="flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-50"
-                      style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
-                    >
-                      {isCreating ? (
-                        <>
-                          <RefreshCw size={14} className="animate-spin" /> 创建中...
-                        </>
-                      ) : (
-                        <>
-                          <Plus size={14} /> 创建模型
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
-
-      {ollamaStatus?.isRunning && (
-        <div className="mb-4 rounded-xl overflow-hidden shrink-0" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-          <div className="flex items-center justify-between border-b px-4 py-2.5" style={{ borderColor: 'var(--border-color)' }}>
-            <div className="flex items-center gap-2">
-              <Activity size={14} style={{ color: 'var(--success-color)' }} />
-              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                运行中的模型 ({runningModels.length})
-              </span>
-            </div>
-            <button
-              onClick={() => loadRunningModels(true)}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors"
-              style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
-            >
-              <RefreshCw size={12} /> 刷新
-            </button>
-          </div>
-
-          <div className="max-h-28 overflow-y-auto p-3">
-            {runningModels.length === 0 ? (
-              <div className="flex h-10 flex-col items-center justify-center text-center">
-                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                  当前没有运行中的模型
+            
+            {!ollamaStatus?.isRunning ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-center">
+                <AlertCircle size={32} style={{ color: 'var(--warning-color)' }} className="mb-2" />
+                <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-primary)' }}>
+                  未检测到 Ollama 服务
                 </p>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                  运行 <code className="rounded px-1 py-0.5" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>ollama serve</code> 启动
+                </p>
+                {window.electronAPI?.ollama && (
+                  <button
+                    onClick={handleStart}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all"
+                    style={{ 
+                      backgroundColor: 'rgba(0,180,42,0.1)', 
+                      color: 'var(--success-color)',
+                      border: '1px solid rgba(0,180,42,0.2)'
+                    }}
+                  >
+                    <Play size={12} /> 启动服务
+                  </button>
+                )}
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-2">
-                {runningModels.map((model) => (
-                  <motion.div
-                    key={model.name}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="rounded-lg p-2.5"
-                    style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--success-color)' }}
+              <div className="flex-1 flex flex-col">
+                <div className="flex items-center gap-2 mb-2">
+                  <div
+                    className="flex h-8 w-8 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: 'var(--toast-success-bg)' }}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-                            {model.name}
-                          </span>
-                          <span
-                            className="rounded px-1.5 py-0.5 text-xs shrink-0"
-                            style={{ backgroundColor: 'rgba(0,180,42,0.1)', color: 'var(--success-color)' }}
-                          >
-                            运行中
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                          {model.details?.parameter_size && (
-                            <span className="flex items-center gap-1">
-                              <Zap size={10} /> {model.details.parameter_size}
-                            </span>
-                          )}
-                          {model.size > 0 && (
-                            <span className="flex items-center gap-1">
-                              <HardDrive size={10} /> {formatSize(model.size)}
-                            </span>
-                          )}
-                          {model.sizeVram !== undefined && model.sizeVram > 0 && (
-                            <span className="flex items-center gap-1">
-                              VRAM: {formatSize(model.sizeVram)}
-                            </span>
-                          )}
-                          {model.modified_at && (
-                            <span className="flex items-center gap-1">
-                              <Clock size={10} /> {new Date(model.modified_at).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleStopRunningModel(model.name)}
-                        className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-all active:scale-95"
-                        style={{ backgroundColor: 'var(--btn-danger-bg)', color: 'var(--btn-danger-text)' }}
-                        title="停止运行"
-                      >
-                        <StopCircle size={12} /> 停止
-                      </button>
+                    <Activity size={16} style={{ color: 'var(--toast-success-text)' }} />
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      运行中
                     </div>
-                  </motion.div>
-                ))}
+                    <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      {config.host}:{ollamaStatus.port}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-1.5 mt-auto">
+                  <button
+                    onClick={handleStop}
+                    className="flex-1 flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors"
+                    style={{ 
+                      backgroundColor: 'rgba(245,63,63,0.1)', 
+                      color: 'var(--error-color)',
+                      border: '1px solid rgba(245,63,63,0.2)'
+                    }}
+                  >
+                    <Square size={10} /> 停止
+                  </button>
+                  <button
+                    onClick={handleRestart}
+                    className="flex-1 flex items-center justify-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors"
+                    style={{ 
+                      backgroundColor: 'var(--primary-light)', 
+                      color: 'var(--primary-color)',
+                      border: '1px solid var(--primary-color)'
+                    }}
+                  >
+                    <RefreshCw size={10} /> 重启
+                  </button>
+                </div>
               </div>
             )}
           </div>
+
+          {/* 右侧：运行中的模型 */}
+          <div className="flex flex-col">
+            <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid var(--border-color)' }}>
+              <div className="flex items-center gap-2">
+                <Zap size={14} style={{ color: 'var(--success-color)' }} />
+                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                  运行中模型
+                </span>
+                {runningModels.length > 0 && (
+                  <span
+                    className="rounded-full px-1.5 py-0.5 text-xs"
+                    style={{ backgroundColor: 'rgba(0,180,42,0.1)', color: 'var(--success-color)' }}
+                  >
+                    {runningModels.length}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => loadRunningModels(true)}
+                disabled={!ollamaStatus?.isRunning}
+                className="flex items-center gap-1 rounded px-2 py-1 text-xs transition-colors disabled:opacity-50"
+                style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+              >
+                <RefreshCw size={10} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3" style={{ maxHeight: 200 }}>
+              {!ollamaStatus?.isRunning ? (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    服务未启动
+                  </p>
+                </div>
+              ) : runningModels.length === 0 ? (
+                <div className="flex h-full items-center justify-center">
+                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    暂无运行中的模型
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {runningModels.map((model) => (
+                    <div
+                      key={model.name}
+                      className="rounded-lg p-2"
+                      style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                              {model.name}
+                            </span>
+                            <span
+                              className="rounded px-1 py-0.5 text-xs shrink-0"
+                              style={{ backgroundColor: 'rgba(0,180,42,0.1)', color: 'var(--success-color)' }}
+                            >
+                              运行中
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2 mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                            {model.details?.parameter_size && (
+                              <span>{model.details.parameter_size}</span>
+                            )}
+                            {model.size > 0 && (
+                              <span>{formatSize(model.size)}</span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleStopRunningModel(model.name)}
+                          className="flex items-center gap-1 rounded px-2 py-1 text-xs font-medium transition-colors"
+                          style={{ backgroundColor: 'rgba(245,63,63,0.1)', color: 'var(--error-color)' }}
+                          title="停止运行"
+                        >
+                          <StopCircle size={10} /> 停止
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-      )}
+      </div>
+
+      <PullModelPanel 
+        showCreateModel={showCreateModel}
+        setShowCreateModel={setShowCreateModel}
+        createModelName={createModelName}
+        setCreateModelName={setCreateModelName}
+        createModelPath={createModelPath}
+        setCreateModelPath={setCreateModelPath}
+        createModelFile={createModelFile}
+        setCreateModelFile={setCreateModelFile}
+        handleCreateModel={handleCreateModel}
+        handleSelectModelfile={handleSelectModelfile}
+      />
 
       <div className="mb-4 rounded-xl flex-1 min-h-0 flex" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
         <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0, borderRight: '1px solid var(--border-color)' }}>
