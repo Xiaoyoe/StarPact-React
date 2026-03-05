@@ -4,9 +4,10 @@ import { useStore } from '@/store';
 
 interface ChatWelcomeProps {
   onStartChat: () => void;
+  onSuggestionClick?: (text: string) => void;
 }
 
-export function ChatWelcome({ onStartChat }: ChatWelcomeProps) {
+export function ChatWelcome({ onStartChat, onSuggestionClick }: ChatWelcomeProps) {
   const { activeOllamaModel, ollamaStatus, ollamaModels } = useStore();
 
   const suggestions = [
@@ -174,7 +175,13 @@ export function ChatWelcome({ onStartChat }: ChatWelcomeProps) {
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3, delay: 0.55 + index * 0.05 }}
-                  onClick={onStartChat}
+                  onClick={() => {
+                    if (onSuggestionClick) {
+                      onSuggestionClick(suggestion.text);
+                    } else {
+                      onStartChat();
+                    }
+                  }}
                   className="flex items-center gap-3 p-3 rounded-xl text-left transition-all hover:scale-[1.01] active:scale-[0.99]"
                   style={{ 
                     backgroundColor: 'var(--bg-secondary)',

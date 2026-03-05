@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
-  Star, ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare
+  ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -56,11 +56,12 @@ function CodeBlock({ language, children }: { language: string; children: string 
   );
 }
 
-function MessageBubble({ message, isLast, compactMode, onImageClick }: { 
+function MessageBubble({ message, isLast, compactMode, onImageClick, onRegenerate }: { 
   message: ChatMessage; 
   isLast: boolean; 
   compactMode: boolean;
   onImageClick: (images: string[], index: number) => void;
+  onRegenerate?: (content: string) => void;
 }) {
   const isUser = message.role === 'user';
   const [showActions, setShowActions] = useState(true);
@@ -237,21 +238,24 @@ function MessageBubble({ message, isLast, compactMode, onImageClick }: {
               exit={{ opacity: 0, y: -4 }}
               className={cn("mt-1 flex items-center gap-1", isUser ? "justify-end" : "justify-start")}
             >
-              {[
-                { icon: Copy, label: '复制', action: () => navigator.clipboard.writeText(message.content) },
-                { icon: RotateCcw, label: '重新生成', action: () => {} },
-                { icon: Star, label: '收藏', action: () => {} },
-              ].map(({ icon: Icon, label, action }) => (
+              <button
+                onClick={() => navigator.clipboard.writeText(message.content)}
+                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors"
+                style={{ color: 'var(--text-tertiary)' }}
+                title="复制"
+              >
+                <Copy size={12} />
+              </button>
+              {isUser && onRegenerate && (
                 <button
-                  key={label}
-                  onClick={action}
+                  onClick={() => onRegenerate(message.content)}
                   className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors"
                   style={{ color: 'var(--text-tertiary)' }}
-                  title={label}
+                  title="重新生成"
                 >
-                  <Icon size={12} />
+                  <RotateCcw size={12} />
                 </button>
-              ))}
+              )}
             </motion.div>
           )}
         </AnimatePresence>
@@ -781,10 +785,25 @@ export function ChatPage() {
     setShowWelcome(false);
   };
 
+  const handleSuggestionClick = (text: string) => {
+    setInputValue(text);
+    setShowWelcome(false);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+  };
+
+  const handleRegenerate = (content: string) => {
+    setInputValue(content);
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 100);
+  };
+
   if (showWelcome && showChatWelcome) {
     return (
       <div className="flex h-full flex-col no-select" style={{ backgroundColor: 'var(--bg-primary)' }}>
-        <ChatWelcome onStartChat={handleStartChat} />
+        <ChatWelcome onStartChat={handleStartChat} onSuggestionClick={handleSuggestionClick} />
       </div>
     );
   }
@@ -1166,6 +1185,7 @@ export function ChatPage() {
                 isLast={idx === activeConversation.messages.length - 1}
                 compactMode={compactMode}
                 onImageClick={openImageViewer}
+                onRegenerate={handleRegenerate}
               />
             ))}
             <div ref={messagesEndRef} />

@@ -4,7 +4,7 @@ import {
   Settings2, Check, X, AlertCircle, Zap, Globe, HardDrive,
   ChevronRight, BarChart3, Clock, Activity, Eye, EyeOff,
   Play, Square, RefreshCw, StopCircle, ChevronUp, ChevronDown,
-  Terminal, FileBox, FolderOpen
+  Terminal, FileBox, FolderOpen, Info, Cpu, Database, FileText
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import type { ModelConfig } from '@/store';
@@ -442,6 +442,11 @@ function OllamaPanel({
     expiresAt?: string;
     sizeVram?: number;
   }>>([]);
+  const [selectedModelInfo, setSelectedModelInfo] = useState<ModelShowInfo | null>(null);
+  const [selectedModelName, setSelectedModelName] = useState<string | null>(null);
+  const [loadingModelInfo, setLoadingModelInfo] = useState(false);
+  const [showLicense, setShowLicense] = useState(false);
+  const [showModelInfo, setShowModelInfo] = useState(true);
 
   useEffect(() => {
     if (window.electronAPI?.ollama) {
@@ -710,6 +715,33 @@ function OllamaPanel({
       if (showToast) {
         toast.error('查询运行模型失败', { duration: 2000 });
       }
+    }
+  };
+
+  const loadModelInfo = async (modelName: string) => {
+    setLoadingModelInfo(true);
+    setSelectedModelName(modelName);
+    setShowLicense(false);
+    try {
+      const response = await fetch(`http://${config.host}:${config.port}/api/show`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: modelName })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedModelInfo(data);
+        addOllamaLog({ type: 'info', message: `已加载模型 ${modelName} 的详细信息` });
+      } else {
+        addOllamaLog({ type: 'error', message: `获取模型 ${modelName} 信息失败` });
+        toast.error('获取模型信息失败', { duration: 2000 });
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `获取模型 ${modelName} 信息失败` });
+      toast.error('获取模型信息失败', { duration: 2000 });
+    } finally {
+      setLoadingModelInfo(false);
     }
   };
 
@@ -1507,148 +1539,384 @@ function OllamaPanel({
         </div>
       )}
 
-      <div className="mb-4 rounded-xl flex-1 min-h-0 flex flex-col" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
-        <div className="flex items-center justify-between border-b px-4 py-2.5 shrink-0" style={{ borderColor: 'var(--border-color)' }}>
-          <div className="flex items-center gap-2">
-            <HardDrive size={14} style={{ color: 'var(--text-tertiary)' }} />
-            <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-              本地模型 ({ollamaModels.length})
-            </span>
+      <div className="mb-4 rounded-xl flex-1 min-h-0 flex" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+        <div className="flex-1 flex flex-col overflow-hidden" style={{ minHeight: 0, borderRight: '1px solid var(--border-color)' }}>
+          <div className="flex items-center justify-between border-b px-4 py-2.5 shrink-0" style={{ borderColor: 'var(--border-color)' }}>
+            <div className="flex items-center gap-2">
+              <HardDrive size={14} style={{ color: 'var(--text-tertiary)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                本地模型 ({ollamaModels.length})
+              </span>
+            </div>
+            <button
+              onClick={loadOllamaModels}
+              disabled={!ollamaStatus?.isRunning}
+              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors disabled:opacity-50"
+              style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+            >
+              <RefreshCw size={12} /> 刷新
+            </button>
           </div>
-          <button
-            onClick={loadOllamaModels}
-            disabled={!ollamaStatus?.isRunning}
-            className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs transition-colors disabled:opacity-50"
-            style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
-          >
-            <RefreshCw size={12} /> 刷新
-          </button>
+
+          <div className="flex-1 min-h-0 overflow-y-auto p-3">
+            {ollamaModels.length === 0 ? (
+              <div className="flex h-24 flex-col items-center justify-center text-center">
+                <AlertCircle size={32} style={{ color: 'var(--text-tertiary)' }} className="mb-2 opacity-30" />
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  {ollamaStatus?.isRunning ? '暂无模型' : '请先启动 Ollama 服务'}
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {ollamaModels.map((model) => {
+                  const isRunning = runningModels.some(rm => rm.name === model.name || rm.model === model.name);
+                  const isStarting = startingModel === model.name;
+                  const isSelected = activeOllamaModel === model.name;
+                  const isInfoSelected = selectedModelName === model.name;
+                  
+                  return (
+                    <motion.div
+                      key={model.name}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="rounded-lg p-3 cursor-pointer"
+                      style={{ 
+                        backgroundColor: isInfoSelected ? 'var(--primary-light)' : 'var(--bg-primary)', 
+                        border: isSelected ? '2px solid var(--primary-color)' : (isRunning ? '1px solid var(--success-color)' : '1px solid var(--border-color)')
+                      }}
+                      onClick={() => loadModelInfo(model.name)}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                              {model.name}
+                            </span>
+                            {isSelected && (
+                              <span
+                                className="rounded px-1.5 py-0.5 text-xs shrink-0"
+                                style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+                              >
+                                已选择
+                              </span>
+                            )}
+                            {isRunning && (
+                              <span
+                                className="rounded px-1.5 py-0.5 text-xs shrink-0"
+                                style={{ backgroundColor: 'rgba(0,180,42,0.1)', color: 'var(--success-color)' }}
+                              >
+                                运行中
+                              </span>
+                            )}
+                            <span
+                              className="rounded px-1.5 py-0.5 text-xs shrink-0"
+                              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
+                            >
+                              {getModelLabel(model)}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                            {model.details?.parameter_size && (
+                              <span className="flex items-center gap-1">
+                                <Zap size={10} /> {model.details.parameter_size}
+                              </span>
+                            )}
+                            {model.size > 0 && (
+                              <span className="flex items-center gap-1">
+                                <HardDrive size={10} /> {formatSize(model.size)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleSelectAndSwitchModel(model.name); }}
+                            disabled={startingModel !== null}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors disabled:opacity-50"
+                            style={{ 
+                              color: isSelected ? 'var(--primary-color)' : 'var(--text-tertiary)', 
+                              backgroundColor: isSelected ? 'var(--primary-light)' : 'transparent' 
+                            }}
+                            title="选择并切换模型"
+                          >
+                            <Check size={14} />
+                          </button>
+                          {ollamaStatus?.isRunning && (
+                            isRunning ? (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleStopRunningModel(model.name); }}
+                                className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+                                style={{ color: 'var(--error-color)', backgroundColor: 'rgba(245,63,63,0.1)' }}
+                                title="停止运行"
+                              >
+                                <StopCircle size={14} />
+                              </button>
+                            ) : (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleStartModel(model.name); }}
+                                disabled={isStarting || startingModel !== null}
+                                className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors disabled:opacity-50"
+                                style={{ color: 'var(--success-color)', backgroundColor: 'rgba(0,180,42,0.1)' }}
+                                title={isStarting ? '启动中...' : '启动模型'}
+                              >
+                                <Play size={14} className={isStarting ? 'animate-pulse' : ''} />
+                              </button>
+                            )
+                          )}
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteModel(model.name); }}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-opacity-80"
+                            style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-tertiary)' }}
+                            title="删除模型"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-3">
-          {ollamaModels.length === 0 ? (
-            <div className="flex h-24 flex-col items-center justify-center text-center">
-              <AlertCircle size={32} style={{ color: 'var(--text-tertiary)' }} className="mb-2 opacity-30" />
-              <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                {ollamaStatus?.isRunning ? '暂无模型' : '请先启动 Ollama 服务'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-2">
-              {ollamaModels.map((model) => {
-                const isRunning = runningModels.some(rm => rm.name === model.name || rm.model === model.name);
-                const isStarting = startingModel === model.name;
-                const isSelected = activeOllamaModel === model.name;
-                
-                return (
-                  <motion.div
-                    key={model.name}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="rounded-lg p-3"
-                    style={{ 
-                      backgroundColor: 'var(--bg-primary)', 
-                      border: isSelected ? '2px solid var(--primary-color)' : (isRunning ? '1px solid var(--success-color)' : '1px solid var(--border-color)')
-                    }}
+        <AnimatePresence>
+          {showModelInfo && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: 380, opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="flex flex-col overflow-hidden"
+              style={{ backgroundColor: 'var(--bg-primary)' }}
+            >
+              <div className="flex items-center justify-between border-b px-4 py-3" style={{ borderColor: 'var(--border-color)' }}>
+                <div className="flex items-center gap-2">
+                  <Info size={16} style={{ color: 'var(--text-tertiary)' }} />
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    模型详情
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedModelName && (
+                    <span className="text-xs truncate max-w-[150px]" style={{ color: 'var(--text-tertiary)' }}>
+                      {selectedModelName}
+                    </span>
+                  )}
+                  <button
+                    onClick={() => setShowModelInfo(false)}
+                    className="flex h-6 w-6 items-center justify-center rounded transition-colors"
+                    style={{ color: 'var(--text-tertiary)' }}
+                    title="隐藏详情面板"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-                            {model.name}
-                          </span>
-                          {isSelected && (
-                            <span
-                              className="rounded px-1.5 py-0.5 text-xs shrink-0"
-                              style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
-                            >
-                              已选择
-                            </span>
-                          )}
-                          {isRunning && (
-                            <span
-                              className="rounded px-1.5 py-0.5 text-xs shrink-0"
-                              style={{ backgroundColor: 'rgba(0,180,42,0.1)', color: 'var(--success-color)' }}
-                            >
-                              运行中
-                            </span>
-                          )}
-                          <span
-                            className="rounded px-1.5 py-0.5 text-xs shrink-0"
-                            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
-                          >
-                            {getModelLabel(model)}
-                          </span>
+                    <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+          
+          <div className="flex-1 overflow-y-auto p-4">
+            {loadingModelInfo ? (
+              <div className="flex h-full items-center justify-center">
+                <RefreshCw size={24} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
+              </div>
+            ) : !selectedModelInfo ? (
+              <div className="flex h-full flex-col items-center justify-center text-center">
+                <Info size={48} style={{ color: 'var(--text-tertiary)' }} className="mb-4 opacity-30" />
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  点击左侧模型查看详细信息
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {selectedModelInfo.details && (
+                  <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <Cpu size={12} /> 基本信息
+                    </h4>
+                    <div className="space-y-1.5 text-xs">
+                      {selectedModelInfo.details.family && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--text-tertiary)' }}>模型系列</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{selectedModelInfo.details.family}</span>
                         </div>
-                        <div className="flex flex-wrap gap-2 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                          {model.details?.parameter_size && (
-                            <span className="flex items-center gap-1">
-                              <Zap size={10} /> {model.details.parameter_size}
-                            </span>
-                          )}
-                          {model.size > 0 && (
-                            <span className="flex items-center gap-1">
-                              <HardDrive size={10} /> {formatSize(model.size)}
-                            </span>
-                          )}
-                          {model.modified_at && (
-                            <span className="flex items-center gap-1">
-                              <Clock size={10} /> {new Date(model.modified_at).toLocaleDateString()}
-                            </span>
-                          )}
+                      )}
+                      {selectedModelInfo.details.parameter_size && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--text-tertiary)' }}>参数规模</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{selectedModelInfo.details.parameter_size}</span>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleSelectAndSwitchModel(model.name)}
-                          disabled={startingModel !== null}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors disabled:opacity-50"
-                          style={{ 
-                            color: isSelected ? 'var(--primary-color)' : 'var(--text-tertiary)', 
-                            backgroundColor: isSelected ? 'var(--primary-light)' : 'var(--bg-tertiary)' 
-                          }}
-                          title="选择并切换模型"
-                        >
-                          <Check size={14} />
-                        </button>
-                        {ollamaStatus?.isRunning && (
-                          isRunning ? (
-                            <button
-                              onClick={() => handleStopRunningModel(model.name)}
-                              className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
-                              style={{ color: 'var(--error-color)', backgroundColor: 'rgba(245,63,63,0.1)' }}
-                              title="停止运行"
-                            >
-                              <StopCircle size={14} />
-                            </button>
-                          ) : (
-                            <button
-                              onClick={() => handleStartModel(model.name)}
-                              disabled={isStarting || startingModel !== null}
-                              className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors disabled:opacity-50"
-                              style={{ color: 'var(--success-color)', backgroundColor: 'rgba(0,180,42,0.1)' }}
-                              title={isStarting ? '启动中...' : '启动模型'}
-                            >
-                              <Play size={14} className={isStarting ? 'animate-pulse' : ''} />
-                            </button>
-                          )
-                        )}
-                        <button
-                          onClick={() => handleDeleteModel(model.name)}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-opacity-80"
-                          style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-tertiary)' }}
-                          title="删除模型"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
+                      )}
+                      {selectedModelInfo.details.quantization_level && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--text-tertiary)' }}>量化级别</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{selectedModelInfo.details.quantization_level}</span>
+                        </div>
+                      )}
+                      {selectedModelInfo.details.format && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--text-tertiary)' }}>格式</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{selectedModelInfo.details.format}</span>
+                        </div>
+                      )}
+                      {selectedModelInfo.details.families && selectedModelInfo.details.families.length > 0 && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--text-tertiary)' }}>支持系列</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{selectedModelInfo.details.families.join(', ')}</span>
+                        </div>
+                      )}
                     </div>
-                  </motion.div>
-                );
-              })}
-            </div>
+                  </div>
+                )}
+
+                {selectedModelInfo.capabilities && selectedModelInfo.capabilities.length > 0 && (
+                  <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <h4 className="text-xs font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+                      能力标签
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5">
+                      {selectedModelInfo.capabilities.map((cap, idx) => (
+                        <span
+                          key={idx}
+                          className="rounded px-2 py-0.5 text-xs"
+                          style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                        >
+                          {cap}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedModelInfo.modelfile && (
+                  <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <FileText size={12} /> Modelfile
+                    </h4>
+                    <pre className="text-xs overflow-x-auto whitespace-pre-wrap max-h-[200px]" style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                      {selectedModelInfo.modelfile}
+                    </pre>
+                  </div>
+                )}
+
+                {selectedModelInfo.details?.parent_model && (
+                  <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <HardDrive size={12} /> 父模型
+                    </h4>
+                    <p className="text-xs break-all" style={{ color: 'var(--text-secondary)' }}>
+                      {selectedModelInfo.details.parent_model}
+                    </p>
+                  </div>
+                )}
+
+                {selectedModelInfo.parameters && (
+                  <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <Settings2 size={12} /> 默认参数
+                    </h4>
+                    <pre className="text-xs overflow-x-auto whitespace-pre-wrap" style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                      {selectedModelInfo.parameters}
+                    </pre>
+                  </div>
+                )}
+
+                {selectedModelInfo.template && (
+                  <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <FileText size={12} /> 提示模板
+                    </h4>
+                    <pre className="text-xs overflow-x-auto whitespace-pre-wrap" style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                      {selectedModelInfo.template}
+                    </pre>
+                  </div>
+                )}
+
+                {selectedModelInfo.model_info && (
+                  <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                      <Database size={12} /> 模型架构
+                    </h4>
+                    <div className="space-y-1.5 text-xs">
+                      {selectedModelInfo.model_info['general.architecture'] && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--text-tertiary)' }}>架构</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{selectedModelInfo.model_info['general.architecture']}</span>
+                        </div>
+                      )}
+                      {selectedModelInfo.model_info['general.parameter_count'] && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--text-tertiary)' }}>参数数量</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{Number(selectedModelInfo.model_info['general.parameter_count']).toLocaleString()}</span>
+                        </div>
+                      )}
+                      {selectedModelInfo.model_info['general.file_type'] && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--text-tertiary)' }}>文件类型</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{selectedModelInfo.model_info['general.file_type']}</span>
+                        </div>
+                      )}
+                      {selectedModelInfo.model_info['tokenizer.ggml.model'] && (
+                        <div className="flex justify-between">
+                          <span style={{ color: 'var(--text-tertiary)' }}>分词器模型</span>
+                          <span style={{ color: 'var(--text-primary)' }}>{selectedModelInfo.model_info['tokenizer.ggml.model']}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {selectedModelInfo.license && (
+                  <div className="rounded-lg overflow-hidden" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                    <button
+                      onClick={() => setShowLicense(!showLicense)}
+                      className="w-full flex items-center justify-between p-3 hover:opacity-80 transition-opacity"
+                    >
+                      <h4 className="text-xs font-semibold flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                        <FileText size={12} /> 许可证
+                      </h4>
+                      {showLicense ? (
+                        <ChevronUp size={14} style={{ color: 'var(--text-tertiary)' }} />
+                      ) : (
+                        <ChevronDown size={14} style={{ color: 'var(--text-tertiary)' }} />
+                      )}
+                    </button>
+                    <AnimatePresence>
+                      {showLicense && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="px-3 pb-3">
+                            <pre className="text-xs overflow-x-auto whitespace-pre-wrap max-h-[300px] overflow-y-auto" style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                              {selectedModelInfo.license}
+                            </pre>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </motion.div>
           )}
-        </div>
+        </AnimatePresence>
+        
+        {!showModelInfo && (
+          <button
+            onClick={() => setShowModelInfo(true)}
+            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-colors shrink-0"
+            style={{ backgroundColor: 'var(--bg-secondary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+            title="显示详情面板"
+          >
+            <Info size={12} /> 显示详情
+          </button>
+        )}
       </div>
     </div>
   );
