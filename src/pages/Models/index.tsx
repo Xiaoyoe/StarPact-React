@@ -448,6 +448,10 @@ function OllamaPanel({
   const [loadingModelInfo, setLoadingModelInfo] = useState(false);
   const [showLicense, setShowLicense] = useState(false);
   const [showModelInfo, setShowModelInfo] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteModelName, setDeleteModelName] = useState<string | null>(null);
+  const [deleteModelInfo, setDeleteModelInfo] = useState<ModelShowInfo | null>(null);
+  const [loadingDeleteInfo, setLoadingDeleteInfo] = useState(false);
 
   useEffect(() => {
     if (window.electronAPI?.ollama) {
@@ -656,19 +660,45 @@ function OllamaPanel({
       return;
     }
 
-    if (!confirm(`确定要删除模型 ${modelName} 吗？此操作不可撤销！`)) return;
+    setDeleteModelName(modelName);
+    setShowDeleteConfirm(true);
+    setLoadingDeleteInfo(true);
+    setDeleteModelInfo(null);
 
-    toast.info(`正在删除模型 ${modelName}...`, { duration: 2000 });
-    addOllamaLog({ type: 'info', message: `正在删除模型 ${modelName}...` });
+    try {
+      const response = await fetch(`http://${config.host}:${config.port}/api/show`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: modelName })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setDeleteModelInfo(data);
+      } else {
+        addOllamaLog({ type: 'error', message: `获取模型 ${modelName} 信息失败` });
+      }
+    } catch (error) {
+      addOllamaLog({ type: 'error', message: `获取模型 ${modelName} 信息失败` });
+    } finally {
+      setLoadingDeleteInfo(false);
+    }
+  };
+
+  const confirmDeleteModel = async () => {
+    if (!deleteModelName) return;
+
+    toast.info(`正在删除模型 ${deleteModelName}...`, { duration: 2000 });
+    addOllamaLog({ type: 'info', message: `正在删除模型 ${deleteModelName}...` });
 
     try {
       if (window.electronAPI?.ollama) {
-        await window.electronAPI.ollama.deleteModel(modelName);
+        await window.electronAPI.ollama.deleteModel(deleteModelName);
       } else {
         const response = await fetch(`http://${config.host}:${config.port}/api/delete`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: modelName }),
+          body: JSON.stringify({ name: deleteModelName }),
         });
 
         if (!response.ok) {
@@ -677,13 +707,16 @@ function OllamaPanel({
         }
       }
 
-      addOllamaLog({ type: 'info', message: `模型 ${modelName} 已删除` });
-      toast.success(`模型 ${modelName} 已删除`, { duration: 2000 });
+      addOllamaLog({ type: 'info', message: `模型 ${deleteModelName} 已删除` });
+      toast.success(`模型 ${deleteModelName} 已删除`, { duration: 2000 });
+      setShowDeleteConfirm(false);
+      setDeleteModelName(null);
+      setDeleteModelInfo(null);
       await loadOllamaModels();
       await loadRunningModels();
     } catch (error) {
-      addOllamaLog({ type: 'error', message: `删除模型 ${modelName} 失败: ${error}` });
-      toast.error(`删除模型 ${modelName} 失败`, { duration: 3000 });
+      addOllamaLog({ type: 'error', message: `删除模型 ${deleteModelName} 失败: ${error}` });
+      toast.error(`删除模型 ${deleteModelName} 失败`, { duration: 3000 });
     }
   };
 
@@ -1841,6 +1874,170 @@ function OllamaPanel({
           </button>
         )}
       </div>
+
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+            onClick={() => setShowDeleteConfirm(false)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="relative w-[500px] max-h-[80vh] overflow-hidden rounded-2xl"
+              style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: 'var(--border-color)' }}>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="flex h-10 w-10 items-center justify-center rounded-xl"
+                    style={{ backgroundColor: 'rgba(245,63,63,0.1)' }}
+                  >
+                    <Trash2 size={20} style={{ color: 'var(--error-color)' }} />
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                      确认删除模型
+                    </h2>
+                    <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      此操作不可撤销
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className="max-h-[calc(80vh-140px)] overflow-y-auto p-6">
+                {loadingDeleteInfo ? (
+                  <div className="flex h-32 items-center justify-center">
+                    <RefreshCw size={24} className="animate-spin" style={{ color: 'var(--text-tertiary)' }} />
+                  </div>
+                ) : deleteModelInfo ? (
+                  <div className="space-y-4">
+                    <div className="rounded-lg p-4" style={{ backgroundColor: 'rgba(245,63,63,0.05)', border: '1px solid rgba(245,63,63,0.2)' }}>
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertCircle size={16} style={{ color: 'var(--error-color)' }} />
+                        <span className="text-sm font-medium" style={{ color: 'var(--error-color)' }}>
+                          即将删除: {deleteModelName}
+                        </span>
+                      </div>
+                      <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        删除后模型文件将从磁盘中移除，无法恢复。请确认是否继续。
+                      </p>
+                    </div>
+
+                    {deleteModelInfo.details && (
+                      <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                        <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                          <Cpu size={12} /> 模型信息
+                        </h4>
+                        <div className="space-y-1.5 text-xs">
+                          {deleteModelInfo.details.family && (
+                            <div className="flex justify-between">
+                              <span style={{ color: 'var(--text-tertiary)' }}>模型系列</span>
+                              <span style={{ color: 'var(--text-primary)' }}>{deleteModelInfo.details.family}</span>
+                            </div>
+                          )}
+                          {deleteModelInfo.details.parameter_size && (
+                            <div className="flex justify-between">
+                              <span style={{ color: 'var(--text-tertiary)' }}>参数规模</span>
+                              <span style={{ color: 'var(--text-primary)' }}>{deleteModelInfo.details.parameter_size}</span>
+                            </div>
+                          )}
+                          {deleteModelInfo.details.quantization_level && (
+                            <div className="flex justify-between">
+                              <span style={{ color: 'var(--text-tertiary)' }}>量化级别</span>
+                              <span style={{ color: 'var(--text-primary)' }}>{deleteModelInfo.details.quantization_level}</span>
+                            </div>
+                          )}
+                          {deleteModelInfo.details.format && (
+                            <div className="flex justify-between">
+                              <span style={{ color: 'var(--text-tertiary)' }}>格式</span>
+                              <span style={{ color: 'var(--text-primary)' }}>{deleteModelInfo.details.format}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {deleteModelInfo.model_info && (
+                      <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                        <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                          <Database size={12} /> 模型架构
+                        </h4>
+                        <div className="space-y-1.5 text-xs">
+                          {deleteModelInfo.model_info['general.architecture'] && (
+                            <div className="flex justify-between">
+                              <span style={{ color: 'var(--text-tertiary)' }}>架构</span>
+                              <span style={{ color: 'var(--text-primary)' }}>{deleteModelInfo.model_info['general.architecture']}</span>
+                            </div>
+                          )}
+                          {deleteModelInfo.model_info['general.parameter_count'] && (
+                            <div className="flex justify-between">
+                              <span style={{ color: 'var(--text-tertiary)' }}>参数数量</span>
+                              <span style={{ color: 'var(--text-primary)' }}>{Number(deleteModelInfo.model_info['general.parameter_count']).toLocaleString()}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {deleteModelInfo.modelfile && (
+                      <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                        <h4 className="text-xs font-semibold mb-2 flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                          <FileText size={12} /> Modelfile
+                        </h4>
+                        <pre className="text-xs overflow-x-auto whitespace-pre-wrap max-h-[150px] overflow-y-auto" style={{ color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
+                          {deleteModelInfo.modelfile}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex h-32 items-center justify-center">
+                    <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>无法获取模型信息</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 border-t px-6 py-4" style={{ borderColor: 'var(--border-color)' }}>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  className="rounded-lg px-4 py-2 text-sm transition-colors"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    color: 'var(--text-secondary)',
+                    border: '1px solid var(--border-color)',
+                  }}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={confirmDeleteModel}
+                  disabled={loadingDeleteInfo}
+                  className="flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-all active:scale-95 disabled:opacity-50"
+                  style={{ backgroundColor: 'var(--error-color)', color: 'white' }}
+                >
+                  <Trash2 size={14} />
+                  确认删除
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
