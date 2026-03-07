@@ -1,10 +1,12 @@
 import { useState, useEffect, useMemo, memo, useRef } from 'react';
 import {
-  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid, Maximize2
+  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid, Maximize2, Image as ImageIcon, X
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { LogEntry } from '@/store';
 import { motion } from 'framer-motion';
+import { BackgroundStorage, type CustomBackground } from '@/services/storage/BackgroundStorage';
+import { LocalImage } from '@/components/LocalImage';
 
 
 const logLevelConfig = {
@@ -200,6 +202,8 @@ export function SettingsPage() {
   const [logSearchQuery, setLogSearchQuery] = useState('');
   const [logCurrentPage, setLogCurrentPage] = useState(1);
   const [currentWindowSize, setCurrentWindowSize] = useState<{ width: number; height: number } | null>(null);
+  const [customBackgrounds, setCustomBackgrounds] = useState<CustomBackground[]>([]);
+  const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
   const LOG_PAGE_SIZE = 30;
   const toast = useToast();
   
@@ -254,6 +258,18 @@ export function SettingsPage() {
       setConfigLoaded(true);
     };
     loadSettings();
+  }, []);
+
+  useEffect(() => {
+    const loadCustomBackgrounds = async () => {
+      try {
+        const backgrounds = await BackgroundStorage.getInstance().getAllBackgrounds();
+        setCustomBackgrounds(backgrounds);
+      } catch (error) {
+        console.error('Failed to load custom backgrounds:', error);
+      }
+    };
+    loadCustomBackgrounds();
   }, []);
 
   // 保存设置到配置存储
@@ -729,171 +745,289 @@ export function SettingsPage() {
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="space-y-6"
+              className="space-y-8"
+              style={{ margin: '-2rem', padding: '2rem' }}
             >
               <section>
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-6">
                   <div>
-                    <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
                       聊天壁纸
                     </h2>
                     <p className="text-sm mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                      为聊天界面设置个性化背景
+                      选择或上传壁纸，为界面添加个性化背景
                     </p>
                   </div>
                   {chatWallpaper && (
                     <button
-                      onClick={() => setChatWallpaper('')}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:scale-105"
+                      onClick={() => {
+                        setChatWallpaper('');
+                        setSelectedBackgroundId(null);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105"
                       style={{ 
                         color: 'var(--error-color)', 
                         backgroundColor: 'rgba(239, 68, 68, 0.1)',
                         border: '1px solid rgba(239, 68, 68, 0.2)'
                       }}
                     >
-                      <Trash2 size={12} /> 清除壁纸
+                      <Trash2 size={14} /> 清除当前壁纸
                     </button>
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2">
-                    <div 
-                      className="rounded-xl overflow-hidden"
-                      style={{ 
-                        backgroundColor: 'var(--bg-secondary)', 
-                        border: '1px solid var(--border-color)' 
-                      }}
-                    >
-                      <div 
-                        className="px-4 py-3 border-b flex items-center gap-2"
-                        style={{ borderColor: 'var(--border-color)' }}
-                      >
-                        <Palette size={16} style={{ color: 'var(--primary-color)' }} />
-                        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>预设壁纸</span>
-                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ 
-                          backgroundColor: 'var(--primary-light)', 
-                          color: 'var(--primary-color)' 
-                        }}>4 款可选</span>
-                      </div>
-                      <div className="p-4">
-                        <div className="grid grid-cols-2 gap-3">
-                          {[
-                            { id: 'ling', name: '玲', path: '/src/images/background/ling.jpg', desc: '清新淡雅' },
-                            { id: 'xue', name: '雪', path: '/src/images/background/xue.png', desc: '纯净唯美' },
-                            { id: 'pool', name: '泳池', path: '/src/images/background/五女泳池.jpg', desc: '夏日清凉' },
-                            { id: 'girl', name: '宅家少女', path: '/src/images/background/宅家少女.png', desc: '温馨居家' }
-                          ].map((wallpaper) => (
-                            <WallpaperItem
-                              key={wallpaper.id}
-                              id={wallpaper.id}
-                              name={wallpaper.name}
-                              path={wallpaper.path}
-                              isSelected={chatWallpaper === wallpaper.path}
-                              onSelect={setChatWallpaper}
-                            />
-                          ))}
-                        </div>
-                      </div>
+                <div className="space-y-6">
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Palette size={18} style={{ color: 'var(--primary-color)' }} />
+                      <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>预设壁纸</h3>
+                      <span className="text-xs px-2 py-0.5 rounded-full" style={{ 
+                        backgroundColor: 'var(--primary-light)', 
+                        color: 'var(--primary-color)' 
+                      }}>4 款</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-4">
+                      {[
+                        { id: 'ling', name: '玲', path: '/src/images/background/ling.jpg' },
+                        { id: 'xue', name: '雪', path: '/src/images/background/xue.png' },
+                        { id: 'pool', name: '泳池', path: '/src/images/background/五女泳池.jpg' },
+                        { id: 'girl', name: '宅家少女', path: '/src/images/background/宅家少女.png' }
+                      ].map((wallpaper) => (
+                        <WallpaperItem
+                          key={wallpaper.id}
+                          id={wallpaper.id}
+                          name={wallpaper.name}
+                          path={wallpaper.path}
+                          isSelected={chatWallpaper === wallpaper.path}
+                          onSelect={(path) => {
+                            setChatWallpaper(path);
+                            setSelectedBackgroundId(null);
+                          }}
+                        />
+                      ))}
                     </div>
                   </div>
 
-                  <div className="space-y-4">
-                    <div 
-                      className="rounded-xl overflow-hidden"
-                      style={{ 
-                        backgroundColor: 'var(--bg-secondary)', 
-                        border: '1px solid var(--border-color)' 
-                      }}
-                    >
-                      <div 
-                        className="px-4 py-3 border-b"
-                        style={{ borderColor: 'var(--border-color)' }}
+                  <div 
+                    className="h-px w-full"
+                    style={{ backgroundColor: 'var(--border-color)' }}
+                  />
+
+                  <div>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <ImageIcon size={18} style={{ color: 'var(--primary-color)' }} />
+                        <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>我的壁纸库</h3>
+                        <span className="text-xs px-2 py-0.5 rounded-full" style={{ 
+                          backgroundColor: 'var(--primary-light)', 
+                          color: 'var(--primary-color)' 
+                        }}>{customBackgrounds.length} 张</span>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          if (window.electronAPI?.file?.selectFile) {
+                            const result = await window.electronAPI.file.selectFile({
+                              title: '选择壁纸图片',
+                              filters: [
+                                { name: '图片文件', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'] }
+                              ],
+                              multi: true
+                            });
+                            if (result && result.filePaths && result.filePaths.length > 0) {
+                              for (const filePath of result.filePaths) {
+                                const fileName = filePath.split(/[/\\]/).pop() || filePath;
+                                const background: CustomBackground = {
+                                  id: BackgroundStorage.getInstance().generateId(),
+                                  name: fileName.replace(/\.[^/.]+$/, ''),
+                                  path: filePath,
+                                  addedAt: Date.now()
+                                };
+                                await BackgroundStorage.getInstance().saveBackground(background);
+                              }
+                              const backgrounds = await BackgroundStorage.getInstance().getAllBackgrounds();
+                              setCustomBackgrounds(backgrounds);
+                              toast.success(`已添加 ${result.filePaths.length} 张壁纸`);
+                            }
+                          } else {
+                            const input = document.createElement('input');
+                            input.type = 'file';
+                            input.accept = 'image/*';
+                            input.multiple = true;
+                            input.onchange = async (e) => {
+                              const files = Array.from((e.target as HTMLInputElement).files || []);
+                              if (files.length > 0) {
+                                for (const file of files) {
+                                  const background: CustomBackground = {
+                                    id: BackgroundStorage.getInstance().generateId(),
+                                    name: file.name.replace(/\.[^/.]+$/, ''),
+                                    path: file.name,
+                                    size: file.size,
+                                    addedAt: Date.now()
+                                  };
+                                  await BackgroundStorage.getInstance().saveBackground(background);
+                                }
+                                const backgrounds = await BackgroundStorage.getInstance().getAllBackgrounds();
+                                setCustomBackgrounds(backgrounds);
+                                toast.success(`已添加 ${files.length} 张壁纸（Web模式仅保存文件名）`);
+                              }
+                            };
+                            input.click();
+                          }
+                        }}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105"
+                        style={{
+                          backgroundColor: 'var(--primary-color)',
+                          color: 'white'
+                        }}
                       >
-                        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>当前壁纸</span>
-                      </div>
-                      <div className="p-4">
-                        <div 
-                          className="aspect-video rounded-lg overflow-hidden relative"
-                          style={{ backgroundColor: 'var(--bg-tertiary)' }}
-                        >
-                          {chatWallpaper ? (
-                            <img
-                              src={chatWallpaper}
-                              alt="当前壁纸"
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                              <div 
-                                className="w-10 h-10 rounded-full flex items-center justify-center mb-2"
-                                style={{ backgroundColor: 'var(--bg-secondary)' }}
-                              >
-                                <Palette size={20} style={{ color: 'var(--text-tertiary)' }} />
-                              </div>
-                              <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>未设置壁纸</span>
-                            </div>
-                          )}
-                        </div>
-                        <p className="text-xs mt-3 text-center" style={{ color: 'var(--text-tertiary)' }}>
-                          {chatWallpaper ? '已应用壁纸' : '使用默认背景'}
-                        </p>
-                      </div>
+                        <Upload size={14} /> 添加壁纸
+                      </button>
                     </div>
 
+                    {customBackgrounds.length > 0 ? (
+                      <div className="grid grid-cols-4 gap-4">
+                        {customBackgrounds.map((bg) => (
+                          <div 
+                            key={bg.id}
+                            className="rounded-xl overflow-hidden transition-all cursor-pointer group relative"
+                            style={{ 
+                              backgroundColor: 'var(--bg-secondary)',
+                              border: `2px solid ${selectedBackgroundId === bg.id ? 'var(--primary-color)' : 'var(--border-color)'}`
+                            }}
+                            onClick={async () => {
+                              setSelectedBackgroundId(bg.id);
+                              if (bg.path.startsWith('data:') || bg.path.startsWith('http') || bg.path.startsWith('/src/')) {
+                                setChatWallpaper(bg.path);
+                              } else if (window.electronAPI?.file?.readFile) {
+                                try {
+                                  const result = await window.electronAPI.file.readFile(bg.path, 'base64');
+                                  if (result.success && result.content) {
+                                    const ext = bg.path.split('.').pop()?.toLowerCase() || 'jpg';
+                                    const mimeType = ext === 'png' ? 'image/png' : 
+                                                    ext === 'gif' ? 'image/gif' :
+                                                    ext === 'webp' ? 'image/webp' :
+                                                    ext === 'bmp' ? 'image/bmp' : 'image/jpeg';
+                                    const dataUrl = `data:${mimeType};base64,${result.content}`;
+                                    setChatWallpaper(dataUrl);
+                                  }
+                                } catch (err) {
+                                  console.error('Failed to load wallpaper:', err);
+                                  toast.error('加载壁纸失败');
+                                }
+                              } else {
+                                toast.error('不支持此路径');
+                              }
+                            }}
+                          >
+                            <div className="aspect-square relative">
+                              <LocalImage 
+                                path={bg.path}
+                                alt={bg.name}
+                                className="w-full h-full object-cover"
+                              />
+                              {selectedBackgroundId === bg.id && (
+                                <div className="absolute inset-0 flex items-center justify-center" 
+                                  style={{ backgroundColor: 'rgba(59, 130, 246, 0.3)' }}>
+                                  <div className="text-white text-xs px-3 py-1 rounded-full font-medium" 
+                                    style={{ backgroundColor: 'var(--primary-color)' }}>
+                                    当前使用
+                                  </div>
+                                </div>
+                              )}
+                              <button
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  await BackgroundStorage.getInstance().deleteBackground(bg.id);
+                                  const backgrounds = await BackgroundStorage.getInstance().getAllBackgrounds();
+                                  setCustomBackgrounds(backgrounds);
+                                  if (selectedBackgroundId === bg.id) {
+                                    setChatWallpaper('');
+                                    setSelectedBackgroundId(null);
+                                  }
+                                  toast.success('壁纸已删除');
+                                }}
+                                className="absolute top-2 right-2 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                                style={{ 
+                                  color: 'white',
+                                  backgroundColor: 'rgba(0, 0, 0, 0.5)'
+                                }}
+                              >
+                                <X size={14} />
+                              </button>
+                            </div>
+                            <div className="p-3" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                              <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                                {bg.name}
+                              </p>
+                              <p className="text-xs truncate mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                                {bg.path.length > 30 ? '...' + bg.path.slice(-30) : bg.path}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div 
+                        className="rounded-xl p-8 text-center"
+                        style={{ 
+                          backgroundColor: 'var(--bg-secondary)',
+                          border: '1px dashed var(--border-color)'
+                        }}
+                      >
+                        <div 
+                          className="w-16 h-16 rounded-full mx-auto flex items-center justify-center mb-4"
+                          style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                        >
+                          <ImageIcon size={28} style={{ color: 'var(--text-tertiary)' }} />
+                        </div>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                          壁纸库为空
+                        </p>
+                        <p className="text-xs mt-2" style={{ color: 'var(--text-tertiary)' }}>
+                          点击上方"添加壁纸"按钮选择本地图片
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div 
+                    className="h-px w-full"
+                    style={{ backgroundColor: 'var(--border-color)' }}
+                  />
+
+                  <div>
+                    <div className="flex items-center gap-2 mb-4">
+                      <Monitor size={18} style={{ color: 'var(--primary-color)' }} />
+                      <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>当前壁纸预览</h3>
+                    </div>
                     <div 
                       className="rounded-xl overflow-hidden"
                       style={{ 
-                        backgroundColor: 'var(--bg-secondary)', 
-                        border: '1px solid var(--border-color)' 
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)'
                       }}
                     >
                       <div 
-                        className="px-4 py-3 border-b"
-                        style={{ borderColor: 'var(--border-color)' }}
+                        className="aspect-[4/1] relative"
+                        style={{ backgroundColor: 'var(--bg-tertiary)' }}
                       >
-                        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>自定义上传</span>
-                      </div>
-                      <div className="p-4">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          id="wallpaper-upload"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (event) => {
-                                const imageUrl = event.target?.result as string;
-                                setChatWallpaper(imageUrl);
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                        <label 
-                          htmlFor="wallpaper-upload" 
-                          className="block cursor-pointer"
-                        >
-                          <div 
-                            className="border-2 border-dashed rounded-lg p-4 text-center transition-colors hover:border-opacity-60"
-                            style={{ borderColor: 'var(--primary-color)' }}
-                          >
+                        {chatWallpaper ? (
+                          <LocalImage
+                            path={chatWallpaper}
+                            alt="当前壁纸"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
                             <div 
-                              className="w-10 h-10 rounded-full mx-auto flex items-center justify-center mb-2"
-                              style={{ backgroundColor: 'var(--primary-light)' }}
+                              className="w-14 h-14 rounded-full flex items-center justify-center mb-3"
+                              style={{ backgroundColor: 'var(--bg-secondary)' }}
                             >
-                              <Upload size={18} style={{ color: 'var(--primary-color)' }} />
+                              <Palette size={28} style={{ color: 'var(--text-tertiary)' }} />
                             </div>
-                            <p className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
-                              点击上传
-                            </p>
-                            <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                              JPG / PNG
-                            </p>
+                            <span className="text-sm" style={{ color: 'var(--text-tertiary)' }}>未设置壁纸，使用默认背景</span>
                           </div>
-                        </label>
+                        )}
                       </div>
                     </div>
                   </div>
