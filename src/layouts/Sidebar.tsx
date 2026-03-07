@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle, Image as ImageIcon
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -39,6 +39,7 @@ export function Sidebar() {
     ollamaVerboseMode, setOllamaVerboseMode,
     ollamaThinkMode, setOllamaThinkMode,
     ollamaChatMode, setOllamaChatMode,
+    includeImagesInContext, setIncludeImagesInContext,
     showTokenEstimate, setShowTokenEstimate,
   } = useStore();
 
@@ -68,6 +69,7 @@ export function Sidebar() {
       const savedThinkMode = configStorage.get('ollamaThinkMode');
       const savedChatMode = configStorage.get('ollamaChatMode');
       const savedShowTokenEstimate = configStorage.get('showTokenEstimate');
+      const savedIncludeImagesInContext = configStorage.get('includeImagesInContext');
       
       if (savedVerboseMode !== undefined) {
         setOllamaVerboseMode(savedVerboseMode);
@@ -80,6 +82,9 @@ export function Sidebar() {
       }
       if (savedShowTokenEstimate !== undefined) {
         setShowTokenEstimate(savedShowTokenEstimate);
+      }
+      if (savedIncludeImagesInContext !== undefined) {
+        setIncludeImagesInContext(savedIncludeImagesInContext);
       }
     };
     loadConfig();
@@ -455,6 +460,41 @@ export function Sidebar() {
                     style={{
                       left: '2px',
                       transform: ollamaChatMode === 'multi' ? 'translateX(20px)' : 'translateX(0)',
+                    }}
+                  />
+                </button>
+              </div>
+
+              {/* Include Images Toggle */}
+              <div 
+                className="flex items-center justify-between px-5 py-3 border-b"
+                style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <ImageIcon size={14} style={{ color: 'var(--primary-color)' }} />
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>携带图片</span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    多轮对话包含图片
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    const newValue = !includeImagesInContext;
+                    setIncludeImagesInContext(newValue);
+                    configStorage.set('includeImagesInContext', newValue);
+                    toast.info(newValue ? '多轮对话将携带图片数据' : '多轮对话将不携带图片数据', { duration: 2000 });
+                  }}
+                  className="relative flex h-6 w-11 items-center rounded-full transition-colors"
+                  style={{ 
+                    backgroundColor: includeImagesInContext ? 'var(--success-color)' : 'var(--bg-tertiary)',
+                  }}
+                  title={includeImagesInContext ? '关闭图片携带' : '开启图片携带'}
+                >
+                  <span
+                    className="absolute h-5 w-5 rounded-full bg-white shadow transition-transform"
+                    style={{
+                      left: '2px',
+                      transform: includeImagesInContext ? 'translateX(20px)' : 'translateX(0)',
                     }}
                   />
                 </button>

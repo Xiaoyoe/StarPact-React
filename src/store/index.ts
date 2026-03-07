@@ -171,6 +171,8 @@ interface AppState {
   setOllamaThinkMode: (think: boolean) => void;
   ollamaChatMode: 'single' | 'multi';
   setOllamaChatMode: (mode: 'single' | 'multi') => void;
+  includeImagesInContext: boolean;
+  setIncludeImagesInContext: (include: boolean) => void;
   showTokenEstimate: boolean;
   setShowTokenEstimate: (show: boolean) => void;
 
@@ -731,6 +733,8 @@ export const useStore = create<AppState>((set, get) => {
   setOllamaThinkMode: (think) => set({ ollamaThinkMode: think }),
   ollamaChatMode: 'multi' as 'single' | 'multi',
   setOllamaChatMode: (mode) => set({ ollamaChatMode: mode }),
+  includeImagesInContext: true,
+  setIncludeImagesInContext: (include) => set({ includeImagesInContext: include }),
   showTokenEstimate: true,
   setShowTokenEstimate: (show) => set({ showTokenEstimate: show }),
 
