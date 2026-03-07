@@ -5,6 +5,7 @@ import { registerFileHandlers } from './ipc/fileHandlers';
 import { registerStorageHandlers } from './ipc/storageHandlers';
 import { registerWindowHandlers } from './ipc/windowHandlers';
 import { registerFFmpegHandlers } from './ipc/ffmpegHandlers';
+import { registerShellHandlers } from './ipc/shellHandlers';
 
 export let mainWindow: BrowserWindow | null = null;
 
@@ -39,6 +40,7 @@ app.whenReady().then(() => {
   registerFileHandlers();
   registerStorageHandlers();
   registerWindowHandlers();
+  registerShellHandlers();
   createWindow();
   registerFFmpegHandlers();
 });

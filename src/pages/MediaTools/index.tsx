@@ -9,6 +9,7 @@ import { FFmpegConfigModal } from '@/components/FFmpegConfigModal';
 import { useFFmpegStore, type ProcessingModule, type ProcessingTask } from '@/stores/ffmpegStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store';
+import { useWallpaperStyle } from '@/hooks';
 
 function TaskItem({ 
   task, 
@@ -190,6 +191,7 @@ export function MediaToolsPage() {
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   
   const { chatWallpaper } = useStore();
+  const wallpaperStyle = useWallpaperStyle(chatWallpaper);
   const { 
     tasks,
     activeTaskIds,
@@ -246,9 +248,7 @@ export function MediaToolsPage() {
       className="h-full flex flex-col overflow-hidden p-6 relative" 
       style={{ 
         backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
+        ...wallpaperStyle
       }}
     >
       <div className="flex items-center justify-between mb-4">

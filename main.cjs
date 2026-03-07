@@ -7,6 +7,7 @@ const isDev = require('electron-is-dev');
 let mainWindow = null;
 let currentProcess = null;
 let currentTaskId = null;
+let devToolsEnabled = false;
 
 // FFmpeg Service
 const ffmpegService = {
@@ -625,6 +626,58 @@ function registerWindowHandlers() {
   });
 }
 
+// 注册 Shell 相关的 IPC 处理器
+function registerShellHandlers() {
+  ipcMain.handle('shell:openExternal', async (event, url) => {
+    try {
+      await shell.openExternal(url);
+      return { success: true };
+    } catch (error) {
+      console.error('打开外部链接失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+}
+
+// 注册开发者模式相关的 IPC 处理器
+function registerDevToolsHandlers() {
+  // 获取开发者模式状态
+  ipcMain.handle('devTools:getStatus', async () => {
+    return { enabled: devToolsEnabled };
+  });
+
+  // 启用开发者模式
+  ipcMain.handle('devTools:enable', async () => {
+    devToolsEnabled = true;
+    return { success: true, enabled: true };
+  });
+
+  // 禁用开发者模式
+  ipcMain.handle('devTools:disable', async () => {
+    devToolsEnabled = false;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.closeDevTools();
+    }
+    return { success: true, enabled: false };
+  });
+
+  // 打开开发者工具（仅在启用时允许）
+  ipcMain.handle('devTools:toggle', async () => {
+    if (!devToolsEnabled) {
+      return { success: false, error: '开发者模式未启用' };
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow.webContents.openDevTools();
+      }
+      return { success: true };
+    }
+    return { success: false, error: '窗口不存在' };
+  });
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -636,6 +689,7 @@ function createWindow() {
       preload: path.join(__dirname, 'src/main/preload/index.cjs'),
       nodeIntegration: false,
       contextIsolation: true,
+      devTools: true,
     },
     backgroundColor: '#FFFFFF',
   });
@@ -646,9 +700,25 @@ function createWindow() {
 
   mainWindow.loadURL(url);
 
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
+  // 禁用开发者工具快捷键（默认禁用开发者模式）
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    const key = input.key.toLowerCase();
+    const isDevToolsShortcut = 
+      key === 'f12' || 
+      (input.control && input.shift && key === 'i') ||
+      (input.meta && input.alt && key === 'i');
+    
+    if (isDevToolsShortcut && !devToolsEnabled) {
+      event.preventDefault();
+    }
+  });
+
+  // 禁用右键菜单（可选，防止通过菜单打开开发者工具）
+  mainWindow.webContents.on('context-menu', (event) => {
+    if (!devToolsEnabled) {
+      event.preventDefault();
+    }
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -659,6 +729,8 @@ app.whenReady().then(() => {
   registerStorageHandlers();
   registerFileHandlers();
   registerWindowHandlers();
+  registerShellHandlers();
+  registerDevToolsHandlers();
   createWindow();
   registerFFmpegHandlers();
 });

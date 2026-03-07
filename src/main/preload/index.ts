@@ -97,6 +97,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('ffmpeg:log', listener);
     },
   },
+  shell: {
+    openExternal: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SHELL.OPEN_EXTERNAL, url),
+  },
 });
 
 declare global {
@@ -220,6 +223,15 @@ declare global {
           progress: number;
         }) => void) => () => void;
         onLog: (callback: (log: string) => void) => () => void;
+      };
+      shell: {
+        openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
+      };
+      devTools: {
+        getStatus: () => Promise<{ enabled: boolean }>;
+        enable: () => Promise<{ success: boolean; enabled: boolean }>;
+        disable: () => Promise<{ success: boolean; enabled: boolean }>;
+        toggle: () => Promise<{ success: boolean; error?: string }>;
       };
     };
   }

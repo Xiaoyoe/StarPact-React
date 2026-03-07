@@ -55,6 +55,19 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('ffmpeg:log', listener);
     },
   },
+
+  // Shell 相关 API
+  shell: {
+    openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+  },
+
+  // 开发者工具相关 API
+  devTools: {
+    getStatus: () => ipcRenderer.invoke('devTools:getStatus'),
+    enable: () => ipcRenderer.invoke('devTools:enable'),
+    disable: () => ipcRenderer.invoke('devTools:disable'),
+    toggle: () => ipcRenderer.invoke('devTools:toggle'),
+  },
   
   // 监听路径未配置通知
   onPathNotConfigured: (callback) => {

@@ -44,4 +44,7 @@ export const IPC_CHANNELS = {
     GET_MEDIA_INFO: 'ffmpeg:getMediaInfo',
     VALIDATE_PATH: 'ffmpeg:validatePath',
   },
+  SHELL: {
+    OPEN_EXTERNAL: 'shell:openExternal',
+  },
 } as const;

@@ -13,6 +13,7 @@ import { configStorage } from '@/services/storage/ConfigStorage';
 import { useToast } from '@/components/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store';
+import { useWallpaperStyle } from '@/hooks';
 
 // 检查是否为Electron环境
 const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
@@ -186,6 +187,7 @@ const initialFolders: ImageFolder[] = [
 export function GalleryPage() {
   const toast = useToast();
   const { chatWallpaper } = useStore();
+  const wallpaperStyle = useWallpaperStyle(chatWallpaper);
   
   
 
@@ -768,9 +770,7 @@ export function GalleryPage() {
       style={{ 
         backgroundColor: 'var(--bg-primary)',
         backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
+        ...wallpaperStyle
       }}
     >
       {/* 顶部工具栏 */}

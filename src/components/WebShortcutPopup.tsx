@@ -270,24 +270,19 @@ export function WebShortcutPopup({ onClose }: WebShortcutPopupProps) {
     }
   };
 
-  const handleCardClick = (shortcut: WebShortcut) => {
+  const handleCardClick = async (shortcut: WebShortcut) => {
     if (rightPanelMode === 'delete') {
       toggleSelect(shortcut.id);
       return;
     }
     
-    // 使用 Electron 的 shell 模块打开外部网页
-    if (window.require) {
-      try {
-        const { shell } = window.require('electron');
-        shell.openExternal(shortcut.url);
-      } catch (error) {
-        console.error('Failed to open external website:', error);
-        // fallback: 使用浏览器打开
+    if (window.electronAPI?.shell?.openExternal) {
+      const result = await window.electronAPI.shell.openExternal(shortcut.url);
+      if (!result.success) {
+        console.error('Failed to open external website:', result.error);
         window.open(shortcut.url, '_blank');
       }
     } else {
-      // fallback: 使用浏览器打开
       window.open(shortcut.url, '_blank');
     }
   };

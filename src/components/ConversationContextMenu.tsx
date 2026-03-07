@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, X, MessageSquare } from 'lucide-react';
+import { Trash2, MessageSquare } from 'lucide-react';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 interface ContextMenuProps {
   visible: boolean;
@@ -22,7 +23,8 @@ export function ConversationContextMenu({
   onClose,
 }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const [hoveredButton, setHoveredButton] = useState<string | null>(null);
+  const [isDeleteHovered, setIsDeleteHovered] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -58,15 +60,30 @@ export function ConversationContextMenu({
 
   useEffect(() => {
     if (!visible) {
-      setHoveredButton(null);
+      setIsDeleteHovered(false);
+      setShowConfirm(false);
     }
   }, [visible]);
+
+  const handleDeleteClick = () => {
+    setShowConfirm(true);
+  };
+
+  const handleConfirmDelete = () => {
+    onDelete();
+    setShowConfirm(false);
+    onClose();
+  };
+
+  const handleCancelDelete = () => {
+    setShowConfirm(false);
+  };
 
   const menuVariants = {
     hidden: {
       opacity: 0,
-      scale: 0.95,
-      y: -8,
+      scale: 0.92,
+      y: -6,
     },
     visible: {
       opacity: 1,
@@ -75,155 +92,100 @@ export function ConversationContextMenu({
       transition: {
         type: 'spring',
         stiffness: 500,
-        damping: 30,
+        damping: 28,
       },
     },
     exit: {
       opacity: 0,
-      scale: 0.95,
-      y: -8,
+      scale: 0.92,
+      y: -6,
       transition: {
-        duration: 0.15,
+        duration: 0.1,
       },
     },
   };
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 8 },
-    visible: (i: number) => ({
-      opacity: 1,
-      y: 0,
-      transition: {
-        delay: i * 0.06,
-        type: 'spring',
-        stiffness: 500,
-        damping: 25,
-      },
-    }),
-  };
-
   return (
-    <AnimatePresence>
-      {visible && (
-        <motion.div
-          ref={menuRef}
-          variants={menuVariants}
-          initial="hidden"
-          animate="visible"
-          exit="exit"
-          className="fixed z-50 w-64 rounded-2xl overflow-hidden"
-          style={{
-            left: x + 12,
-            top: y,
-            backgroundColor: 'var(--bg-primary)',
-            border: '1px solid var(--border-color)',
-            boxShadow: '0 20px 50px -12px rgba(0, 0, 0, 0.25)',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div
-            className="px-4 py-3 border-b"
-            style={{ borderColor: 'var(--border-color)' }}
+    <>
+      <AnimatePresence>
+        {visible && (
+          <motion.div
+            ref={menuRef}
+            variants={menuVariants}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            className="fixed z-50"
+            style={{
+              left: x + 24,
+              top: y,
+            }}
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center gap-3">
+            <div
+              className="flex items-center gap-3 px-3 py-2 rounded-xl"
+              style={{
+                backgroundColor: 'var(--bg-primary)',
+                border: '1px solid var(--border-color)',
+                boxShadow: '0 8px 32px -8px rgba(0, 0, 0, 0.18)',
+              }}
+            >
               <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center"
-                style={{ backgroundColor: 'var(--primary-light)' }}
+                className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{
+                  background: 'linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-dark, var(--primary-color)) 100%)',
+                }}
               >
-                <MessageSquare size={16} style={{ color: 'var(--primary-color)' }} />
+                <MessageSquare size={14} style={{ color: 'white' }} />
               </div>
-              <div className="flex-1 min-w-0">
+
+              <div className="flex-1 min-w-0 max-w-[140px]">
                 <div
                   className="text-sm font-medium truncate"
                   style={{ color: 'var(--text-primary)' }}
                 >
                   {title}
                 </div>
-                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                <div
+                  className="text-xs"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
                   {messageCount} 条消息
-                </span>
+                </div>
               </div>
+
+              <div className="w-px h-6 flex-shrink-0" style={{ backgroundColor: 'var(--border-color)' }} />
+
+              <motion.button
+                onClick={handleDeleteClick}
+                onMouseEnter={() => setIsDeleteHovered(true)}
+                onMouseLeave={() => setIsDeleteHovered(false)}
+                className="flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center"
+                animate={{
+                  backgroundColor: isDeleteHovered ? '#ef4444' : 'transparent',
+                  scale: isDeleteHovered ? 1.05 : 1,
+                }}
+                transition={{ duration: 0.15 }}
+                style={{
+                  color: isDeleteHovered ? 'white' : 'var(--error-color)',
+                }}
+              >
+                <Trash2 size={15} />
+              </motion.button>
             </div>
-          </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          <div className="p-3 space-y-2">
-            <motion.button
-              custom={0}
-              variants={itemVariants}
-              initial="hidden"
-              animate="visible"
-              onClick={() => {
-                onDelete();
-                onClose();
-              }}
-              className="w-full relative overflow-hidden rounded-lg group"
-              onMouseEnter={() => setHoveredButton('delete')}
-              onMouseLeave={() => setHoveredButton(null)}
-            >
-              <div
-                className="absolute inset-0 transition-opacity duration-200"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%)',
-                  opacity: hoveredButton === 'delete' ? 1 : 0,
-                }}
-              />
-              <div
-                className="absolute inset-0 transition-opacity duration-200"
-                style={{
-                  border: '1px solid rgba(239, 68, 68, 0.3)',
-                  borderRadius: '8px',
-                  opacity: hoveredButton === 'delete' ? 1 : 0,
-                }}
-              />
-              <div className="relative flex items-center justify-center gap-2 px-4 py-2.5">
-                <Trash2
-                  size={15}
-                  className="transition-transform duration-200 group-hover:scale-110"
-                  style={{ color: 'var(--error-color)' }}
-                />
-                <span
-                  className="text-sm font-medium"
-                  style={{ color: 'var(--error-color)' }}
-                >
-                  删除对话
-                </span>
-              </div>
-            </motion.button>
-
-            <motion.button
-              custom={1}
-              variants={itemVariants}
-              initial="hidden"
-              animate="visible"
-              onClick={onClose}
-              className="w-full relative overflow-hidden rounded-lg group"
-              onMouseEnter={() => setHoveredButton('cancel')}
-              onMouseLeave={() => setHoveredButton(null)}
-            >
-              <div
-                className="absolute inset-0 transition-opacity duration-200"
-                style={{
-                  backgroundColor: 'var(--bg-hover)',
-                  opacity: hoveredButton === 'cancel' ? 1 : 0,
-                }}
-              />
-              <div className="relative flex items-center justify-center gap-2 px-4 py-2.5">
-                <X
-                  size={15}
-                  className="transition-transform duration-200 group-hover:scale-110"
-                  style={{ color: 'var(--text-secondary)' }}
-                />
-                <span
-                  className="text-sm font-medium"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  取消
-                </span>
-              </div>
-            </motion.button>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
+      <ConfirmDialog
+        isOpen={showConfirm}
+        title="删除对话"
+        message={`确定要删除「${title}」吗？此操作无法撤销。`}
+        confirmText="删除"
+        cancelText="取消"
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
+    </>
   );
 }

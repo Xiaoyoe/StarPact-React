@@ -11,6 +11,8 @@ import { configStorage } from '@/services/storage/ConfigStorage';
 import { PerformanceModal } from '@/components/PerformanceModal';
 import { ollamaModelService } from '@/services/OllamaModelService';
 import { ConversationContextMenu } from '@/components/ConversationContextMenu';
+import { WallpaperList } from '@/components/WallpaperList';
+import { BackgroundStorage, type CustomBackground } from '@/services/storage/BackgroundStorage';
 
 interface PanelItem {
   id: string;
@@ -63,6 +65,10 @@ export function Sidebar() {
   const [wallpaperPopupOpen, setWallpaperPopupOpen] = useState(false);
   const [showModelSelect, setShowModelSelect] = useState(false);
   const [switchingModel, setSwitchingModel] = useState(false);
+  const [selectedBackgroundId, setSelectedBackgroundId] = useState<string | null>(null);
+  const [previewWallpaper, setPreviewWallpaper] = useState('');
+  const [previewWallpaperInfo, setPreviewWallpaperInfo] = useState<{ name: string; size?: number; path?: string } | null>(null);
+  const [customBackgrounds, setCustomBackgrounds] = useState<CustomBackground[]>([]);
   
   const [panelOrder, setPanelOrder] = useState<string[]>(['model', 'performance', 'logs', 'wallpaper', 'database']);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -687,77 +693,62 @@ export function Sidebar() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-transparent p-4"
-            onClick={() => setWallpaperPopupOpen(false)}
+            className="fixed inset-0 z-50"
           >
+            <div 
+              className="absolute inset-0 bg-transparent"
+              onClick={() => setWallpaperPopupOpen(false)}
+            />
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              drag
+              dragMomentum={false}
+              initial={{ scale: 0.9, opacity: 0, x: 0, y: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl"
+              className="w-full max-w-sm rounded-xl shadow-2xl overflow-hidden absolute"
+              style={{ 
+                backgroundColor: 'var(--bg-primary)', 
+                border: '1px solid var(--border-color)',
+                left: '50%',
+                top: '50%',
+                marginLeft: '-200px',
+                marginTop: '-200px'
+              }}
               onClick={(e) => e.stopPropagation()}
             >
-              <h3 className="mb-4 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                选择聊天壁纸
-              </h3>
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                {[
-                  { id: 'ling', name: '玲', path: '/src/images/background/ling.jpg' },
-                  { id: 'xue', name: '雪', path: '/src/images/background/xue.png' },
-                  { id: 'pool', name: '泳池', path: '/src/images/background/五女泳池.jpg' },
-                  { id: 'girl', name: '宅家少女', path: '/src/images/background/宅家少女.png' }
-                ].map((wallpaper) => (
-                  <button
-                    key={wallpaper.id}
-                    onClick={() => {
-                      setChatWallpaper(wallpaper.path);
-                      setWallpaperPopupOpen(false);
-                    }}
-                    className="rounded-lg overflow-hidden transition-all active:scale-[0.98]"
-                    style={{
-                      border: `2px solid ${chatWallpaper === wallpaper.path ? 'var(--primary-color)' : 'var(--border-color)'}`,
-                    }}
-                  >
-                    <div className="aspect-square relative">
-                      <img
-                        src={wallpaper.path}
-                        alt={wallpaper.name}
-                        className="w-full h-full object-cover"
-                      />
-                      {chatWallpaper === wallpaper.path && (
-                        <div className="absolute inset-0 bg-primary-color bg-opacity-20 flex items-center justify-center">
-                          <div className="bg-primary-color text-white text-xs px-2 py-1 rounded-full">
-                            ✓ 当前
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-2 text-center">
-                      <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                        {wallpaper.name}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-              <div className="flex justify-end gap-2">
+              <div 
+                className="flex items-center justify-between px-4 py-3 border-b cursor-grab select-none" 
+                style={{ borderColor: 'var(--border-color)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <GripVertical size={14} style={{ color: 'var(--text-tertiary)' }} />
+                  <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    选择聊天壁纸
+                  </h3>
+                </div>
                 <button
                   onClick={() => setWallpaperPopupOpen(false)}
-                  className="rounded-lg px-4 py-2 text-sm transition-colors"
-                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
+                  className="p-1 rounded-md transition-colors hover:opacity-80"
+                  style={{ color: 'var(--text-tertiary)' }}
                 >
-                  取消
+                  <X size={16} />
                 </button>
-                <button
-                  onClick={() => {
-                    setChatWallpaper('');
-                    setWallpaperPopupOpen(false);
-                  }}
-                  className="rounded-lg px-4 py-2 text-sm transition-colors"
-                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)', border: '1px solid var(--border-color)' }}
-                >
-                  清除壁纸
-                </button>
+              </div>
+              <div className="max-h-[70vh] overflow-y-auto">
+                <WallpaperList
+                  selectedBackgroundId={selectedBackgroundId}
+                  setSelectedBackgroundId={setSelectedBackgroundId}
+                  previewWallpaper={previewWallpaper}
+                  setPreviewWallpaper={setPreviewWallpaper}
+                  previewWallpaperInfo={previewWallpaperInfo}
+                  setPreviewWallpaperInfo={setPreviewWallpaperInfo}
+                  customBackgrounds={customBackgrounds}
+                  setCustomBackgrounds={setCustomBackgrounds}
+                  showDoubleClickToggle={true}
+                  showClearButton={true}
+                  showHeader={true}
+                  compact={true}
+                />
               </div>
             </motion.div>
           </motion.div>

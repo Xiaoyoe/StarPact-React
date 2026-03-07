@@ -13,6 +13,7 @@ import { useToast } from '@/components/Toast';
 import { ollamaModelStorage, type OllamaModelFile } from '@/services/storage/OllamaModelStorage';
 import { ollamaModelService } from '@/services/OllamaModelService';
 import { PullModelPanel } from '@/components/PullModelPanel';
+import { useWallpaperStyle } from '@/hooks';
 
 function ModelForm({
   model,
@@ -1955,6 +1956,8 @@ export function ModelsPage() {
     chatWallpaper,
   } = useStore();
 
+  const wallpaperStyle = useWallpaperStyle(chatWallpaper);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [editingModel, setEditingModel] = useState<ModelConfig | null>(null);
   const [isAdding, setIsAdding] = useState(false);
@@ -2121,9 +2124,7 @@ export function ModelsPage() {
         style={{ 
           backgroundColor: 'var(--bg-primary)',
           backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat'
+          ...wallpaperStyle
         }}
       >
         <header
@@ -2151,9 +2152,7 @@ export function ModelsPage() {
       style={{ 
         backgroundColor: 'var(--bg-primary)',
         backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
+        ...wallpaperStyle
       }}
     >
       <div className="flex-1 overflow-y-auto">

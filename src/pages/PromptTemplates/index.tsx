@@ -8,6 +8,7 @@ import {
 import { cn } from '@/utils/cn';
 import { PromptTemplateStorage, Template, TemplateResult } from '@/services/storage/PromptTemplateStorage';
 import { useStore } from '@/store';
+import { useWallpaperStyle } from '@/hooks';
 
 // ==================== 类型定义 ====================
 // 从 PromptTemplateStorage 导入类型定义
@@ -678,6 +679,7 @@ function TemplateCard({ template, onEdit, onDelete, onManageResults, showToast }
 // ==================== 主页面组件 ====================
 export default function PromptTemplatesPage() {
   const { chatWallpaper } = useStore();
+  const wallpaperStyle = useWallpaperStyle(chatWallpaper);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('');
@@ -832,9 +834,7 @@ export default function PromptTemplatesPage() {
       style={{ 
         backgroundColor: 'var(--bg-primary)',
         backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
+        ...wallpaperStyle
       }}
     >
       <Toast message={toastMsg} visible={toastVisible} />

@@ -18,6 +18,7 @@ import { MessageBubble } from '@/components/MessageBubble';
 import { ollamaModelService } from '@/services/OllamaModelService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { estimateConversationTokens, formatTokenCount } from '@/utils/tokenEstimator';
+import { useWallpaperStyle } from '@/hooks';
 
 export function ChatPage() {
   const {
@@ -38,6 +39,7 @@ export function ChatPage() {
   } = useStore();
 
   const toast = useToast();
+  const wallpaperStyle = useWallpaperStyle(chatWallpaper);
 
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -845,7 +847,11 @@ export function ChatPage() {
   }
 
   return (
-    <div className="flex h-full flex-col no-select" style={{ backgroundColor: compactMode ? 'transparent' : 'var(--bg-primary)', backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none', backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }}>
+    <div className="flex h-full flex-col no-select" style={{ 
+      backgroundColor: compactMode ? 'transparent' : 'var(--bg-primary)', 
+      backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
+      ...wallpaperStyle
+    }}>
       {/* 快速导航组件 */}
     {showNav && activeConversation && activeConversation.messages.length > 0 && (
       <ChatQuickNav 
