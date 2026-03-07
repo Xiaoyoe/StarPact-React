@@ -1952,6 +1952,7 @@ export function ModelsPage() {
     ollamaLogs,
     addOllamaLog,
     setOllamaLogs,
+    chatWallpaper,
   } = useStore();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -2115,7 +2116,16 @@ export function ModelsPage() {
 
   if (isAdding || editingModel) {
     return (
-      <div className="flex h-full flex-col" style={{ backgroundColor: 'var(--bg-primary)' }}>
+      <div 
+        className="flex h-full flex-col" 
+        style={{ 
+          backgroundColor: 'var(--bg-primary)',
+          backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat'
+        }}
+      >
         <header
           className="flex items-center gap-3 border-b px-6"
           style={{ height: 56, borderColor: 'var(--border-color)' }}
@@ -2136,7 +2146,16 @@ export function ModelsPage() {
   }
 
   return (
-    <div className="flex h-full" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div 
+      className="flex h-full" 
+      style={{ 
+        backgroundColor: 'var(--bg-primary)',
+        backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
       <div className="flex-1 overflow-y-auto">
         {activeMainTab === 'ollama' ? (
           <OllamaPanel

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store';
 import { useToast } from '@/components/Toast';
 import { configStorage } from '@/services/storage/ConfigStorage';
-import { Database, Activity, Brain, MessageCircle, Image as ImageIcon, ChevronDown, Settings2 } from 'lucide-react';
+import { Database, Activity, Brain, MessageCircle, Image as ImageIcon, ChevronDown, Settings2, AlertTriangle } from 'lucide-react';
 
 interface ChatControlPanelProps {
   isOpen: boolean;
@@ -21,6 +21,7 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
     ollamaThinkMode, setOllamaThinkMode,
     ollamaChatMode, setOllamaChatMode,
     includeImagesInContext, setIncludeImagesInContext,
+    deleteConfirmEnabled, setDeleteConfirmEnabled,
   } = useStore();
 
   useEffect(() => {
@@ -42,6 +43,19 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
   }, [isOpen, onClose]);
 
   const controls = [
+    {
+      id: 'deleteConfirm',
+      icon: AlertTriangle,
+      label: '删除确认',
+      description: '删除消息前确认',
+      checked: deleteConfirmEnabled,
+      onChange: () => {
+        const newValue = !deleteConfirmEnabled;
+        setDeleteConfirmEnabled(newValue);
+        configStorage.set('deleteConfirmEnabled', newValue);
+        toast.info(newValue ? '已开启删除确认' : '已关闭删除确认', { duration: 2000 });
+      },
+    },
     {
       id: 'token',
       icon: Database,
@@ -185,22 +199,47 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
                       </div>
                     </div>
                     <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center shrink-0"
+                      className="relative w-11 h-6 rounded-full shrink-0"
                       style={{
-                        backgroundColor: control.checked ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                        backgroundColor: control.checked 
+                          ? 'var(--primary-color)' 
+                          : 'var(--bg-tertiary)',
+                        boxShadow: control.checked 
+                          ? '0 0 8px rgba(59, 130, 246, 0.35)' 
+                          : 'inset 0 1px 2px rgba(0, 0, 0, 0.1)',
+                        transition: 'background-color 0.2s, box-shadow 0.2s',
                       }}
                     >
-                      {control.checked && (
-                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                          <path
-                            d="M2 6L5 9L10 3"
-                            stroke="white"
-                            strokeWidth="2"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      )}
+                      <div
+                        className="absolute top-0.5 w-5 h-5 rounded-full flex items-center justify-center"
+                        style={{
+                          backgroundColor: 'white',
+                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.12)',
+                          transform: control.checked ? 'translateX(20px)' : 'translateX(0)',
+                          transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                          willChange: 'transform',
+                        }}
+                      >
+                        {control.checked && (
+                          <svg
+                            width="10"
+                            height="10"
+                            viewBox="0 0 10 10"
+                            fill="none"
+                            style={{ 
+                              animation: 'checkIn 0.15s ease-out forwards',
+                            }}
+                          >
+                            <path
+                              d="M1.5 5L4 7.5L8.5 2.5"
+                              stroke="var(--primary-color)"
+                              strokeWidth="1.5"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

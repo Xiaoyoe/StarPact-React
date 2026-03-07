@@ -3,12 +3,7 @@ import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
   ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare, Trash2, Settings, Eye, EyeOff, Sliders
 } from 'lucide-react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { useStore, generateId } from '@/store';
-import type { ChatMessage } from '@/store';
 import { cn } from '@/utils/cn';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ChatQuickNav } from '@/components/ChatQuickNav';
@@ -19,268 +14,10 @@ import { PerformanceModal } from '@/components/PerformanceModal';
 import { ImageViewer } from '@/components/ImageViewer';
 import { ChatWelcome } from '@/components/ChatWelcome';
 import { ChatControlPanel } from '@/components/ChatControlPanel';
+import { MessageBubble } from '@/components/MessageBubble';
 import { ollamaModelService } from '@/services/OllamaModelService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { estimateConversationTokens, formatTokenCount } from '@/utils/tokenEstimator';
-
-function CodeBlock({ language, children }: { language: string; children: string }) {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(children);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div className="group relative my-2 overflow-hidden rounded-lg" style={{ backgroundColor: 'var(--code-bg)' }}>
-      <div className="flex items-center justify-between px-4 py-2" style={{ backgroundColor: 'rgba(255,255,255,0.05)' }}>
-        <span className="text-xs text-gray-400">{language || 'code'}</span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 rounded px-2 py-1 text-xs text-gray-400 transition-colors hover:bg-white/10 hover:text-gray-200"
-        >
-          {copied ? <><Check size={12} /> 已复制</> : <><Copy size={12} /> 复制</>}
-        </button>
-      </div>
-      <SyntaxHighlighter
-        language={language || 'text'}
-        style={oneDark}
-        customStyle={{
-          margin: 0,
-          padding: '16px',
-          fontSize: '13px',
-          lineHeight: '1.5',
-          background: 'transparent',
-        }}
-      >
-        {children}
-      </SyntaxHighlighter>
-    </div>
-  );
-}
-
-function MessageBubble({ message, isLast, compactMode, onImageClick, onRegenerate, onDelete }: { 
-  message: ChatMessage; 
-  isLast: boolean; 
-  compactMode: boolean;
-  onImageClick: (images: string[], index: number) => void;
-  onRegenerate?: (content: string) => void;
-  onDelete?: (messageId: string) => void;
-}) {
-  const isUser = message.role === 'user';
-  const [showActions, setShowActions] = useState(true);
-  const [showThinking, setShowThinking] = useState(true);
-
-  const formatTime = (ts: number) => {
-    const d = new Date(ts);
-    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-  };
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.2 }}
-      className={cn("group flex gap-3 px-4 py-3", isUser ? "flex-row-reverse" : "flex-row")}
-      data-message-id={message.id}
-    >
-      {/* Avatar */}
-      <div
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
-        style={{
-          backgroundColor: isUser ? 'var(--primary-color)' : 'var(--bg-tertiary)',
-        }}
-      >
-        {isUser ? (
-          <User size={16} color="white" />
-        ) : (
-          <Bot size={16} style={{ color: 'var(--primary-color)' }} />
-        )}
-      </div>
-
-      {/* Content */}
-      <div className={cn("max-w-[75%] min-w-0", isUser ? "items-end" : "items-start")}>
-        {/* Name & Time */}
-        <div className={cn("mb-1 flex items-center gap-2 text-xs", isUser ? "flex-row-reverse" : "flex-row")}
-          style={{ color: 'var(--text-tertiary)' }}
-        >
-          <span className="font-medium">{isUser ? '你' : (message.modelName || 'AI')}</span>
-          <span>{formatTime(message.timestamp)}</span>
-        </div>
-
-        {/* Bubble */}
-        <div
-          className={cn(
-            "relative rounded-2xl px-4 py-3 copy-allowed",
-            isUser ? "rounded-tr-md" : "rounded-tl-md"
-          )}
-          style={{
-            backgroundColor: compactMode ? 'transparent' : (isUser ? 'var(--bg-chat-user)' : 'var(--bg-chat-ai)'),
-            color: 'var(--text-primary)',
-            userSelect: 'text',
-            border: '1px solid var(--border-color)',
-          }}
-        >
-          {isUser ? (
-            <div className="space-y-2">
-              {message.images && message.images.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {message.images.map((img, idx) => (
-                    <img 
-                      key={idx}
-                      src={img} 
-                      alt={`图片 ${idx + 1}`}
-                      className="max-w-[200px] max-h-[200px] object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
-                      style={{ borderColor: 'var(--border-color)' }}
-                      onClick={() => onImageClick(message.images!, idx)}
-                    />
-                  ))}
-                </div>
-              )}
-              <p className="whitespace-pre-wrap text-sm leading-relaxed copy-allowed" style={{ userSelect: 'text' }}>{message.content}</p>
-            </div>
-          ) : (
-            <>
-              {/* Thinking Section */}
-              {message.thinking && (
-                <div className="mb-4">
-                  <button
-                    onClick={() => setShowThinking(!showThinking)}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all w-full"
-                    style={{ 
-                      color: showThinking ? 'var(--primary-color)' : 'var(--text-secondary)',
-                      backgroundColor: showThinking ? 'var(--primary-light)' : 'var(--bg-secondary)',
-                      border: '1px solid var(--border-color)',
-                    }}
-                  >
-                    <Brain size={14} style={{ color: 'var(--primary-color)' }} />
-                    <span className="flex-1 text-left">思考过程</span>
-                    {message.thinkingDuration && (
-                      <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: 'var(--success-color)', backgroundColor: 'rgba(34, 197, 94, 0.1)' }}>
-                        {message.thinkingDuration.toFixed(1)}s
-                      </span>
-                    )}
-                    <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                      {message.thinking.length} 字符
-                    </span>
-                    <ChevronRight 
-                      size={14} 
-                      style={{ 
-                        color: 'var(--text-tertiary)',
-                        transform: showThinking ? 'rotate(90deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s'
-                      }} 
-                    />
-                  </button>
-                  <AnimatePresence>
-                    {showThinking && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0, marginTop: 0 }}
-                        animate={{ opacity: 1, height: 'auto', marginTop: 8 }}
-                        exit={{ opacity: 0, height: 0, marginTop: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="overflow-hidden"
-                      >
-                        <div 
-                          className="rounded-xl p-4 text-sm leading-relaxed max-h-80 overflow-y-auto"
-                          style={{ 
-                            backgroundColor: 'var(--bg-secondary)',
-                            border: '1px solid var(--border-color)',
-                            color: 'var(--text-secondary)'
-                          }}
-                        >
-                          <div className="flex items-center gap-2 mb-3 pb-2 border-b" style={{ borderColor: 'var(--border-color)' }}>
-                            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--primary-color)' }} />
-                            <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>AI 正在思考...</span>
-                          </div>
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm]}
-                            components={{
-                              p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                              code: ({ className, children, ...props }) => {
-                                const match = /language-(\w+)/.exec(className || '');
-                                const codeString = String(children).replace(/\n$/, '');
-                                if (match) {
-                                  return <CodeBlock language={match[1]}>{codeString}</CodeBlock>;
-                                }
-                                return <code className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor: 'var(--bg-tertiary)' }} {...props}>{children}</code>;
-                              },
-                            }}
-                          >
-                            {message.thinking}
-                          </ReactMarkdown>
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
-              
-              {/* Main Content */}
-              <div className={cn("markdown-body copy-allowed", message.isStreaming && isLast && 'typing-cursor')} style={{ userSelect: 'text' }}>
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  components={{
-                    code({ className, children, ...props }) {
-                      const match = /language-(\w+)/.exec(className || '');
-                      const codeString = String(children).replace(/\n$/, '');
-                      if (match) {
-                        return <CodeBlock language={match[1]}>{codeString}</CodeBlock>;
-                      }
-                      return <code className={className} {...props}>{children}</code>;
-                    },
-                  }}
-                >
-                  {message.content}
-                </ReactMarkdown>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Actions */}
-        <AnimatePresence>
-          {showActions && !message.isStreaming && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              className={cn("mt-1 flex items-center gap-1", isUser ? "justify-end" : "justify-start")}
-            >
-              <button
-                onClick={() => navigator.clipboard.writeText(message.content)}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors hover:bg-white/10"
-                style={{ color: 'var(--text-tertiary)' }}
-                title="复制"
-              >
-                <Copy size={12} />
-              </button>
-              <button
-                onClick={() => onDelete?.(message.id)}
-                className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors hover:bg-white/10"
-                style={{ color: 'var(--text-tertiary)' }}
-                title="删除"
-              >
-                <Trash2 size={12} />
-              </button>
-              {isUser && onRegenerate && (
-                <button
-                  onClick={() => onRegenerate(message.content)}
-                  className="flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors hover:bg-white/10"
-                  style={{ color: 'var(--text-tertiary)' }}
-                  title="重新生成"
-                >
-                  <RotateCcw size={12} />
-                </button>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </motion.div>
-  );
-}
 
 export function ChatPage() {
   const {
@@ -296,6 +33,7 @@ export function ChatPage() {
     ollamaThinkMode,
     ollamaChatMode,
     includeImagesInContext,
+    deleteConfirmEnabled,
     showTokenEstimate,
   } = useStore();
 
@@ -1065,10 +803,21 @@ export function ChatPage() {
   };
 
   const handleDeleteMessage = (messageId: string) => {
-    setDeleteConfirm({
-      isOpen: true,
-      messageId,
-    });
+    if (deleteConfirmEnabled) {
+      setDeleteConfirm({
+        isOpen: true,
+        messageId,
+      });
+    } else {
+      if (activeConversationId) {
+        shouldScrollToBottomRef.current = false;
+        deleteMessage(activeConversationId, messageId);
+        toast.success('消息已删除');
+        setTimeout(() => {
+          shouldScrollToBottomRef.current = true;
+        }, 100);
+      }
+    }
   };
 
   const confirmDeleteMessage = () => {
@@ -1364,7 +1113,7 @@ export function ChatPage() {
           </div>
 
           {/* Tools Menu */}
-          <div className="relative" ref={toolsMenuRef}>
+          <div className="relative ml-2" ref={toolsMenuRef}>
             <button
               onClick={() => setShowToolsMenu(!showToolsMenu)}
               className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"

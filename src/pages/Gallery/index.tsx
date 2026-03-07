@@ -12,6 +12,7 @@ import { GalleryStorage, ImageMetadata, ImageAlbum } from '@/services/storage/Ga
 import { configStorage } from '@/services/storage/ConfigStorage';
 import { useToast } from '@/components/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useStore } from '@/store';
 
 // 检查是否为Electron环境
 const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
@@ -184,9 +185,10 @@ const initialFolders: ImageFolder[] = [
 
 export function GalleryPage() {
   const toast = useToast();
+  const { chatWallpaper } = useStore();
+  
   
 
-  
   // 状态管理
   const [folders, setFolders] = useState<ImageFolder[]>(initialFolders);
   const [activeFolderId, setActiveFolderId] = useState<string>('all');
@@ -761,7 +763,16 @@ export function GalleryPage() {
   };
 
   return (
-    <div className="relative flex flex-col h-full" style={{ backgroundColor: 'var(--bg-primary)' }}>
+    <div 
+      className="relative flex flex-col h-full" 
+      style={{ 
+        backgroundColor: 'var(--bg-primary)',
+        backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat'
+      }}
+    >
       {/* 顶部工具栏 */}
       <GalleryToolbar
         viewMode={viewMode}

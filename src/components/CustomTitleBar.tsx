@@ -86,6 +86,7 @@ const CustomTitleBar: React.FC<CustomTitleBarProps> = ({
   const [dailyQuoteInterval, setDailyQuoteInterval] = useState<10 | 3600 | 86400>(10);
   const [closeConfirm, setCloseConfirm] = useState(true);
   const [showCloseDialog, setShowCloseDialog] = useState(false);
+  const [showRefreshDialog, setShowRefreshDialog] = useState(false);
   const [appNameDisplay, setAppNameDisplay] = useState<'chinese' | 'english'>('english');
   const titleBarRef = useRef<HTMLDivElement>(null);
 
@@ -149,7 +150,16 @@ const CustomTitleBar: React.FC<CustomTitleBarProps> = ({
   }, [isElectronEnv]);
 
   const handleRefresh = useCallback(() => {
+    setShowRefreshDialog(true);
+  }, []);
+
+  const confirmRefresh = useCallback(() => {
+    setShowRefreshDialog(false);
     window.location.reload();
+  }, []);
+
+  const cancelRefresh = useCallback(() => {
+    setShowRefreshDialog(false);
   }, []);
 
   const handleMinimize = useCallback(async () => {
@@ -393,6 +403,62 @@ const CustomTitleBar: React.FC<CustomTitleBarProps> = ({
                 whileTap={{ scale: 0.98 }}
                 transition={{ type: 'spring', stiffness: 400, damping: 17 }}
                 onClick={cancelClose}
+                className="px-4 py-2 rounded-lg text-sm font-medium"
+                style={{
+                  backgroundColor: 'var(--bg-tertiary)',
+                  color: 'var(--text-secondary)',
+                  border: '1px solid var(--border-color)'
+                }}
+              >
+                取消
+              </motion.button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRefreshDialog && (
+        <div 
+          className="fixed inset-0 z-[9999] flex items-center justify-center"
+          style={{ backgroundColor: 'var(--bg-modal-overlay)', backdropFilter: 'blur(4px)' }}
+          onClick={cancelRefresh}
+        >
+          <div 
+            className="rounded-xl shadow-2xl p-6 max-w-sm w-full mx-4"
+            style={{ 
+              backgroundColor: 'var(--bg-secondary)',
+              border: '1px solid var(--border-color)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold mb-2" style={{ color: 'var(--text-primary)' }}>
+              确认刷新
+            </h3>
+            <p className="text-sm mb-2" style={{ color: 'var(--text-secondary)' }}>
+              确定要刷新页面吗？
+            </p>
+            <p className="text-xs mb-6" style={{ color: 'var(--text-tertiary)' }}>
+              刷新将重新加载应用程序，当前未保存的数据可能会丢失。
+            </p>
+            <div className="flex justify-end gap-3">
+              <motion.button
+                whileHover={{ x: 3 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                onClick={confirmRefresh}
+                className="px-4 py-2 rounded-lg text-sm font-medium"
+                style={{
+                  backgroundColor: 'var(--primary-color)',
+                  color: 'white'
+                }}
+              >
+                确认刷新
+              </motion.button>
+              <motion.button
+                whileHover={{ x: 3 }}
+                whileTap={{ scale: 0.98 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 17 }}
+                onClick={cancelRefresh}
                 className="px-4 py-2 rounded-lg text-sm font-medium"
                 style={{
                   backgroundColor: 'var(--bg-tertiary)',

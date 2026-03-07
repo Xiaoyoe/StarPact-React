@@ -173,6 +173,8 @@ interface AppState {
   setOllamaChatMode: (mode: 'single' | 'multi') => void;
   includeImagesInContext: boolean;
   setIncludeImagesInContext: (include: boolean) => void;
+  deleteConfirmEnabled: boolean;
+  setDeleteConfirmEnabled: (enabled: boolean) => void;
   showTokenEstimate: boolean;
   setShowTokenEstimate: (show: boolean) => void;
 
@@ -735,6 +737,8 @@ export const useStore = create<AppState>((set, get) => {
   setOllamaChatMode: (mode) => set({ ollamaChatMode: mode }),
   includeImagesInContext: true,
   setIncludeImagesInContext: (include) => set({ includeImagesInContext: include }),
+  deleteConfirmEnabled: true,
+  setDeleteConfirmEnabled: (enabled) => set({ deleteConfirmEnabled: enabled }),
   showTokenEstimate: true,
   setShowTokenEstimate: (show) => set({ showTokenEstimate: show }),
 

@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle, Image as ImageIcon
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle, Image as ImageIcon, AlertTriangle
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -40,6 +40,7 @@ export function Sidebar() {
     ollamaThinkMode, setOllamaThinkMode,
     ollamaChatMode, setOllamaChatMode,
     includeImagesInContext, setIncludeImagesInContext,
+    deleteConfirmEnabled, setDeleteConfirmEnabled,
     showTokenEstimate, setShowTokenEstimate,
   } = useStore();
 
@@ -70,6 +71,7 @@ export function Sidebar() {
       const savedChatMode = configStorage.get('ollamaChatMode');
       const savedShowTokenEstimate = configStorage.get('showTokenEstimate');
       const savedIncludeImagesInContext = configStorage.get('includeImagesInContext');
+      const savedDeleteConfirmEnabled = configStorage.get('deleteConfirmEnabled');
       
       if (savedVerboseMode !== undefined) {
         setOllamaVerboseMode(savedVerboseMode);
@@ -85,6 +87,9 @@ export function Sidebar() {
       }
       if (savedIncludeImagesInContext !== undefined) {
         setIncludeImagesInContext(savedIncludeImagesInContext);
+      }
+      if (savedDeleteConfirmEnabled !== undefined) {
+        setDeleteConfirmEnabled(savedDeleteConfirmEnabled);
       }
     };
     loadConfig();
@@ -206,7 +211,7 @@ export function Sidebar() {
     {
       id: 'wallpaper',
       icon: <Images size={14} />,
-      title: '聊天壁纸设置',
+      title: '壁纸设置',
       subtitle: chatWallpaper ? '已设置壁纸' : '未设置壁纸',
       onClick: () => setWallpaperPopupOpen(true),
     },
@@ -495,6 +500,41 @@ export function Sidebar() {
                     style={{
                       left: '2px',
                       transform: includeImagesInContext ? 'translateX(20px)' : 'translateX(0)',
+                    }}
+                  />
+                </button>
+              </div>
+
+              {/* Delete Confirm Toggle */}
+              <div 
+                className="flex items-center justify-between px-5 py-3 border-b"
+                style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={14} style={{ color: 'var(--warning-color)' }} />
+                  <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>删除确认</span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    删除消息前确认
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    const newValue = !deleteConfirmEnabled;
+                    setDeleteConfirmEnabled(newValue);
+                    configStorage.set('deleteConfirmEnabled', newValue);
+                    toast.info(newValue ? '已开启删除确认' : '已关闭删除确认', { duration: 2000 });
+                  }}
+                  className="relative flex h-6 w-11 items-center rounded-full transition-colors"
+                  style={{ 
+                    backgroundColor: deleteConfirmEnabled ? 'var(--success-color)' : 'var(--bg-tertiary)',
+                  }}
+                  title={deleteConfirmEnabled ? '关闭删除确认' : '开启删除确认'}
+                >
+                  <span
+                    className="absolute h-5 w-5 rounded-full bg-white shadow transition-transform"
+                    style={{
+                      left: '2px',
+                      transform: deleteConfirmEnabled ? 'translateX(20px)' : 'translateX(0)',
                     }}
                   />
                 </button>
