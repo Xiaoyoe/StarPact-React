@@ -10,6 +10,7 @@ import { useToast } from '@/components/Toast';
 import { configStorage } from '@/services/storage/ConfigStorage';
 import { PerformanceModal } from '@/components/PerformanceModal';
 import { ollamaModelService } from '@/services/OllamaModelService';
+import { ConversationContextMenu } from '@/components/ConversationContextMenu';
 
 interface PanelItem {
   id: string;
@@ -48,6 +49,17 @@ export function Sidebar() {
 
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
   const [bottomPanelsVisible, setBottomPanelsVisible] = useState(true);
+  const [contextMenu, setContextMenu] = useState<{
+    visible: boolean;
+    x: number;
+    y: number;
+    conversation: { id: string; title: string; messageCount: number } | null;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    conversation: null,
+  });
   const [wallpaperPopupOpen, setWallpaperPopupOpen] = useState(false);
   const [showModelSelect, setShowModelSelect] = useState(false);
   const [switchingModel, setSwitchingModel] = useState(false);
@@ -227,11 +239,14 @@ export function Sidebar() {
   const orderedPanelItems = panelOrder.map(id => panelItems.find(item => item.id === id)!).filter(Boolean);
 
   const handleThemeToggle = () => {
+    let newTheme: string;
     if (isLightTheme) {
-      setTheme('dark');
+      newTheme = 'dark';
     } else {
-      setTheme('light');
+      newTheme = 'light';
     }
+    setTheme(newTheme);
+    configStorage.set('theme', newTheme);
   };
 
   const filteredConversations = conversations.filter(c =>
@@ -878,6 +893,20 @@ export function Sidebar() {
                   onMouseEnter={() => setHoveredConv(conv.id)}
                   onMouseLeave={() => setHoveredConv(null)}
                   onClick={() => setActiveConversation(conv.id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setContextMenu({
+                      visible: true,
+                      x: e.clientX,
+                      y: e.clientY,
+                      conversation: {
+                        id: conv.id,
+                        title: conv.title,
+                        messageCount: conv.messages.length,
+                      },
+                    });
+                  }}
                   className={cn(
                     "group mb-0.5 flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-2 transition-all",
                     "hover:opacity-90"
@@ -1094,6 +1123,20 @@ export function Sidebar() {
         )}
       </motion.div>
       </motion.aside>
+
+      <ConversationContextMenu
+        visible={contextMenu.visible}
+        x={contextMenu.x}
+        y={contextMenu.y}
+        title={contextMenu.conversation?.title || ''}
+        messageCount={contextMenu.conversation?.messageCount || 0}
+        onDelete={() => {
+          if (contextMenu.conversation) {
+            deleteConversation(contextMenu.conversation.id);
+          }
+        }}
+        onClose={() => setContextMenu(prev => ({ ...prev, visible: false }))}
+      />
     </>
   );
 }

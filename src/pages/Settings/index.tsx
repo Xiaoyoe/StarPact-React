@@ -235,7 +235,6 @@ export function SettingsPage() {
   useEffect(() => {
     const loadSettings = async () => {
       await configStorage.ready();
-      const savedTheme = configStorage.get('theme');
       const savedSendOnEnter = configStorage.get('sendOnEnter');
       const savedStoragePath = configStorage.get('storagePath');
       const savedDailyQuote = configStorage.get('dailyQuote');
@@ -245,7 +244,6 @@ export function SettingsPage() {
       const savedAppNameDisplay = configStorage.get('appNameDisplay');
       const savedDefaultPage = configStorage.get('defaultPage');
 
-      if (savedTheme) setTheme(savedTheme);
       if (savedSendOnEnter !== undefined) setSendOnEnter(savedSendOnEnter);
       if (savedStoragePath) setStoragePath(savedStoragePath);
       if (savedDailyQuote) {
@@ -348,8 +346,10 @@ export function SettingsPage() {
   }, [defaultPage, configLoaded]);
 
   useEffect(() => {
-    configStorage.set('wallpaperDoubleClickChange', doubleClickToChange);
-  }, [doubleClickToChange]);
+    if (configLoaded) {
+      configStorage.set('wallpaperDoubleClickChange', doubleClickToChange);
+    }
+  }, [doubleClickToChange, configLoaded]);
 
 
 

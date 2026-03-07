@@ -530,12 +530,23 @@ export const useStore = create<AppState>((set, get) => {
     }
   }, 500);
 
+  const applyTheme = (theme: ThemeType) => {
+    document.documentElement.className = theme === 'light' ? '' : `theme-${theme}`;
+  };
+
   return {
   // Theme
   theme: 'light',
   setTheme: (theme) => {
-    document.documentElement.className = theme === 'light' ? '' : `theme-${theme}`;
-    set({ theme });
+    if (document.startViewTransition) {
+      document.startViewTransition(() => {
+        applyTheme(theme);
+        set({ theme });
+      });
+    } else {
+      applyTheme(theme);
+      set({ theme });
+    }
   },
 
   // Wallpaper
@@ -817,6 +828,13 @@ export async function initializeStoreFromStorage() {
     
     if (activeConversationId) {
       store.setActiveConversation(activeConversationId);
+    }
+
+    const { configStorage } = await import('@/services/storage/ConfigStorage');
+    await configStorage.ready();
+    const savedTheme = configStorage.get('theme');
+    if (savedTheme) {
+      store.setTheme(savedTheme);
     }
     
     store.setHydrated(true);
