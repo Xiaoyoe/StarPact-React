@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, memo, useRef } from 'react';
+import { useState, useEffect, useMemo, memo } from 'react';
 import {
-  Palette, Type, Monitor, Info, RefreshCw, Download, Upload, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid, Maximize2, Image as ImageIcon, X
+  Palette, Type, Monitor, Info, RefreshCw, Download, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid, Maximize2, X
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { LogEntry } from '@/store';
@@ -96,79 +96,6 @@ const SettingsLogItem = memo(function SettingsLogItem({ log }: SettingsLogItemPr
   );
 });
 
-interface WallpaperItemProps {
-  id: string;
-  name: string;
-  path: string;
-  isSelected: boolean;
-  onSelect: (path: string) => void;
-}
-
-const WallpaperItem = memo(function WallpaperItem({ id, name, path, isSelected, onSelect }: WallpaperItemProps) {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [isInView, setIsInView] = useState(false);
-  const imgRef = useRef<HTMLImageElement>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsInView(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '100px' }
-    );
-
-    if (imgRef.current) {
-      observer.observe(imgRef.current);
-    }
-
-    return () => observer.disconnect();
-  }, []);
-
-  return (
-    <button
-      onClick={() => onSelect(path)}
-      className="rounded-xl overflow-hidden transition-all active:scale-[0.98]"
-      style={{
-        border: `2px solid ${isSelected ? 'var(--primary-color)' : 'var(--border-color)'}`,
-      }}
-    >
-      <div className="aspect-square relative" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-        {!isLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin" 
-              style={{ borderColor: 'var(--primary-color)', borderTopColor: 'transparent' }} 
-            />
-          </div>
-        )}
-        <img
-          ref={imgRef}
-          src={isInView ? path : undefined}
-          alt={name}
-          className={`w-full h-full object-cover transition-opacity duration-300 ${isLoaded ? 'opacity-100' : 'opacity-0'}`}
-          onLoad={() => setIsLoaded(true)}
-          loading="lazy"
-        />
-        {isSelected && (
-          <div className="absolute inset-0 flex items-center justify-center" 
-            style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)' }}>
-            <div className="text-white text-xs px-2 py-1 rounded-full" 
-              style={{ backgroundColor: 'var(--primary-color)' }}>
-              ✓ 当前使用
-            </div>
-          </div>
-        )}
-      </div>
-      <div className="p-2 text-center" style={{ backgroundColor: 'var(--bg-secondary)' }}>
-        <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-          {name}
-        </div>
-      </div>
-    </button>
-  );
-});
 import { configStorage } from '@/services/storage/ConfigStorage';
 import { useToast } from '@/components/Toast';
 import { AboutSection } from './about';
@@ -664,8 +591,6 @@ export function SettingsPage() {
                                     console.error('Failed to show file in folder:', err);
                                     toast.error('无法打开文件位置');
                                   }
-                                } else if (!previewWallpaperInfo.path || previewWallpaperInfo.path.startsWith('data:')) {
-                                  toast.info('预设壁纸无法打开文件位置');
                                 } else {
                                   toast.info('当前环境不支持此功能');
                                 }

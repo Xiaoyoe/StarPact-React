@@ -100,6 +100,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   shell: {
     openExternal: (url: string) => ipcRenderer.invoke(IPC_CHANNELS.SHELL.OPEN_EXTERNAL, url),
   },
+  storage: {
+    backupData: (content: string, fileName: string) => 
+      ipcRenderer.invoke('storage:backupData', content, fileName),
+    getBackupPath: () => ipcRenderer.invoke('storage:getBackupPath'),
+  },
 });
 
 declare global {
@@ -232,6 +237,19 @@ declare global {
         enable: () => Promise<{ success: boolean; enabled: boolean }>;
         disable: () => Promise<{ success: boolean; enabled: boolean }>;
         toggle: () => Promise<{ success: boolean; error?: string }>;
+      };
+      storage: {
+        backupData: (content: string, fileName: string) => Promise<{
+          success: boolean;
+          path?: string;
+          error?: string;
+        }>;
+        backupDataToPath: (content: string, fileName: string, targetPath: string) => Promise<{
+          success: boolean;
+          path?: string;
+          error?: string;
+        }>;
+        getBackupPath: () => Promise<string>;
       };
     };
   }

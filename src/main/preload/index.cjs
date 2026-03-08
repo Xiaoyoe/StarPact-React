@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveModulePath: (type, path) => ipcRenderer.invoke('storage:saveModulePath', type, path),
     checkAllPaths: () => ipcRenderer.invoke('storage:checkAllPaths'),
     migrateModuleData: (oldPath, newPath, type) => ipcRenderer.invoke('storage:migrateModuleData', oldPath, newPath, type),
+    backupData: (content, fileName) => ipcRenderer.invoke('storage:backupData', content, fileName),
+    backupDataToPath: (content, fileName, targetPath) => ipcRenderer.invoke('storage:backupDataToPath', content, fileName, targetPath),
+    getBackupPath: () => ipcRenderer.invoke('storage:getBackupPath'),
   },
   
   // 对话框API
@@ -20,6 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     selectFolder: (options) => ipcRenderer.invoke('file:selectFolder', options),
     selectFile: (options) => ipcRenderer.invoke('file:selectFile', options),
     readFile: (filePath, encoding) => ipcRenderer.invoke('file:readFile', filePath, encoding),
+    writeFile: (filePath, content) => ipcRenderer.invoke('file:writeFile', filePath, content),
     showInFolder: (filePath) => ipcRenderer.invoke('file:showInFolder', filePath),
     deleteFile: (filePath) => ipcRenderer.invoke('file:deleteFile', filePath),
   },

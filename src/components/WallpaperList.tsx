@@ -1,10 +1,9 @@
 import { useState, useEffect, memo } from 'react';
-import { LayoutGrid, Palette, Image as ImageIcon, Trash2, Upload, X } from 'lucide-react';
+import { LayoutGrid, Image as ImageIcon, Trash2, Upload, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
 import { BackgroundStorage, type CustomBackground } from '@/services/storage/BackgroundStorage';
 import { configStorage } from '@/services/storage/ConfigStorage';
-import { LocalImage } from '@/components/LocalImage';
 import { useToast } from '@/components/Toast';
 
 interface WallpaperListProps {
@@ -134,23 +133,6 @@ export const WallpaperList = memo(function WallpaperList({
     }
   };
 
-  const handlePresetSelect = (wallpaper: { id: string; name: string; path: string }) => {
-    setSelectedBackgroundId(null);
-    setPreviewWallpaperInfo({ name: wallpaper.name, path: wallpaper.path });
-    if (!doubleClickToChange) {
-      setChatWallpaper(wallpaper.path);
-    }
-    setPreviewWallpaper(wallpaper.path);
-  };
-
-  const handlePresetDoubleClick = (wallpaper: { id: string; name: string; path: string }) => {
-    setSelectedBackgroundId(null);
-    setPreviewWallpaperInfo({ name: wallpaper.name, path: wallpaper.path });
-    setChatWallpaper(wallpaper.path);
-    setPreviewWallpaper(wallpaper.path);
-    toast.success('壁纸已更改');
-  };
-
   const handleAddWallpaper = async () => {
     if (window.electronAPI?.file?.selectFile) {
       const result = await window.electronAPI.file.selectFile({
@@ -232,12 +214,6 @@ export const WallpaperList = memo(function WallpaperList({
     setPreviewWallpaperInfo(null);
   };
 
-  const presetWallpapers = [
-    { id: 'ling', name: '玲', path: '/src/images/background/ling.jpg' },
-    { id: 'xue', name: '雪', path: '/src/images/background/xue.png' },
-    { id: 'girl', name: '宅家少女', path: '/src/images/background/宅家少女.png' }
-  ];
-
   return (
     <div 
       className={compact ? "w-full" : "w-72 flex-shrink-0 rounded-xl overflow-hidden flex flex-col"}
@@ -312,43 +288,6 @@ export const WallpaperList = memo(function WallpaperList({
           </button>
         </div>
       )}
-
-      <div className="border-b flex-shrink-0" style={{ borderColor: 'var(--border-color)' }}>
-        <div className="px-4 py-2 flex items-center gap-2" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-          <Palette size={14} style={{ color: 'var(--primary-color)' }} />
-          <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>预设壁纸</span>
-        </div>
-        <div className={compact ? "grid grid-cols-2 gap-2 p-2" : "grid grid-cols-3 gap-2 p-2"}>
-          {presetWallpapers.map((wallpaper) => (
-            <button
-              key={wallpaper.id}
-              onClick={() => handlePresetSelect(wallpaper)}
-              onDoubleClick={() => handlePresetDoubleClick(wallpaper)}
-              className="rounded-lg overflow-hidden transition-all hover:scale-[1.02]"
-              style={{
-                border: `2px solid ${chatWallpaper === wallpaper.path ? 'var(--primary-color)' : 'var(--border-color)'}`,
-              }}
-            >
-              <div className="aspect-square relative" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-                <img
-                  src={wallpaper.path}
-                  alt={wallpaper.name}
-                  className="w-full h-full object-cover"
-                />
-                {chatWallpaper === wallpaper.path && (
-                  <div className="absolute inset-0 flex items-center justify-center" 
-                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)' }}>
-                    <div className="text-white text-[10px] px-1.5 py-0.5 rounded-full" 
-                      style={{ backgroundColor: 'var(--primary-color)' }}>
-                      使用中
-                    </div>
-                  </div>
-                )}
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
 
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         <div className="px-4 py-2 flex items-center gap-2 flex-shrink-0" style={{ backgroundColor: 'var(--bg-tertiary)' }}>

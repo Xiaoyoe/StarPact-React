@@ -29,12 +29,6 @@
           "arch": [
             "x64"
           ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
         }
       ]
     },
@@ -44,9 +38,6 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "星约"
-    },
-    "portable": {
-      "artifactName": "${productName}-Portable-${version}.exe"
     }
   },
   "dependencies": {

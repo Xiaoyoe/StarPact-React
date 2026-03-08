@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle, Image as ImageIcon, AlertTriangle
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle, Image as ImageIcon, AlertTriangle, Maximize2, Monitor
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -13,6 +13,7 @@ import { ollamaModelService } from '@/services/OllamaModelService';
 import { ConversationContextMenu } from '@/components/ConversationContextMenu';
 import { WallpaperList } from '@/components/WallpaperList';
 import { BackgroundStorage, type CustomBackground } from '@/services/storage/BackgroundStorage';
+import { LocalImage } from '@/components/LocalImage';
 
 interface PanelItem {
   id: string;
@@ -69,6 +70,7 @@ export function Sidebar() {
   const [previewWallpaper, setPreviewWallpaper] = useState('');
   const [previewWallpaperInfo, setPreviewWallpaperInfo] = useState<{ name: string; size?: number; path?: string } | null>(null);
   const [customBackgrounds, setCustomBackgrounds] = useState<CustomBackground[]>([]);
+  const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
   
   const [panelOrder, setPanelOrder] = useState<string[]>(['model', 'performance', 'logs', 'wallpaper', 'database']);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -705,14 +707,14 @@ export function Sidebar() {
               initial={{ scale: 0.9, opacity: 0, x: 0, y: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="w-full max-w-sm rounded-xl shadow-2xl overflow-hidden absolute"
+              className="w-full max-w-2xl rounded-xl shadow-2xl overflow-hidden absolute"
               style={{ 
                 backgroundColor: 'var(--bg-primary)', 
                 border: '1px solid var(--border-color)',
                 left: '50%',
                 top: '50%',
-                marginLeft: '-200px',
-                marginTop: '-200px'
+                marginLeft: '-320px',
+                marginTop: '-240px'
               }}
               onClick={(e) => e.stopPropagation()}
             >
@@ -734,23 +736,131 @@ export function Sidebar() {
                   <X size={16} />
                 </button>
               </div>
-              <div className="max-h-[70vh] overflow-y-auto">
-                <WallpaperList
-                  selectedBackgroundId={selectedBackgroundId}
-                  setSelectedBackgroundId={setSelectedBackgroundId}
-                  previewWallpaper={previewWallpaper}
-                  setPreviewWallpaper={setPreviewWallpaper}
-                  previewWallpaperInfo={previewWallpaperInfo}
-                  setPreviewWallpaperInfo={setPreviewWallpaperInfo}
-                  customBackgrounds={customBackgrounds}
-                  setCustomBackgrounds={setCustomBackgrounds}
-                  showDoubleClickToggle={true}
-                  showClearButton={true}
-                  showHeader={true}
-                  compact={true}
-                />
+              <div className="flex gap-3 p-3" style={{ maxHeight: '70vh' }}>
+                <div className="flex-1 flex flex-col min-w-0 gap-2">
+                  <div 
+                    className="flex-1 rounded-lg overflow-hidden flex flex-col"
+                    style={{ 
+                      backgroundColor: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-color)'
+                    }}
+                  >
+                    <div className="flex items-center justify-between px-3 py-2 border-b flex-shrink-0" style={{ borderColor: 'var(--border-color)' }}>
+                      <div className="flex items-center gap-2">
+                        <Monitor size={12} style={{ color: 'var(--primary-color)' }} />
+                        <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>预览</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {previewWallpaperInfo && (
+                          <span 
+                            className="text-[10px] px-2 py-0.5 rounded-md"
+                            style={{ 
+                              backgroundColor: 'var(--bg-tertiary)', 
+                              color: 'var(--text-tertiary)' 
+                            }}
+                          >
+                            {previewWallpaperInfo.name}
+                            {previewWallpaperInfo.size && ` · ${(previewWallpaperInfo.size / 1024).toFixed(1)}KB`}
+                          </span>
+                        )}
+                        {previewWallpaper && (
+                          <button
+                            onClick={() => setIsFullscreenPreview(true)}
+                            className="p-1 rounded-md transition-all hover:scale-105"
+                            style={{ 
+                              backgroundColor: 'var(--bg-tertiary)',
+                              color: 'var(--text-secondary)'
+                            }}
+                            title="全屏预览"
+                          >
+                            <Maximize2 size={10} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div 
+                      className="flex-1 relative overflow-hidden min-h-[200px]"
+                      style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                    >
+                      {previewWallpaper ? (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <LocalImage
+                            path={previewWallpaper}
+                            alt="当前壁纸"
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center">
+                          <div 
+                            className="w-12 h-12 rounded-full flex items-center justify-center mb-2"
+                            style={{ backgroundColor: 'var(--bg-secondary)' }}
+                          >
+                            <Images size={24} style={{ color: 'var(--text-tertiary)' }} />
+                          </div>
+                          <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>未设置壁纸</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="w-64 flex-shrink-0 max-h-[400px] overflow-y-auto">
+                  <WallpaperList
+                    selectedBackgroundId={selectedBackgroundId}
+                    setSelectedBackgroundId={setSelectedBackgroundId}
+                    previewWallpaper={previewWallpaper}
+                    setPreviewWallpaper={setPreviewWallpaper}
+                    previewWallpaperInfo={previewWallpaperInfo}
+                    setPreviewWallpaperInfo={setPreviewWallpaperInfo}
+                    customBackgrounds={customBackgrounds}
+                    setCustomBackgrounds={setCustomBackgrounds}
+                    showDoubleClickToggle={true}
+                    showClearButton={false}
+                    showHeader={true}
+                    compact={true}
+                  />
+                </div>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Fullscreen Wallpaper Preview */}
+      <AnimatePresence>
+        {isFullscreenPreview && previewWallpaper && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[60] flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.9)' }}
+            onClick={() => setIsFullscreenPreview(false)}
+          >
+            <button
+              onClick={() => setIsFullscreenPreview(false)}
+              className="absolute top-4 right-4 p-2 rounded-lg transition-all hover:scale-105"
+              style={{ 
+                backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                color: 'white'
+              }}
+            >
+              <X size={24} />
+            </button>
+            <div className="max-w-[95vw] max-h-[95vh] flex flex-col items-center">
+              {previewWallpaperInfo && (
+                <div className="mb-2 text-white text-sm">
+                  {previewWallpaperInfo.name}
+                  {previewWallpaperInfo.size && ` · ${(previewWallpaperInfo.size / 1024).toFixed(1)}KB`}
+                </div>
+              )}
+              <img
+                src={previewWallpaper}
+                alt="全屏预览"
+                className="max-w-full max-h-[90vh] object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

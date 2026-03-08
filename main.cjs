@@ -4,6 +4,26 @@ const fs = require('fs');
 const { spawn } = require('child_process');
 const isDev = require('electron-is-dev');
 
+let backupDir = '';
+
+if (!isDev) {
+  const exeDir = path.dirname(app.getPath('exe'));
+  const dataDir = path.join(exeDir, 'data');
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+  backupDir = path.join(dataDir, 'starpact-backup');
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true });
+  }
+  app.setPath('userData', dataDir);
+} else {
+  backupDir = path.join(__dirname, 'backup');
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true });
+  }
+}
+
 let mainWindow = null;
 let currentProcess = null;
 let currentTaskId = null;
@@ -340,6 +360,35 @@ function registerFFmpegHandlers() {
 
 // 注册存储相关的 IPC 处理器
 function registerStorageHandlers() {
+  ipcMain.handle('storage:backupData', async (event, content, fileName) => {
+    try {
+      if (!backupDir) {
+        return { success: false, error: '备份目录未初始化' };
+      }
+      const filePath = path.join(backupDir, fileName);
+      fs.writeFileSync(filePath, content, 'utf8');
+      return { success: true, path: filePath };
+    } catch (error) {
+      console.error('备份数据失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('storage:getBackupPath', async () => {
+    return backupDir;
+  });
+
+  ipcMain.handle('storage:backupDataToPath', async (event, content, fileName, targetPath) => {
+    try {
+      const filePath = path.join(targetPath, fileName);
+      fs.writeFileSync(filePath, content, 'utf8');
+      return { success: true, path: filePath };
+    } catch (error) {
+      console.error('备份数据到指定路径失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 处理获取模块路径的请求
   ipcMain.handle('storage:getModulePath', async (event, type) => {
     try {
@@ -495,6 +544,17 @@ function registerFileHandlers() {
         content: null,
         error: error.message,
       };
+    }
+  });
+
+  // 处理写入文件内容的请求
+  ipcMain.handle('file:writeFile', async (event, filePath, content) => {
+    try {
+      await fs.promises.writeFile(filePath, content, 'utf8');
+      return { success: true };
+    } catch (error) {
+      console.error('写入文件失败:', error);
+      return { success: false, error: error.message };
     }
   });
 

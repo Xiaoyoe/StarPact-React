@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
-import { Database, RefreshCw, Download, Upload, Trash2 } from 'lucide-react';
+import { Database, RefreshCw, Download, Upload, Trash2, FolderOutput, FolderInput } from 'lucide-react';
 import { StorageMonitor } from '@/services/storage/StorageMonitor';
 import type { StorageHealthReport } from '@/services/storage/StorageMonitor';
 import { useStore } from '@/store';
+import { useToast } from '@/components/Toast';
 
 interface IndexedDBStorageStatusProps {
   onRefresh?: () => void;
@@ -12,19 +13,24 @@ const STORE_LABELS: Record<string, string> = {
   'gallery': '图片相册',
   'video-playlists': '视频播放列表',
   'prompt-templates': '提示词模板',
-  'config': '配置',
   'web-shortcuts': '网页快捷方式',
-  'chat-model': '聊天模型',
+  'config': '配置',
+  'chat-model': '聊天页面',
   'logs': '日志',
   'ollama-model': 'Ollama 模型',
   'text-contrast': '文本对比',
   'images': '图片',
-  'videos': '视频'
+  'videos': '视频',
+  'ffmpeg-config': 'FFmpeg 配置',
+  'set-background': '自定义壁纸'
 };
 
 export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProps) {
   const [storageReport, setStorageReport] = useState<StorageHealthReport | null>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [isExportingToFolder, setIsExportingToFolder] = useState(false);
+  const [isExportingToCustomFolder, setIsExportingToCustomFolder] = useState(false);
+  const [isImportingBackup, setIsImportingBackup] = useState(false);
   const [selectedStore, setSelectedStore] = useState<string | null>(null);
   const [showStoreMenu, setShowStoreMenu] = useState(false);
   const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
@@ -38,6 +44,7 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const clearLogs = useStore((state) => state.clearLogs);
+  const toast = useToast();
 
   useEffect(() => {
     const loadStorageReport = async () => {
@@ -359,6 +366,113 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
     }
   };
 
+  const handleExportToFolder = async () => {
+    if (!window.electronAPI?.storage?.backupData) {
+      toast.error('此功能仅在桌面端可用');
+      return;
+    }
+
+    setIsExportingToFolder(true);
+    try {
+      const dbData = await fetchAllIndexedDBData();
+      const jsonString = JSON.stringify(dbData, null, 2);
+      
+      const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const fileName = `starpact-backup-${dateStr}.json`;
+
+      const result = await window.electronAPI.storage.backupData(jsonString, fileName);
+      
+      if (result.success) {
+        toast.success(`备份已保存到: ${result.path}`);
+      } else {
+        toast.error('备份失败: ' + result.error);
+      }
+    } catch (err) {
+      console.error('备份失败:', err);
+      toast.error('备份失败');
+    } finally {
+      setIsExportingToFolder(false);
+    }
+  };
+
+  const handleExportToCustomFolder = async () => {
+    if (!window.electronAPI?.file?.selectFolder) {
+      toast.error('此功能仅在桌面端可用');
+      return;
+    }
+
+    setIsExportingToCustomFolder(true);
+    try {
+      const result = await window.electronAPI.file.selectFolder({
+        title: '选择备份保存位置'
+      });
+
+      if (!result.success || !result.path) {
+        setIsExportingToCustomFolder(false);
+        return;
+      }
+
+      const dbData = await fetchAllIndexedDBData();
+      const jsonString = JSON.stringify(dbData, null, 2);
+      
+      const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const fileName = `starpact-backup-${dateStr}.json`;
+
+      const backupResult = await window.electronAPI.storage.backupDataToPath(jsonString, fileName, result.path);
+      
+      if (backupResult.success) {
+        toast.success(`备份已保存到: ${backupResult.path}`);
+      } else {
+        toast.error('备份失败: ' + backupResult.error);
+      }
+    } catch (err) {
+      console.error('备份失败:', err);
+      toast.error('备份失败');
+    } finally {
+      setIsExportingToCustomFolder(false);
+    }
+  };
+
+  const handleImportBackup = async () => {
+    if (!window.electronAPI?.file?.selectFile) {
+      toast.error('此功能仅在桌面端可用');
+      return;
+    }
+
+    setIsImportingBackup(true);
+    try {
+      const result = await window.electronAPI.file.selectFile({
+        title: '选择备份文件',
+        filters: [{ name: 'JSON 备份文件', extensions: ['json'] }]
+      });
+
+      if (!result.success || !result.filePath) {
+        setIsImportingBackup(false);
+        return;
+      }
+
+      const fileResult = await window.electronAPI.file.readFile(result.filePath, 'utf8');
+      if (!fileResult.success || !fileResult.content) {
+        toast.error('读取备份文件失败');
+        setIsImportingBackup(false);
+        return;
+      }
+
+      const data = JSON.parse(fileResult.content);
+      await importToIndexedDB(data);
+      
+      const report = await StorageMonitor.getHealthReport();
+      setStorageReport(report);
+      onRefresh?.();
+      toast.success('备份数据导入成功');
+    } catch (err) {
+      console.error('导入备份失败:', err);
+      toast.error('导入备份失败');
+    } finally {
+      setIsImportingBackup(false);
+    }
+  };
+
   const handleImportClick = () => {
     fileInputRef.current?.click();
   };
@@ -668,6 +782,39 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
           <Trash2 size={12} />
           清空
         </button>
+        {window.electronAPI?.storage?.backupData && (
+          <button
+            onClick={handleExportToFolder}
+            disabled={isExportingToFolder}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
+            style={{ backgroundColor: 'var(--primary-color)', color: 'white', opacity: isExportingToFolder ? 0.6 : 1 }}
+          >
+            <FolderOutput size={12} />
+            {isExportingToFolder ? '备份中...' : '快速备份'}
+          </button>
+        )}
+        {window.electronAPI?.file?.selectFolder && (
+          <button
+            onClick={handleExportToCustomFolder}
+            disabled={isExportingToCustomFolder}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', opacity: isExportingToCustomFolder ? 0.6 : 1 }}
+          >
+            <FolderInput size={12} />
+            {isExportingToCustomFolder ? '备份中...' : '另存为'}
+          </button>
+        )}
+        {window.electronAPI?.file?.selectFile && (
+          <button
+            onClick={handleImportBackup}
+            disabled={isImportingBackup}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', opacity: isImportingBackup ? 0.6 : 1 }}
+          >
+            <Upload size={12} />
+            {isImportingBackup ? '导入中...' : '导入备份'}
+          </button>
+        )}
       </div>
 
       {showStoreMenu && selectedStore && (

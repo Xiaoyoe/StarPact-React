@@ -28,7 +28,10 @@ export class StorageMonitor {
     'web-shortcuts',
     'chat-model',
     'logs',
-    'text-contrast'
+    'ollama-model',
+    'text-contrast',
+    'ffmpeg-config',
+    'set-background'
   ];
 
   static async getStoreStats(storeName: string): Promise<StorageStats> {
