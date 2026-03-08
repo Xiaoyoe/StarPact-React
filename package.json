@@ -23,7 +23,7 @@
       "output": "dist-electron"
     },
     "win": {
-      "icon": "build/icon.ico",
+      "icon": "build/主图_icons/256-主图.ico",
       "target": [
         {
           "target": "nsis",
@@ -39,9 +39,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "星约",
-      "installerIcon": "build/icon.ico",
-      "uninstallerIcon": "build/icon.ico",
-      "installerHeaderIcon": "build/icon.ico"
+      "installerIcon": "build/主图_icons/256-主图.ico",
+      "uninstallerIcon": "build/主图_icons/256-主图.ico",
+      "installerHeaderIcon": "build/主图_icons/256-主图.ico"
     }
   },
   "dependencies": {

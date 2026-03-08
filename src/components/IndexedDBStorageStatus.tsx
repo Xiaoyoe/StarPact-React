@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { Database, RefreshCw, Download, Upload, Trash2, FolderOutput, FolderInput } from 'lucide-react';
+import { Database, RefreshCw, Trash2, FolderOutput, FolderInput, Download, Upload } from 'lucide-react';
 import { StorageMonitor } from '@/services/storage/StorageMonitor';
 import type { StorageHealthReport } from '@/services/storage/StorageMonitor';
 import { useStore } from '@/store';
 import { useToast } from '@/components/Toast';
+
+export const DATA_IMPORTED_EVENT = 'starpact:data-imported';
 
 interface IndexedDBStorageStatusProps {
   onRefresh?: () => void;
@@ -27,7 +29,6 @@ const STORE_LABELS: Record<string, string> = {
 
 export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProps) {
   const [storageReport, setStorageReport] = useState<StorageHealthReport | null>(null);
-  const [isImporting, setIsImporting] = useState(false);
   const [isExportingToFolder, setIsExportingToFolder] = useState(false);
   const [isExportingToCustomFolder, setIsExportingToCustomFolder] = useState(false);
   const [isImportingBackup, setIsImportingBackup] = useState(false);
@@ -41,9 +42,9 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
     warning?: string;
     onConfirm: () => void;
   } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const clearLogs = useStore((state) => state.clearLogs);
+  const hydrateFromStorage = useStore((state) => state.hydrateFromStorage);
   const toast = useToast();
 
   useEffect(() => {
@@ -330,42 +331,6 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
     });
   };
 
-  const handleExport = async () => {
-    try {
-      const dbData = await fetchAllIndexedDBData();
-      const jsonString = JSON.stringify(dbData, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json' });
-      
-      const dateStr = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const fileName = `indexeddb-backup-${dateStr}.json`;
-      
-      if (window.showSaveFilePicker) {
-        try {
-          const handle = await window.showSaveFilePicker({
-            suggestedName: fileName,
-            types: [{
-              description: 'JSON Files',
-              accept: { 'application/json': ['.json'] }
-            }]
-          });
-          const writable = await handle.createWritable();
-          await writable.write(blob);
-          await writable.close();
-          onRefresh?.();
-        } catch (err) {
-          if ((err as Error).name !== 'AbortError') {
-            downloadBlob(blob, fileName);
-          }
-        }
-      } else {
-        downloadBlob(blob, fileName);
-        onRefresh?.();
-      }
-    } catch (err) {
-      console.error('导出失败:', err);
-    }
-  };
-
   const handleExportToFolder = async () => {
     if (!window.electronAPI?.storage?.backupData) {
       toast.error('此功能仅在桌面端可用');
@@ -461,6 +426,9 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
       const data = JSON.parse(fileResult.content);
       await importToIndexedDB(data);
       
+      await hydrateFromStorage();
+      window.dispatchEvent(new CustomEvent(DATA_IMPORTED_EVENT));
+      
       const report = await StorageMonitor.getHealthReport();
       setStorageReport(report);
       onRefresh?.();
@@ -488,6 +456,9 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
       
       await importToIndexedDB(data);
       
+      await hydrateFromStorage();
+      window.dispatchEvent(new CustomEvent(DATA_IMPORTED_EVENT));
+      
       const report = await StorageMonitor.getHealthReport();
       setStorageReport(report);
       onRefresh?.();
@@ -499,6 +470,27 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
         fileInputRef.current.value = '';
       }
     }
+  };
+
+  const blobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const base64ToBlob = (base64: string): Blob => {
+    const parts = base64.split(';base64,');
+    const contentType = parts[0].split(':')[1];
+    const raw = window.atob(parts[1]);
+    const rawLength = raw.length;
+    const uInt8Array = new Uint8Array(rawLength);
+    for (let i = 0; i < rawLength; ++i) {
+      uInt8Array[i] = raw.charCodeAt(i);
+    }
+    return new Blob([uInt8Array], { type: contentType });
   };
 
   const importToIndexedDB = async (data: Record<string, any>): Promise<void> => {
@@ -540,13 +532,20 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
               for (const item of storeData) {
                 if (item && item.value) {
                   let putRequest: IDBRequest;
+                  let valueToStore = item.value;
                   
-                  if (keyPath && item.value[keyPath] !== undefined) {
-                    putRequest = store.put(item.value);
+                  if (valueToStore.__isBlobBase64 && typeof valueToStore.blob === 'string') {
+                    const blob = base64ToBlob(valueToStore.blob);
+                    const { __isBlobBase64, ...rest } = valueToStore;
+                    valueToStore = { ...rest, blob };
+                  }
+                  
+                  if (keyPath && valueToStore[keyPath] !== undefined) {
+                    putRequest = store.put(valueToStore);
                   } else if (item.id !== undefined) {
-                    putRequest = store.put(item.value, item.id);
+                    putRequest = store.put(valueToStore, item.id);
                   } else {
-                    putRequest = store.put(item.value);
+                    putRequest = store.put(valueToStore);
                   }
                   
                   putRequest.onsuccess = () => {
@@ -603,7 +602,7 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
       try {
         const request = indexedDB.open('starpact-db');
 
-        request.onsuccess = (event) => {
+        request.onsuccess = async (event) => {
           const db = (event.target as IDBOpenDBRequest).result;
           const data: Record<string, any> = {};
           const objectStores: string[] = [];
@@ -612,8 +611,9 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
             objectStores.push(db.objectStoreNames[i]);
           }
 
-          const fetchObjectStoreData = async (storeNames: string[], index: number) => {
+          const fetchObjectStoreData = (storeNames: string[], index: number) => {
             if (index >= storeNames.length) {
+              db.close();
               resolve(data);
               return;
             }
@@ -623,24 +623,42 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
             try {
               const transaction = db.transaction(storeName, 'readonly');
               const store = transaction.objectStore(storeName);
-              const storeData: any[] = [];
+              const rawStoreData: any[] = [];
 
               const cursorRequest = store.openCursor();
               cursorRequest.onsuccess = (event) => {
                 const cursor = (event.target as IDBRequest).result;
                 if (cursor) {
-                  storeData.push({
+                  rawStoreData.push({
                     id: cursor.key,
                     value: cursor.value
                   });
                   cursor.continue();
-                } else {
-                  data[storeName] = storeData;
-                  fetchObjectStoreData(storeNames, index + 1);
                 }
               };
 
-              cursorRequest.onerror = () => {
+              transaction.oncomplete = async () => {
+                const storeData: any[] = [];
+                for (const item of rawStoreData) {
+                  if (item.value && item.value.blob instanceof Blob) {
+                    const base64 = await blobToBase64(item.value.blob);
+                    storeData.push({
+                      id: item.id,
+                      value: {
+                        ...item.value,
+                        blob: base64,
+                        __isBlobBase64: true
+                      }
+                    });
+                  } else {
+                    storeData.push(item);
+                  }
+                }
+                data[storeName] = storeData;
+                fetchObjectStoreData(storeNames, index + 1);
+              };
+
+              transaction.onerror = () => {
                 fetchObjectStoreData(storeNames, index + 1);
               };
             } catch (err) {
@@ -681,14 +699,6 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
       className="rounded-xl p-4"
       style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json"
-        className="hidden"
-        onChange={handleImport}
-      />
-      
       <div className="mb-3">
         <h3 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
           <Database size={14} className="mr-1 inline" /> IndexedDB存储状态
@@ -749,23 +759,6 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
       )}
 
       <div className="flex items-center justify-end gap-2 pt-3 border-t" style={{ borderColor: 'var(--border-color)' }}>
-        <button
-          onClick={handleImportClick}
-          disabled={isImporting}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
-          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', opacity: isImporting ? 0.6 : 1 }}
-        >
-          <Upload size={12} />
-          {isImporting ? '导入中...' : '导入'}
-        </button>
-        <button
-          onClick={handleExport}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
-          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
-        >
-          <Download size={12} />
-          导出
-        </button>
         <button
           onClick={handleRefresh}
           className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"

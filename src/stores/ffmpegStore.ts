@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { ffmpegRendererService, type FFmpegProgress } from '@/services/ffmpeg/FFmpegRendererService';
 import { ffmpegConfigStorage } from '@/services/storage/FFmpegConfigStorage';
 
-export type ProcessingModule = 'formatConvert' | 'audioProcess' | 'advancedTools' | 'commandBuilder';
+export type ProcessingModule = 'formatConvert' | 'audioProcess' | 'advancedTools' | 'commandBuilder' | 'icoConvert' | 'imageFormatConvert';
 
 export interface ProcessingTask {
   id: string;

@@ -14,6 +14,7 @@ import { useToast } from '@/components/Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store';
 import { useWallpaperStyle } from '@/hooks';
+import { DATA_IMPORTED_EVENT } from '@/components/IndexedDBStorageStatus';
 
 // 检查是否为Electron环境
 const isElectron = typeof process !== 'undefined' && process.versions && process.versions.electron;
@@ -314,6 +315,16 @@ export function GalleryPage() {
     };
     
     loadImagesFromStorage();
+
+    const handleDataImported = () => {
+      loadImagesFromStorage();
+    };
+    
+    window.addEventListener(DATA_IMPORTED_EVENT, handleDataImported);
+    
+    return () => {
+      window.removeEventListener(DATA_IMPORTED_EVENT, handleDataImported);
+    };
   }, []);
 
   // 保存图片数据到存储

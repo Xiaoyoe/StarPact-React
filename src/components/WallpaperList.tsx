@@ -1,18 +1,10 @@
 import { useState, useEffect, memo } from 'react';
-import { LayoutGrid, Palette, Image as ImageIcon, Trash2, Upload, X } from 'lucide-react';
+import { LayoutGrid, Image as ImageIcon, Trash2, Upload, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useStore } from '@/store';
 import { BackgroundStorage, type CustomBackground } from '@/services/storage/BackgroundStorage';
 import { configStorage } from '@/services/storage/ConfigStorage';
-import { LocalImage } from '@/components/LocalImage';
 import { useToast } from '@/components/Toast';
-
-interface PresetWallpaper {
-  id: string;
-  name: string;
-  file: string;
-  path?: string;
-}
 
 interface WallpaperListProps {
   selectedBackgroundId: string | null;
@@ -46,31 +38,7 @@ export const WallpaperList = memo(function WallpaperList({
   const { chatWallpaper, setChatWallpaper } = useStore();
   const [doubleClickToChange, setDoubleClickToChange] = useState(false);
   const [configLoaded, setConfigLoaded] = useState(false);
-  const [resourcePath, setResourcePath] = useState<string>('');
   const toast = useToast();
-
-  const presetWallpapers: PresetWallpaper[] = [
-    { id: 'ling', name: '玲', file: 'ling.jpg' },
-    { id: 'xue', name: '雪', file: 'xue.png' },
-    { id: 'girl', name: '宅家少女', file: '宅家少女.png' }
-  ];
-
-  useEffect(() => {
-    const loadResourcePath = async () => {
-      if (window.electronAPI?.storage?.getResourcePath) {
-        const path = await window.electronAPI.storage.getResourcePath();
-        setResourcePath(path);
-      }
-    };
-    loadResourcePath();
-  }, []);
-
-  const getPresetWallpaperPath = (wallpaper: PresetWallpaper): string => {
-    if (resourcePath) {
-      return `file://${resourcePath}/${wallpaper.file}`;
-    }
-    return `/src/images/background/${wallpaper.file}`;
-  };
 
   useEffect(() => {
     const loadConfirmSetting = async () => {
@@ -163,25 +131,6 @@ export const WallpaperList = memo(function WallpaperList({
         toast.error('加载壁纸失败');
       }
     }
-  };
-
-  const handlePresetSelect = (wallpaper: PresetWallpaper) => {
-    const wallpaperPath = getPresetWallpaperPath(wallpaper);
-    setSelectedBackgroundId(null);
-    setPreviewWallpaperInfo({ name: wallpaper.name, path: wallpaperPath });
-    if (!doubleClickToChange) {
-      setChatWallpaper(wallpaperPath);
-    }
-    setPreviewWallpaper(wallpaperPath);
-  };
-
-  const handlePresetDoubleClick = (wallpaper: PresetWallpaper) => {
-    const wallpaperPath = getPresetWallpaperPath(wallpaper);
-    setSelectedBackgroundId(null);
-    setPreviewWallpaperInfo({ name: wallpaper.name, path: wallpaperPath });
-    setChatWallpaper(wallpaperPath);
-    setPreviewWallpaper(wallpaperPath);
-    toast.success('壁纸已更改');
   };
 
   const handleAddWallpaper = async () => {
@@ -339,45 +288,6 @@ export const WallpaperList = memo(function WallpaperList({
           </button>
         </div>
       )}
-
-      <div className="border-b flex-shrink-0" style={{ borderColor: 'var(--border-color)' }}>
-        <div className="px-4 py-2 flex items-center gap-2" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-          <Palette size={14} style={{ color: 'var(--primary-color)' }} />
-          <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>预设壁纸</span>
-        </div>
-        <div className={compact ? "grid grid-cols-2 gap-2 p-2" : "grid grid-cols-3 gap-2 p-2"}>
-          {presetWallpapers.map((wallpaper) => {
-            const wallpaperPath = getPresetWallpaperPath(wallpaper);
-            return (
-            <button
-              key={wallpaper.id}
-              onClick={() => handlePresetSelect(wallpaper)}
-              onDoubleClick={() => handlePresetDoubleClick(wallpaper)}
-              className="rounded-lg overflow-hidden transition-all hover:scale-[1.02]"
-              style={{
-                border: `2px solid ${chatWallpaper === wallpaperPath ? 'var(--primary-color)' : 'var(--border-color)'}`,
-              }}
-            >
-              <div className="aspect-square relative" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-                <img
-                  src={wallpaperPath}
-                  alt={wallpaper.name}
-                  className="w-full h-full object-cover"
-                />
-                {chatWallpaper === wallpaperPath && (
-                  <div className="absolute inset-0 flex items-center justify-center" 
-                    style={{ backgroundColor: 'rgba(59, 130, 246, 0.2)' }}>
-                    <div className="text-white text-[10px] px-1.5 py-0.5 rounded-full" 
-                      style={{ backgroundColor: 'var(--primary-color)' }}>
-                      使用中
-                    </div>
-                  </div>
-                )}
-              </div>
-            </button>
-          )})}
-        </div>
-      </div>
 
       <div className="flex-1 overflow-hidden flex flex-col min-h-0">
         <div className="px-4 py-2 flex items-center gap-2 flex-shrink-0" style={{ backgroundColor: 'var(--bg-tertiary)' }}>

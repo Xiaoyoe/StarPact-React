@@ -584,9 +584,9 @@ export function SettingsPage() {
                                 color: 'var(--text-tertiary)' 
                               }}
                               onClick={async () => {
-                                if (previewWallpaperInfo.path && window.electronAPI?.file?.showItemInFolder) {
+                                if (previewWallpaperInfo.path && window.electronAPI?.file?.showInFolder) {
                                   try {
-                                    await window.electronAPI.file.showItemInFolder(previewWallpaperInfo.path);
+                                    await window.electronAPI.file.showInFolder(previewWallpaperInfo.path);
                                   } catch (err) {
                                     console.error('Failed to show file in folder:', err);
                                     toast.error('无法打开文件位置');

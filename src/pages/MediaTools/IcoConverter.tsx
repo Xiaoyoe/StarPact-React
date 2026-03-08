@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Image as ImageIcon, Upload, Circle, Square, RectangleHorizontal, Download, RotateCcw, ZoomIn, ZoomOut, Check, Info, Eye, X } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useToast } from '@/components/Toast';
+import { useFFmpegStore } from '@/stores/ffmpegStore';
 
 interface CropArea {
   x: number;
@@ -29,6 +30,7 @@ export function IcoConverter() {
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [imageName, setImageName] = useState<string>('');
+  const [inputFilePath, setInputFilePath] = useState<string>('');
   const [cropShape, setCropShape] = useState<'circle' | 'square' | 'custom'>('circle');
   const [cropArea, setCropArea] = useState<CropArea>({ x: 50, y: 50, width: 200, height: 200 });
   const [selectedSizes, setSelectedSizes] = useState<SizeOption[]>(
@@ -42,12 +44,16 @@ export function IcoConverter() {
   const [customFileName, setCustomFileName] = useState('');
   const [previewImages, setPreviewImages] = useState<{ size: number; url: string }[]>([]);
   const [showPreview, setShowPreview] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [currentTaskId, setCurrentTaskId] = useState<string | null>(null);
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const toast = useToast();
+  
+  const { outputPath, isElectronEnv, startTask, updateTaskProgress, addTaskLog, completeTask } = useFFmpegStore();
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -56,11 +62,17 @@ export function IcoConverter() {
       return;
     }
 
+    let filePath = file.name;
+    if (isElectronEnv && file.path) {
+      filePath = file.path;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const src = event.target?.result as string;
       setImageSrc(src);
       setImageName(file.name.replace(/\.[^/.]+$/, ''));
+      setInputFilePath(filePath);
       
       const img = new Image();
       img.onload = () => {
@@ -77,9 +89,9 @@ export function IcoConverter() {
       img.src = src;
     };
     reader.readAsDataURL(file);
-  }, [toast]);
+  }, [toast, isElectronEnv]);
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (!file) return;
@@ -89,11 +101,17 @@ export function IcoConverter() {
       return;
     }
 
+    let filePath = file.name;
+    if (isElectronEnv && file.path) {
+      filePath = file.path;
+    }
+
     const reader = new FileReader();
     reader.onload = (event) => {
       const src = event.target?.result as string;
       setImageSrc(src);
       setImageName(file.name.replace(/\.[^/.]+$/, ''));
+      setInputFilePath(filePath);
       
       const img = new Image();
       img.onload = () => {
@@ -110,7 +128,7 @@ export function IcoConverter() {
       img.src = src;
     };
     reader.readAsDataURL(file);
-  }, [toast]);
+  }, [toast, isElectronEnv]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -273,6 +291,18 @@ export function IcoConverter() {
     setShowPreview(true);
   };
 
+  const getOutputFilePath = () => {
+    const now = new Date();
+    const dateTimeSuffix = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    const finalName = customFileName.trim() ? customFileName.trim() : `${imageName}_${dateTimeSuffix}`;
+    
+    if (outputPath) {
+      const sep = outputPath.includes('\\') ? '\\' : '/';
+      return `${outputPath}${sep}${finalName}.ico`;
+    }
+    return `${finalName}.ico`;
+  };
+
   const generateIco = async () => {
     if (!image || !canvasRef.current) {
       toast.error('请先选择图片');
@@ -285,25 +315,74 @@ export function IcoConverter() {
       return;
     }
 
+    setIsProcessing(true);
+    const outputFilePath = getOutputFilePath();
+    
+    const taskId = startTask('icoConvert', `${imageName}.ico`, inputFilePath, outputFilePath);
+    setCurrentTaskId(taskId);
+    
+    addTaskLog(taskId, `[info] 开始生成 ICO 文件`);
+    addTaskLog(taskId, `[info] 输出尺寸: ${sizes.join(', ')}`);
+    addTaskLog(taskId, `[info] 裁剪形状: ${cropShape === 'circle' ? '圆形' : cropShape === 'square' ? '正方形' : '自定义'}`);
+
     try {
-      const icoData = await createIcoFromImage(image, cropArea, sizes, cropShape);
+      updateTaskProgress(taskId, 10);
+      
+      const icoData = await createIcoFromImage(image, cropArea, sizes, cropShape, (progress) => {
+        updateTaskProgress(taskId, 10 + progress * 0.8);
+      });
+      
+      updateTaskProgress(taskId, 90);
+      
       const blob = new Blob([icoData], { type: 'image/x-icon' });
-      const url = URL.createObjectURL(blob);
       
-      const link = document.createElement('a');
-      link.href = url;
-      const now = new Date();
-      const dateTimeSuffix = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
-      link.download = customFileName.trim() ? `${customFileName.trim()}.ico` : `${imageName}_${dateTimeSuffix}.ico`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      toast.success('ICO 文件已生成并下载');
+      if (isElectronEnv && outputPath && window.electronAPI?.file?.writeFile) {
+        const reader = new FileReader();
+        reader.onload = async () => {
+          const arrayBuffer = reader.result as ArrayBuffer;
+          const uint8Array = new Uint8Array(arrayBuffer);
+          const result = await window.electronAPI.file.writeFile(outputFilePath, uint8Array);
+          
+          if (result.success) {
+            updateTaskProgress(taskId, 100);
+            addTaskLog(taskId, `[done] ✅ ICO 文件已保存到: ${outputFilePath}`);
+            completeTask(taskId, true);
+            toast.success('ICO 文件已生成');
+          } else {
+            addTaskLog(taskId, `[error] ❌ 保存失败: ${result.error}`);
+            completeTask(taskId, false, result.error);
+            toast.error('保存失败');
+          }
+          setIsProcessing(false);
+          setCurrentTaskId(null);
+        };
+        reader.readAsArrayBuffer(blob);
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = outputFilePath.includes('/') || outputFilePath.includes('\\') 
+          ? outputFilePath.split(/[/\\]/).pop()! 
+          : outputFilePath;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        updateTaskProgress(taskId, 100);
+        addTaskLog(taskId, `[done] ✅ ICO 文件已下载`);
+        completeTask(taskId, true);
+        toast.success('ICO 文件已生成并下载');
+        setIsProcessing(false);
+        setCurrentTaskId(null);
+      }
     } catch (error) {
       console.error('生成 ICO 失败:', error);
+      addTaskLog(taskId, `[error] ❌ 生成失败: ${error}`);
+      completeTask(taskId, false, String(error));
       toast.error('生成 ICO 失败');
+      setIsProcessing(false);
+      setCurrentTaskId(null);
     }
   };
 
@@ -311,11 +390,13 @@ export function IcoConverter() {
     img: HTMLImageElement,
     crop: CropArea,
     sizes: number[],
-    shape: 'circle' | 'square' | 'custom'
+    shape: 'circle' | 'square' | 'custom',
+    onProgress: (progress: number) => void
   ): Promise<ArrayBuffer> => {
     const images: { width: number; height: number; data: Uint8Array }[] = [];
     
-    for (const size of sizes) {
+    for (let i = 0; i < sizes.length; i++) {
+      const size = sizes[i];
       const canvas = document.createElement('canvas');
       canvas.width = size;
       canvas.height = size;
@@ -346,6 +427,7 @@ export function IcoConverter() {
       });
       
       images.push({ width: size, height: size, data: pngData });
+      onProgress((i + 1) / sizes.length);
     }
     
     return createIcoBuffer(images);
@@ -401,6 +483,11 @@ export function IcoConverter() {
         >
           图片工具
         </span>
+        {outputPath && (
+          <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}>
+            输出: {outputPath}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-12 gap-4">
@@ -681,8 +768,8 @@ export function IcoConverter() {
               <div className="flex items-center gap-2">
                 <button
                   onClick={generatePreview}
-                  disabled={!image || selectedSizes.filter(s => s.selected).length === 0}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all"
+                  disabled={!image || selectedSizes.filter(s => s.selected).length === 0 || isProcessing}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50"
                   style={{
                     backgroundColor: 'var(--bg-tertiary)',
                     color: 'var(--text-primary)',
@@ -694,7 +781,7 @@ export function IcoConverter() {
                 </button>
                 <button
                   onClick={generateIco}
-                  disabled={!image || selectedSizes.filter(s => s.selected).length === 0}
+                  disabled={!image || selectedSizes.filter(s => s.selected).length === 0 || isProcessing}
                   className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all shadow-lg"
                   style={{
                     background: 'linear-gradient(135deg, var(--success-color), #16a34a)',
@@ -702,7 +789,7 @@ export function IcoConverter() {
                   }}
                 >
                   <Download className="w-4 h-4" />
-                  生成 ICO 文件
+                  {isProcessing ? '生成中...' : '生成 ICO 文件'}
                 </button>
               </div>
             </div>

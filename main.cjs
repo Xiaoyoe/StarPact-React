@@ -1,7 +1,7 @@
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, exec } = require('child_process');
 const isDev = require('electron-is-dev');
 
 let backupDir = '';
@@ -558,20 +558,39 @@ function registerFileHandlers() {
     }
   });
 
-  // 处理在文件管理器中显示文件的请求
+  // 处理在文件管理器中显示文件的请求（打开文件夹并选中文件）
   ipcMain.handle('file:showInFolder', async (event, filePath) => {
     try {
-      if (!fs.existsSync(filePath)) {
-        const dir = path.dirname(filePath);
-        if (fs.existsSync(dir)) {
+      if (!filePath) {
+        return { success: false, error: '文件路径为空' };
+      }
+
+      const dir = path.dirname(filePath);
+      
+      // 如果文件存在，在 Windows 上使用 explorer /select 来选中文件
+      if (fs.existsSync(filePath)) {
+        if (process.platform === 'win32') {
+          // Windows: 使用 explorer /select 打开并选中文件
+          // 注意：路径需要用双引号包裹，且 /select, 和路径之间不能有空格
+          const escapedPath = filePath.replace(/\//g, '\\');
+          exec(`explorer /select,"${escapedPath}"`);
+        } else if (process.platform === 'darwin') {
+          // macOS: 使用 open -R 来选中文件
+          spawn('open', ['-R', filePath]);
+        } else {
+          // Linux: 只能打开目录
           await shell.openPath(dir);
-          return { success: true };
         }
-        return { success: false, error: '文件或目录不存在' };
+        return { success: true };
       }
       
-      await shell.openPath(path.dirname(filePath));
-      return { success: true };
+      // 文件不存在，尝试打开父目录
+      if (fs.existsSync(dir)) {
+        await shell.openPath(dir);
+        return { success: true };
+      }
+      
+      return { success: false, error: '文件或目录不存在' };
     } catch (error) {
       console.error('打开文件夹失败:', error);
       return { success: false, error: error.message };

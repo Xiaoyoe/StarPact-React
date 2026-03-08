@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Clapperboard, FileType, Music, Terminal as TerminalIcon, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon } from 'lucide-react';
+import { Clapperboard, FileType, Music, Terminal as TerminalIcon, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon, FileImage } from 'lucide-react';
 import { Tabs, ProgressBar } from '@/components/ffmpeg';
 import { FormatConvert } from './FormatConvert';
 import { AudioProcess } from './AudioProcess';
 import { AdvancedTools } from './AdvancedTools';
 import { CommandBuilder } from './CommandBuilder';
 import { IcoConverter } from './IcoConverter';
+import { ImageFormatConvert } from './ImageFormatConvert';
 import { FFmpegConfigModal } from '@/components/FFmpegConfigModal';
 import { useFFmpegStore, type ProcessingModule, type ProcessingTask } from '@/stores/ffmpegStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -266,6 +267,7 @@ export function MediaToolsPage() {
     { key: 'audio', label: '音频处理', icon: <Music className="w-4 h-4" /> },
     { key: 'advanced', label: '高级工具', icon: <Settings className="w-4 h-4" /> },
     { key: 'ico', label: 'ICO转换', icon: <ImageIcon className="w-4 h-4" /> },
+    { key: 'imageFormat', label: '图片转换', icon: <FileImage className="w-4 h-4" /> },
     { key: 'command', label: '命令构建', icon: <TerminalIcon className="w-4 h-4" /> },
   ];
 
@@ -279,6 +281,8 @@ export function MediaToolsPage() {
         return <AdvancedTools />;
       case 'ico':
         return <IcoConverter />;
+      case 'imageFormat':
+        return <ImageFormatConvert />;
       case 'command':
         return <CommandBuilder />;
       default:
