@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle, Image as ImageIcon, AlertTriangle, Maximize2, Monitor
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle, Image as ImageIcon, AlertTriangle, Maximize2, Monitor, Download
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -14,6 +14,7 @@ import { ConversationContextMenu } from '@/components/ConversationContextMenu';
 import { WallpaperList } from '@/components/WallpaperList';
 import { BackgroundStorage, type CustomBackground } from '@/services/storage/BackgroundStorage';
 import { LocalImage } from '@/components/LocalImage';
+import { DownloadGuideModal } from '@/components/DownloadGuideModal';
 
 interface PanelItem {
   id: string;
@@ -71,8 +72,9 @@ export function Sidebar() {
   const [previewWallpaperInfo, setPreviewWallpaperInfo] = useState<{ name: string; size?: number; path?: string } | null>(null);
   const [customBackgrounds, setCustomBackgrounds] = useState<CustomBackground[]>([]);
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
+  const [downloadGuideOpen, setDownloadGuideOpen] = useState(false);
   
-  const [panelOrder, setPanelOrder] = useState<string[]>(['model', 'performance', 'logs', 'wallpaper', 'database']);
+  const [panelOrder, setPanelOrder] = useState<string[]>(['model', 'performance', 'logs', 'wallpaper', 'database', 'download-guide']);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const dragNodeRef = useRef<HTMLDivElement | null>(null);
@@ -241,6 +243,13 @@ export function Sidebar() {
       title: '数据库管理',
       subtitle: '查看本地存储数据',
       onClick: () => setDataManagerOpen(true),
+    },
+    {
+      id: 'download-guide',
+      icon: <Download size={14} />,
+      title: '下载指南',
+      subtitle: 'Ollama与FFmpeg安装',
+      onClick: () => setDownloadGuideOpen(true),
     },
   ];
 
@@ -1237,6 +1246,11 @@ export function Sidebar() {
           }
         }}
         onClose={() => setContextMenu(prev => ({ ...prev, visible: false }))}
+      />
+
+      <DownloadGuideModal 
+        isOpen={downloadGuideOpen} 
+        onClose={() => setDownloadGuideOpen(false)} 
       />
     </>
   );

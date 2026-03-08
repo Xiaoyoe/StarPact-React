@@ -6,7 +6,7 @@ import {
   GallerySidebar,
   GalleryToolbar
 } from '@/components/GalleryComponents';
-import { ImageItem, ImageFolder, ViewMode, SortBy, SortOrder } from '@/types/gallery';
+import { ImageItem, ImageFolder, ViewMode } from '@/types/gallery';
 import sharp from 'sharp';
 import { GalleryStorage, ImageMetadata, ImageAlbum } from '@/services/storage/GalleryStorage';
 import { configStorage } from '@/services/storage/ConfigStorage';
@@ -197,9 +197,6 @@ export function GalleryPage() {
   const [activeFolderId, setActiveFolderId] = useState<string>('all');
   const [showSidebar, setShowSidebar] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [sortBy, setSortBy] = useState<SortBy>('date');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
-  const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showViewer, setShowViewer] = useState<boolean>(false);
   const [viewerIndex, setViewerIndex] = useState<number>(0);
@@ -362,40 +359,15 @@ export function GalleryPage() {
   // 当前文件夹
 
 
-  // 过滤和排序后的图片
+  // 过滤后的图片
   const filteredImages = useMemo(() => {
-    let result = [...activeFolder.images];
+    const result = [...activeFolder.images];
 
-    // 搜索过滤
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      result = result.filter(img => 
-        img.name.toLowerCase().includes(query) ||
-        img.tags.some(tag => tag.toLowerCase().includes(query))
-      );
-    }
-
-    // 排序
-    result.sort((a, b) => {
-      let comparison = 0;
-      
-      switch (sortBy) {
-        case 'name':
-          comparison = a.name.localeCompare(b.name);
-          break;
-        case 'date':
-          comparison = new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime();
-          break;
-        case 'size':
-          comparison = b.size - a.size;
-          break;
-      }
-
-      return sortOrder === 'asc' ? comparison : -comparison;
-    });
+    // 默认按日期降序排序
+    result.sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime());
 
     return result;
-  }, [activeFolder, searchQuery, sortBy, sortOrder]);
+  }, [activeFolder]);
 
   // 处理图片选择
   const handleSelect = (id: string, multi: boolean) => {
@@ -788,12 +760,6 @@ export function GalleryPage() {
       <GalleryToolbar
         viewMode={viewMode}
         onViewModeChange={setViewMode}
-        sortBy={sortBy}
-        onSortByChange={setSortBy}
-        sortOrder={sortOrder}
-        onSortOrderChange={setSortOrder}
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
         selectedCount={selectedIds.size}
         totalCount={filteredImages.length}
         onSelectAll={handleSelectAll}

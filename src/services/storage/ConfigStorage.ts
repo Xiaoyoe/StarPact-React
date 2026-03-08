@@ -4,6 +4,8 @@ import { IndexedDBStorage } from './IndexedDBStorage';
 /**
  * 应用配置接口
  */
+export type SplashScreenType = 'full' | 'minimal' | 'fade' | 'none';
+
 export interface AppConfig {
   theme: string;
   fontSize: number;
@@ -29,6 +31,8 @@ export interface AppConfig {
   deleteConfirmEnabled: boolean;
   showTokenEstimate: boolean;
   showChatWelcome: boolean;
+  splashScreenType: SplashScreenType;
+  splashScreenEnabled: boolean;
   [key: string]: any;
 }
 
@@ -74,6 +78,8 @@ export class ConfigStorage {
       deleteConfirmEnabled: true,
       showTokenEstimate: true,
       showChatWelcome: true,
+      splashScreenType: 'full',
+      splashScreenEnabled: true,
     };
   }
 

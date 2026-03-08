@@ -1,12 +1,13 @@
 import { useState, useEffect, useMemo, memo } from 'react';
 import {
-  Palette, Type, Monitor, Info, RefreshCw, Download, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid, Maximize2, X
+  Palette, Type, Monitor, Info, RefreshCw, Download, MessageSquareQuote, LogOut, Bell, ScrollText, Trash2, AlertCircle, AlertTriangle, Bug, Search, ChevronLeft, ChevronRight, LayoutGrid, Maximize2, X, Sparkles, Database, Shield, HardDrive
 } from 'lucide-react';
 import { useStore } from '@/store';
 import type { LogEntry } from '@/store';
 import { motion } from 'framer-motion';
 import { BackgroundStorage, type CustomBackground } from '@/services/storage/BackgroundStorage';
 import { LocalImage } from '@/components/LocalImage';
+import { IndexedDBStorageStatus } from '@/components/IndexedDBStorageStatus';
 
 
 const logLevelConfig = {
@@ -97,9 +98,9 @@ const SettingsLogItem = memo(function SettingsLogItem({ log }: SettingsLogItemPr
 });
 
 import { configStorage } from '@/services/storage/ConfigStorage';
+import type { SplashScreenType } from '@/services/storage/ConfigStorage';
 import { useToast } from '@/components/Toast';
 import { AboutSection } from './about';
-import { PathPage } from './path';
 import { WallpaperList } from '@/components/WallpaperList';
 import { useWallpaperStyle } from '@/hooks';
 
@@ -118,7 +119,7 @@ export function SettingsPage() {
     logs, clearLogs,
   } = useStore();
 
-  const [activeTab, setActiveTab] = useState<'appearance' | 'wallpaper' | 'general' | 'path' | 'logs' | 'about'>('appearance');
+  const [activeTab, setActiveTab] = useState<'appearance' | 'wallpaper' | 'general' | 'data-management' | 'about'>('appearance');
   const [dailyQuoteEnabled, setDailyQuoteEnabled] = useState(false);
   const [dailyQuoteInterval, setDailyQuoteInterval] = useState<10 | 3600 | 86400>(10);
   const [chatNotificationEnabled, setChatNotificationEnabled] = useState(false);
@@ -136,6 +137,8 @@ export function SettingsPage() {
   const [previewWallpaper, setPreviewWallpaper] = useState<string>('');
   const [previewWallpaperInfo, setPreviewWallpaperInfo] = useState<{ name: string; size?: number; path?: string } | null>(null);
   const [isFullscreenPreview, setIsFullscreenPreview] = useState(false);
+  const [splashScreenEnabled, setSplashScreenEnabled] = useState(true);
+  const [splashScreenType, setSplashScreenType] = useState<SplashScreenType>('full');
   const LOG_PAGE_SIZE = 30;
   const toast = useToast();
   const wallpaperStyle = useWallpaperStyle(chatWallpaper);
@@ -172,6 +175,8 @@ export function SettingsPage() {
       const savedGalleryDefaultLayout = configStorage.get('galleryDefaultLayout');
       const savedAppNameDisplay = configStorage.get('appNameDisplay');
       const savedDefaultPage = configStorage.get('defaultPage');
+      const savedSplashScreenEnabled = configStorage.get('splashScreenEnabled');
+      const savedSplashScreenType = configStorage.get('splashScreenType');
 
       if (savedSendOnEnter !== undefined) setSendOnEnter(savedSendOnEnter);
       if (savedStoragePath) setStoragePath(savedStoragePath);
@@ -186,6 +191,8 @@ export function SettingsPage() {
       if (savedGalleryDefaultLayout) setGalleryDefaultLayout(savedGalleryDefaultLayout);
       if (savedAppNameDisplay) setAppNameDisplay(savedAppNameDisplay);
       if (savedDefaultPage) setDefaultPage(savedDefaultPage);
+      if (savedSplashScreenEnabled !== undefined) setSplashScreenEnabled(savedSplashScreenEnabled);
+      if (savedSplashScreenType) setSplashScreenType(savedSplashScreenType);
       setConfigLoaded(true);
     };
     loadSettings();
@@ -265,6 +272,18 @@ export function SettingsPage() {
     }
   }, [defaultPage, configLoaded]);
 
+  useEffect(() => {
+    if (configLoaded) {
+      configStorage.set('splashScreenEnabled', splashScreenEnabled);
+    }
+  }, [splashScreenEnabled, configLoaded]);
+
+  useEffect(() => {
+    if (configLoaded) {
+      configStorage.set('splashScreenType', splashScreenType);
+    }
+  }, [splashScreenType, configLoaded]);
+
 
 
   useEffect(() => {
@@ -311,8 +330,7 @@ export function SettingsPage() {
     { id: 'appearance' as const, label: '外观', icon: Palette },
     { id: 'wallpaper' as const, label: '壁纸', icon: Palette },
     { id: 'general' as const, label: '通用', icon: Monitor },
-    { id: 'path' as const, label: '路径', icon: RefreshCw },
-    { id: 'logs' as const, label: '日志', icon: ScrollText },
+    { id: 'data-management' as const, label: '数据', icon: Database },
     { id: 'about' as const, label: '关于', icon: Info },
   ];
 
@@ -390,156 +408,170 @@ export function SettingsPage() {
     >
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-8">
-        {activeTab === 'logs' ? (
+        {activeTab === 'data-management' ? (
           <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="h-full flex flex-col"
-            style={{ margin: '-2rem', padding: '2rem' }}
+            className="space-y-6"
           >
-            {/* Header */}
-            <div 
-              className="flex items-center justify-between mb-4 pb-4 border-b"
-              style={{ borderColor: 'var(--border-color)' }}
-            >
-              <div className="flex items-center gap-3">
-                <div 
-                  className="flex h-10 w-10 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: 'var(--primary-light)' }}
-                >
-                  <ScrollText size={20} style={{ color: 'var(--primary-color)' }} />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold" style={{ color: 'var(--text-primary)' }}>
-                    系统日志
-                  </h2>
-                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    共 {logs.length} 条记录，当前显示 {filteredLogs.length} 条
-                  </p>
-                </div>
+            {/* Storage Status Section */}
+            <section>
+              <div className="flex items-center gap-2 mb-4">
+                <HardDrive size={16} style={{ color: 'var(--primary-color)' }} />
+                <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  存储状态
+                </h3>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={clearLogs}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:scale-105"
-                  style={{ 
-                    color: 'var(--error-color)', 
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid rgba(239, 68, 68, 0.2)'
-                  }}
-                >
-                  <Trash2 size={14} /> 清空
-                </button>
-                <button
-                  onClick={handleExportLogs}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-medium transition-all hover:scale-105"
-                  style={{ 
-                    color: 'var(--text-secondary)', 
-                    backgroundColor: 'var(--bg-secondary)',
-                    border: '1px solid var(--border-color)'
-                  }}
-                >
-                  <Download size={14} /> 导出
-                </button>
-              </div>
-            </div>
-
-            {/* Search & Filter */}
-            <div className="flex items-center gap-3 mb-4">
-              {/* Search */}
-              <div 
-                className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 max-w-xs"
-                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+              <IndexedDBStorageStatus onRefresh={() => toast.success('存储状态已刷新')} />
+              
+              <div
+                className="rounded-xl p-4 mt-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
               >
-                <Search size={14} style={{ color: 'var(--text-tertiary)' }} />
-                <input
-                  type="text"
-                  placeholder="搜索日志..."
-                  value={logSearchQuery}
-                  onChange={handleLogSearchChange}
-                  className="bg-transparent text-sm outline-none flex-1"
-                  style={{ color: 'var(--text-primary)' }}
-                />
+                <h4 className="mb-2 text-xs font-medium flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                  <Shield size={12} style={{ color: 'var(--success-color)' }} /> 安全提示
+                </h4>
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  IndexedDB 数据仅存储在本地浏览器中，不会上传至任何远程服务器。
+                  清空浏览器数据可能会导致数据丢失，建议定期导出备份。
+                </p>
               </div>
+            </section>
 
-              {/* Filter Pills */}
-              <div className="flex items-center gap-1">
-                {[
-                  { id: 'all', label: '全部', color: 'var(--primary-color)' },
-                  { id: 'info', label: '信息', color: '#3B82F6' },
-                  { id: 'warn', label: '警告', color: '#F59E0B' },
-                  { id: 'error', label: '错误', color: '#EF4444' },
-                  { id: 'debug', label: '调试', color: '#8B5CF6' },
-                ].map(level => (
+            {/* Logs Section */}
+            <section>
+              <div 
+                className="flex items-center justify-between mb-4 pb-3 border-b"
+                style={{ borderColor: 'var(--border-color)' }}
+              >
+                <div className="flex items-center gap-2">
+                  <ScrollText size={16} style={{ color: 'var(--primary-color)' }} />
+                  <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    系统日志
+                  </h3>
+                  <span 
+                    className="text-xs px-2 py-0.5 rounded-md"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
+                  >
+                    {logs.length} 条记录
+                  </span>
+                </div>
+                <div className="flex gap-2">
                   <button
-                    key={level.id}
-                    onClick={() => handleLogFilterChange(level.id)}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium"
-                    style={{
-                      backgroundColor: logFilterLevel === level.id ? level.color : 'var(--bg-secondary)',
-                      color: logFilterLevel === level.id ? 'white' : 'var(--text-secondary)',
-                      border: `1px solid ${logFilterLevel === level.id ? level.color : 'var(--border-color)'}`,
+                    onClick={clearLogs}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all hover:scale-105"
+                    style={{ 
+                      color: 'var(--error-color)', 
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                      border: '1px solid rgba(239, 68, 68, 0.2)'
                     }}
                   >
-                    {level.label} ({logCounts[level.id as keyof typeof logCounts]})
+                    <Trash2 size={12} /> 清空
                   </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Log List */}
-            <div 
-              className="flex-1 overflow-y-auto rounded-xl p-2 space-y-2"
-              style={{ backgroundColor: 'var(--bg-secondary)' }}
-            >
-              {paginatedLogs.length === 0 ? (
-                <div className="flex h-full items-center justify-center">
-                  <div className="text-center">
-                    <div 
-                      className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl"
-                      style={{ backgroundColor: 'var(--bg-tertiary)' }}
-                    >
-                      <Info size={32} style={{ color: 'var(--text-tertiary)' }} />
-                    </div>
-                    <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                      {logSearchQuery ? '未找到匹配的日志' : '暂无日志记录'}
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                      {logSearchQuery ? '尝试修改搜索关键词' : '系统操作将自动记录日志'}
-                    </p>
-                  </div>
+                  <button
+                    onClick={handleExportLogs}
+                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all hover:scale-105"
+                    style={{ 
+                      color: 'var(--text-secondary)', 
+                      backgroundColor: 'var(--bg-secondary)',
+                      border: '1px solid var(--border-color)'
+                    }}
+                  >
+                    <Download size={12} /> 导出
+                  </button>
                 </div>
-              ) : (
-                paginatedLogs.map((log) => (
-                  <SettingsLogItem key={log.id} log={log} />
-                ))
-              )}
-            </div>
-
-            {/* Pagination */}
-            {logTotalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t" style={{ borderColor: 'var(--border-color)' }}>
-                <button
-                  onClick={() => setLogCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={logCurrentPage === 1}
-                  className="p-1 rounded disabled:opacity-30"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  <ChevronLeft size={16} />
-                </button>
-                <span className="text-xs px-3" style={{ color: 'var(--text-secondary)' }}>
-                  第 {logCurrentPage} / {logTotalPages} 页
-                </span>
-                <button
-                  onClick={() => setLogCurrentPage(p => Math.min(logTotalPages, p + 1))}
-                  disabled={logCurrentPage === logTotalPages}
-                  className="p-1 rounded disabled:opacity-30"
-                  style={{ color: 'var(--text-secondary)' }}
-                >
-                  <ChevronRight size={16} />
-                </button>
               </div>
-            )}
+
+              {/* Search & Filter */}
+              <div className="flex items-center gap-3 mb-4">
+                <div 
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg flex-1 max-w-xs"
+                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+                >
+                  <Search size={14} style={{ color: 'var(--text-tertiary)' }} />
+                  <input
+                    type="text"
+                    placeholder="搜索日志..."
+                    value={logSearchQuery}
+                    onChange={handleLogSearchChange}
+                    className="bg-transparent text-sm outline-none flex-1"
+                    style={{ color: 'var(--text-primary)' }}
+                  />
+                </div>
+
+                <div className="flex items-center gap-1 flex-wrap">
+                  {[
+                    { id: 'all', label: '全部', color: 'var(--primary-color)' },
+                    { id: 'info', label: '信息', color: '#3B82F6' },
+                    { id: 'warn', label: '警告', color: '#F59E0B' },
+                    { id: 'error', label: '错误', color: '#EF4444' },
+                    { id: 'debug', label: '调试', color: '#8B5CF6' },
+                  ].map(level => (
+                    <button
+                      key={level.id}
+                      onClick={() => handleLogFilterChange(level.id)}
+                      className="px-2.5 py-1 rounded-md text-xs font-medium"
+                      style={{
+                        backgroundColor: logFilterLevel === level.id ? level.color : 'var(--bg-secondary)',
+                        color: logFilterLevel === level.id ? 'white' : 'var(--text-secondary)',
+                        border: `1px solid ${logFilterLevel === level.id ? level.color : 'var(--border-color)'}`,
+                      }}
+                    >
+                      {level.label} ({logCounts[level.id as keyof typeof logCounts]})
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Log List */}
+              <div 
+                className="rounded-xl overflow-hidden"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+              >
+                <div 
+                  className="max-h-[400px] overflow-y-auto p-2 space-y-1.5"
+                >
+                  {paginatedLogs.length === 0 ? (
+                    <div className="flex h-32 items-center justify-center">
+                      <div className="text-center">
+                        <Info size={24} className="mx-auto mb-2" style={{ color: 'var(--text-tertiary)' }} />
+                        <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                          {logSearchQuery ? '未找到匹配的日志' : '暂无日志记录'}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    paginatedLogs.map((log) => (
+                      <SettingsLogItem key={log.id} log={log} />
+                    ))
+                  )}
+                </div>
+
+                {logTotalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 p-2 border-t" style={{ borderColor: 'var(--border-color)' }}>
+                    <button
+                      onClick={() => setLogCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={logCurrentPage === 1}
+                      className="p-1 rounded disabled:opacity-30"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      <ChevronLeft size={14} />
+                    </button>
+                    <span className="text-xs px-2" style={{ color: 'var(--text-secondary)' }}>
+                      {logCurrentPage} / {logTotalPages}
+                    </span>
+                    <button
+                      onClick={() => setLogCurrentPage(p => Math.min(logTotalPages, p + 1))}
+                      disabled={logCurrentPage === logTotalPages}
+                      className="p-1 rounded disabled:opacity-30"
+                      style={{ color: 'var(--text-secondary)' }}
+                    >
+                      <ChevronRight size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </section>
           </motion.div>
         ) : (
           <>
@@ -1065,20 +1097,64 @@ export function SettingsPage() {
                 </button>
               </div>
 
-
-
-
-
-
+              {/* Splash Screen Settings */}
+              <div
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                    <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>启动动画</div>
+                  </div>
+                  <button
+                    onClick={() => setSplashScreenEnabled(!splashScreenEnabled)}
+                    className="relative h-6 w-11 rounded-full transition-colors"
+                    style={{ backgroundColor: splashScreenEnabled ? 'var(--primary-color)' : 'var(--bg-tertiary)' }}
+                  >
+                    <motion.div
+                      animate={{ x: splashScreenEnabled ? 22 : 2 }}
+                      className="absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm"
+                    />
+                  </button>
+                </div>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                  程序启动时显示动画效果，                </p>
+                {splashScreenEnabled && (
+                  <div className="space-y-2">
+                    <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>选择动画样式：</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { value: 'full', label: '完整动画', desc: '精美启动画面' },
+                        { value: 'minimal', label: '简约动画', desc: '加载指示器' },
+                        { value: 'fade', label: '淡入淡出', desc: '简单过渡' }
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          onClick={() => setSplashScreenType(option.value as SplashScreenType)}
+                          className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                          style={{
+                            backgroundColor: splashScreenType === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                            color: splashScreenType === option.value ? 'white' : 'var(--text-secondary)',
+                            border: `1px solid ${splashScreenType === option.value ? 'var(--primary-color)' : 'var(--border-color)'}`
+                          }}
+                        >
+                          <div className="font-medium">{option.label}</div>
+                          <div className="text-[10px] opacity-70 mt-0.5">{option.desc}</div>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] mt-2" style={{ color: 'var(--text-tertiary)' }}>
+                      选择"无"可完全关闭启动动画
+                    </p>
+                  </div>
+                )}
+              </div>
             </motion.div>
           )}
 
           {activeTab === 'about' && (
             <AboutSection />
-          )}
-          
-          {activeTab === 'path' && (
-            <PathPage />
           )}
               </div>
             )}

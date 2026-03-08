@@ -6,10 +6,10 @@ import {
   X as CloseIcon, ChevronLeft, ChevronRight, ZoomIn, ZoomOut,
   Maximize2, Info, ArrowUpDown as ArrowUpDownIcon, ChevronDown,
   Images, FolderOpen, Layers, Mountain, Building, Plane, RectangleVertical, ChevronRight as ChevronRightIcon, Camera,
-  Grid3X3, List, LayoutGrid, Search, SortAsc, SortDesc,
+  Grid3X3, List, LayoutGrid,
   CheckSquare, PanelLeftClose, PanelLeftOpen, Upload
 } from 'lucide-react';
-import { ImageItem, ImageFolder, ViewMode, SortBy, SortOrder, EditState, defaultEditState } from '@/types/gallery';
+import { ImageItem, ImageFolder, ViewMode, EditState, defaultEditState } from '@/types/gallery';
 import { cn } from '@/utils/cn';
 
 // ImageEditor Component
@@ -1085,12 +1085,6 @@ export function GallerySidebar({ folders, activeFolderId, onSelectFolder }: Side
 interface ToolbarProps {
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
-  sortBy: SortBy;
-  onSortByChange: (sort: SortBy) => void;
-  sortOrder: SortOrder;
-  onSortOrderChange: (order: SortOrder) => void;
-  searchQuery: string;
-  onSearchChange: (query: string) => void;
   selectedCount: number;
   totalCount: number;
   onSelectAll: () => void;
@@ -1107,9 +1101,6 @@ interface ToolbarProps {
 
 export function GalleryToolbar({
   viewMode, onViewModeChange,
-  sortBy, onSortByChange,
-  sortOrder, onSortOrderChange,
-  searchQuery, onSearchChange,
   selectedCount, totalCount,
   onSelectAll, onDeselectAll, onDeleteSelected,
   onImport, onImportFolder, onClearAlbum,
@@ -1123,12 +1114,6 @@ export function GalleryToolbar({
     { mode: 'list', icon: <List size={16} />, label: '列表' },
   ];
 
-  const sortOptions: { value: SortBy; label: string }[] = [
-    { value: 'name', label: '名称' },
-    { value: 'date', label: '日期' },
-    { value: 'size', label: '大小' },
-  ];
-
   return (
     <div className="h-16 flex items-center justify-between px-4 flex-shrink-0">
       <div className="flex items-center gap-3">
@@ -1138,86 +1123,34 @@ export function GalleryToolbar({
         </span>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="relative group">
-          <Search size={14} style={{ color: 'var(--text-tertiary)' }} className="absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="搜索图片..."
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            className="w-48 rounded-lg pl-8 pr-8 py-1.5 text-xs focus:outline-none focus:ring-1 transition-all hover:border-[var(--primary-color)]"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              border: '1px solid var(--border-color)',
-              color: 'var(--text-secondary)',
-            }}
-          />
-          {searchQuery && (
-            <button
-              onClick={() => onSearchChange('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 transition-colors hover:text-[var(--text-primary)]"
-              style={{ color: 'var(--text-tertiary)' }}
-            >
-              <CloseIcon size={12} />
-            </button>
-          )}
-        </div>
-
-        <div className="h-5 w-px" style={{ backgroundColor: 'var(--border-color)' }} />
-
-        <div className="flex items-center gap-1">
-          <select
-            value={sortBy}
-            onChange={(e) => onSortByChange(e.target.value as SortBy)}
-            className="rounded-lg px-2 py-1.5 text-xs focus:outline-none cursor-pointer hover:border-[var(--primary-color)] transition-colors"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              border: '1px solid var(--border-color)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            {sortOptions.map(opt => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
-            className="p-1.5 rounded-lg transition-all duration-200 hover:bg-[var(--bg-tertiary)] hover:scale-110"
-            style={{ backgroundColor: 'transparent', color: 'var(--text-secondary)' }}
-            title={sortOrder === 'asc' ? '升序' : '降序'}
-          >
-            {sortOrder === 'asc' ? <SortAsc size={16} /> : <SortDesc size={16} />}
-          </button>
-        </div>
-
-        <div className="h-5 w-px" style={{ backgroundColor: 'var(--border-color)' }} />
-
-        <div className="flex items-center rounded-lg p-0.5" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-          {viewModes.map(vm => (
-            <button
-              key={vm.mode}
-              onClick={() => onViewModeChange(vm.mode)}
-              className={cn(
-                "p-1.5 rounded-md transition-all duration-200",
-                viewMode === vm.mode 
-                  ? "hover:opacity-90" 
-                  : "hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
-              )}
-              style={{
-                backgroundColor: viewMode === vm.mode ? 'var(--primary-color)' : 'transparent',
-                color: viewMode === vm.mode ? 'white' : 'var(--text-tertiary)',
-                boxShadow: viewMode === vm.mode ? '0 0 10px rgba(0, 0, 0, 0.2)' : 'none'
-              }}
-              title={vm.label}
-            >
-              {vm.icon}
-            </button>
-          ))}
+      <div className="absolute left-1/2 -translate-x-1/2 flex items-center">
+        <div className="flex items-center rounded-xl p-1 gap-1" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+          {viewModes.map(vm => {
+            const isActive = viewMode === vm.mode;
+            return (
+              <button
+                key={vm.mode}
+                onClick={() => onViewModeChange(vm.mode)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
+                  isActive 
+                    ? "shadow-md" 
+                    : "hover:bg-[var(--bg-secondary)]"
+                )}
+                style={{
+                  backgroundColor: isActive ? 'var(--primary-color)' : 'transparent',
+                  color: isActive ? 'white' : 'var(--text-tertiary)',
+                }}
+              >
+                {vm.icon}
+                <span>{vm.label}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 ml-auto">
         {selectedCount > 0 ? (
           <div className="flex items-center gap-2">
             <span className="text-xs" style={{ color: 'var(--primary-color)' }}>
