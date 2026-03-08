@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Clapperboard, Zap, Stamp, ImageIcon, Camera, AlertCircle, Square, Play, Info, FileType, Upload, Sparkles, X, Maximize2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Clapperboard, Zap, Stamp, ImageIcon, Camera, AlertCircle, Square, Play, Info, FileType, Upload, Sparkles, X, Maximize2, Eraser } from 'lucide-react';
 import { SectionCard, FileDropZone, FormRow, Toggle, Slider, ProgressBar, Terminal, Badge } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ffmpegRendererService, type MediaInfo } from '@/services/ffmpeg/FFmpegRendererService';
@@ -60,7 +60,123 @@ export function AdvancedTools() {
   const [ssInterval, setSSInterval] = useState(5);
   const [ssFormat, setSSFormat] = useState('PNG');
   
+  const [rmWmX, setRmWmX] = useState(10);
+  const [rmWmY, setRmWmY] = useState(10);
+  const [rmWmWidth, setRmWmWidth] = useState(100);
+  const [rmWmHeight, setRmWmHeight] = useState(50);
+  const [rmWmMode, setRmWmMode] = useState<'blur' | 'fill' | 'inpaint'>('blur');
+  const [rmWmBlurStrength, setRmWmBlurStrength] = useState(4);
+  const [rmWmOutputFormat, setRmWmOutputFormat] = useState<'video' | 'image'>('video');
+  const [rmWmImageFormat, setRmWmImageFormat] = useState('png');
+  
+  const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [resizeHandle, setResizeHandle] = useState<'nw' | 'ne' | 'sw' | 'se' | null>(null);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [initialRect, setInitialRect] = useState({ x: 0, y: 0, width: 0, height: 0 });
+  const selectionBoxRef = useRef<HTMLDivElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  
   const [customFileName, setCustomFileName] = useState('');
+
+  const mainFile = inputFiles.length > mainFileIndex ? inputFiles[mainFileIndex] : null;
+  const hasThumbnail = showVideoThumbnail && mainFile && mainFile.thumbnail;
+
+  const handleMouseDown = useCallback((e: React.MouseEvent, handle?: 'nw' | 'ne' | 'sw' | 'se') => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (handle) {
+      setIsResizing(true);
+      setResizeHandle(handle);
+    } else {
+      setIsDragging(true);
+    }
+    
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setInitialRect({ x: rmWmX, y: rmWmY, width: rmWmWidth, height: rmWmHeight });
+  }, [rmWmX, rmWmY, rmWmWidth, rmWmHeight]);
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging && !isResizing) return;
+    if (!previewContainerRef.current || !mainFile?.mediaInfo?.video) return;
+    
+    const container = previewContainerRef.current;
+    const rect = container.getBoundingClientRect();
+    const videoWidth = mainFile.mediaInfo.video.width;
+    const videoHeight = mainFile.mediaInfo.video.height;
+    
+    const scaleX = videoWidth / rect.width;
+    const scaleY = videoHeight / rect.height;
+    
+    const deltaX = (e.clientX - dragStart.x) * scaleX;
+    const deltaY = (e.clientY - dragStart.y) * scaleY;
+    
+    if (isDragging) {
+      const newX = Math.max(0, Math.min(videoWidth - rmWmWidth, initialRect.x + deltaX));
+      const newY = Math.max(0, Math.min(videoHeight - rmWmHeight, initialRect.y + deltaY));
+      setRmWmX(Math.round(newX));
+      setRmWmY(Math.round(newY));
+    } else if (isResizing && resizeHandle) {
+      let newWidth = initialRect.width;
+      let newHeight = initialRect.height;
+      let newX = initialRect.x;
+      let newY = initialRect.y;
+      
+      switch (resizeHandle) {
+        case 'se':
+          newWidth = Math.max(20, Math.min(videoWidth - initialRect.x, initialRect.width + deltaX));
+          newHeight = Math.max(20, Math.min(videoHeight - initialRect.y, initialRect.height + deltaY));
+          break;
+        case 'sw':
+          newWidth = Math.max(20, initialRect.width - deltaX);
+          newHeight = Math.max(20, Math.min(videoHeight - initialRect.y, initialRect.height + deltaY));
+          if (newWidth > 20) {
+            newX = Math.max(0, initialRect.x + (initialRect.width - newWidth));
+          }
+          break;
+        case 'ne':
+          newWidth = Math.max(20, Math.min(videoWidth - initialRect.x, initialRect.width + deltaX));
+          newHeight = Math.max(20, initialRect.height - deltaY);
+          if (newHeight > 20) {
+            newY = Math.max(0, initialRect.y + (initialRect.height - newHeight));
+          }
+          break;
+        case 'nw':
+          newWidth = Math.max(20, initialRect.width - deltaX);
+          newHeight = Math.max(20, initialRect.height - deltaY);
+          if (newWidth > 20) {
+            newX = Math.max(0, initialRect.x + (initialRect.width - newWidth));
+          }
+          if (newHeight > 20) {
+            newY = Math.max(0, initialRect.y + (initialRect.height - newHeight));
+          }
+          break;
+      }
+      
+      setRmWmX(Math.round(newX));
+      setRmWmY(Math.round(newY));
+      setRmWmWidth(Math.round(newWidth));
+      setRmWmHeight(Math.round(newHeight));
+    }
+  }, [isDragging, isResizing, resizeHandle, dragStart, initialRect, mainFile, rmWmWidth, rmWmHeight]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDragging(false);
+    setIsResizing(false);
+    setResizeHandle(null);
+  }, []);
+
+  useEffect(() => {
+    if (isDragging || isResizing) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      return () => {
+        window.removeEventListener('mousemove', handleMouseMove);
+        window.removeEventListener('mouseup', handleMouseUp);
+      };
+    }
+  }, [isDragging, isResizing, handleMouseMove, handleMouseUp]);
 
   useEffect(() => {
     checkConfig();
@@ -130,7 +246,12 @@ export function AdvancedTools() {
     const outputDir = outputPath || inputDir;
     const sep = outputDir.includes('\\') ? '\\' : '/';
     
-    const finalName = customName && customName.trim() ? customName.trim() : `${inputName}${suffix ? `_${suffix}` : ''}`;
+    const now = new Date();
+    const dateTimeSuffix = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+    
+    const finalName = customName && customName.trim() 
+      ? customName.trim() 
+      : `${inputName}${suffix ? `_${suffix}` : ''}_${dateTimeSuffix}`;
     
     return outputDir ? `${outputDir}${sep}${finalName}.${extension}` : `${finalName}.${extension}`;
   };
@@ -197,6 +318,20 @@ export function AdvancedTools() {
         });
         break;
 
+      case 'removeWatermark':
+        const rmWmExt = rmWmOutputFormat === 'image' ? rmWmImageFormat : 'mp4';
+        outputFilePath = generateUniquePath(getOutputFilePath(mainFile, rmWmExt, 'nowatermark', customFileName));
+        args = ffmpegRendererService.buildRemoveWatermarkArgs(mainFile.path, outputFilePath, {
+          x: rmWmX,
+          y: rmWmY,
+          width: rmWmWidth,
+          height: rmWmHeight,
+          mode: rmWmMode,
+          blurStrength: rmWmBlurStrength,
+          outputFormat: rmWmOutputFormat,
+        });
+        break;
+
       default:
         toast.error('该功能暂未实现');
         return;
@@ -232,9 +367,6 @@ export function AdvancedTools() {
 
   const currentModuleTask = tasks.find(t => t.module === 'advancedTools' && activeTaskIds.has(t.id));
   const isCurrentModuleProcessing = !!currentModuleTask;
-
-  const mainFile = inputFiles.length > mainFileIndex ? inputFiles[mainFileIndex] : null;
-  const hasThumbnail = showVideoThumbnail && mainFile && mainFile.thumbnail;
 
   return (
     <div className="space-y-4">
@@ -278,6 +410,7 @@ export function AdvancedTools() {
         {[
           { key: 'compress', label: '视频压缩', icon: <Zap className="w-4 h-4" /> },
           { key: 'watermark', label: '添加水印', icon: <Stamp className="w-4 h-4" /> },
+          { key: 'removeWatermark', label: '去除水印', icon: <Eraser className="w-4 h-4" /> },
           { key: 'gif', label: 'GIF生成', icon: <ImageIcon className="w-4 h-4" /> },
           { key: 'screenshot', label: '视频截图', icon: <Camera className="w-4 h-4" /> },
         ].map((t) => (
@@ -383,7 +516,7 @@ export function AdvancedTools() {
                 className="px-3 py-2 rounded-lg text-xs"
                 style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
               >
-                .{tab === 'gif' ? 'gif' : tab === 'screenshot' ? ssFormat.toLowerCase() : 'mp4'}
+                .{tab === 'gif' ? 'gif' : tab === 'screenshot' ? ssFormat.toLowerCase() : tab === 'removeWatermark' ? (rmWmOutputFormat === 'image' ? rmWmImageFormat : 'mp4') : 'mp4'}
               </span>
             </div>
           </div>
@@ -630,6 +763,248 @@ export function AdvancedTools() {
                     ))}
                   </div>
                 </FormRow>
+              </div>
+            </div>
+          )}
+
+          {tab === 'removeWatermark' && (
+            <div 
+              className="rounded-xl p-4"
+              style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <Eraser className="w-4 h-4" style={{ color: 'var(--warning-color)' }} />
+                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>去除水印</span>
+              </div>
+              <div className="space-y-4">
+                <div 
+                  className="p-3 rounded-lg"
+                  style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)' }}
+                >
+                  <div className="flex items-start gap-2">
+                    <Info className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: 'var(--warning-color)' }} />
+                    <div className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                      <p className="mb-1">在下方预览图中拖拽矩形框来选择水印区域，也可以手动输入坐标。</p>
+                      <p>拖拽框体移动位置，拖拽四角调整大小。</p>
+                    </div>
+                  </div>
+                </div>
+
+                {hasThumbnail && mainFile?.mediaInfo?.video && (
+                  <div 
+                    className="rounded-lg overflow-hidden"
+                    style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                  >
+                    <div className="text-xs px-3 py-2" style={{ color: 'var(--text-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                      水印区域选择（在图片上拖拽框体调整位置和大小）
+                    </div>
+                    <div 
+                      ref={previewContainerRef}
+                      className="relative"
+                      style={{ 
+                        maxWidth: '100%',
+                        aspectRatio: `${mainFile.mediaInfo.video.width} / ${mainFile.mediaInfo.video.height}`,
+                      }}
+                    >
+                      <img 
+                        src={mainFile.thumbnail!} 
+                        alt="视频预览" 
+                        className="w-full h-full object-contain"
+                        draggable={false}
+                      />
+                      <div 
+                        ref={selectionBoxRef}
+                        className="absolute cursor-move"
+                        style={{
+                          left: `${(rmWmX / mainFile.mediaInfo.video.width) * 100}%`,
+                          top: `${(rmWmY / mainFile.mediaInfo.video.height) * 100}%`,
+                          width: `${(rmWmWidth / mainFile.mediaInfo.video.width) * 100}%`,
+                          height: `${(rmWmHeight / mainFile.mediaInfo.video.height) * 100}%`,
+                          border: '2px solid var(--warning-color)',
+                          backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                          boxShadow: '0 0 0 1px rgba(0, 0, 0, 0.5)',
+                        }}
+                        onMouseDown={(e) => handleMouseDown(e)}
+                      >
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          <span className="text-[10px] text-white bg-black/50 px-1.5 py-0.5 rounded">
+                            {rmWmWidth}×{rmWmHeight}
+                          </span>
+                        </div>
+                        <div 
+                          className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white rounded-full cursor-nw-resize shadow-md"
+                          style={{ border: '2px solid var(--warning-color)' }}
+                          onMouseDown={(e) => handleMouseDown(e, 'nw')}
+                        />
+                        <div 
+                          className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white rounded-full cursor-ne-resize shadow-md"
+                          style={{ border: '2px solid var(--warning-color)' }}
+                          onMouseDown={(e) => handleMouseDown(e, 'ne')}
+                        />
+                        <div 
+                          className="absolute -bottom-1.5 -left-1.5 w-3 h-3 bg-white rounded-full cursor-sw-resize shadow-md"
+                          style={{ border: '2px solid var(--warning-color)' }}
+                          onMouseDown={(e) => handleMouseDown(e, 'sw')}
+                        />
+                        <div 
+                          className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-white rounded-full cursor-se-resize shadow-md"
+                          style={{ border: '2px solid var(--warning-color)' }}
+                          onMouseDown={(e) => handleMouseDown(e, 'se')}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {!hasThumbnail && (
+                  <div 
+                    className="p-8 rounded-lg text-center"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px dashed var(--border-color)' }}
+                  >
+                    <ImageIcon className="w-12 h-12 mx-auto mb-3" style={{ color: 'var(--text-tertiary)' }} />
+                    <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                      请先导入视频文件以显示预览图
+                    </p>
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormRow label="起始 X 坐标">
+                    <input 
+                      type="number"
+                      className="w-full rounded-lg px-3 py-2 text-xs outline-none"
+                      style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                      value={rmWmX}
+                      onChange={e => setRmWmX(Number(e.target.value))}
+                      min={0}
+                    />
+                  </FormRow>
+                  <FormRow label="起始 Y 坐标">
+                    <input 
+                      type="number"
+                      className="w-full rounded-lg px-3 py-2 text-xs outline-none"
+                      style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                      value={rmWmY}
+                      onChange={e => setRmWmY(Number(e.target.value))}
+                      min={0}
+                    />
+                  </FormRow>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <FormRow label="区域宽度">
+                    <input 
+                      type="number"
+                      className="w-full rounded-lg px-3 py-2 text-xs outline-none"
+                      style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                      value={rmWmWidth}
+                      onChange={e => setRmWmWidth(Number(e.target.value))}
+                      min={1}
+                    />
+                  </FormRow>
+                  <FormRow label="区域高度">
+                    <input 
+                      type="number"
+                      className="w-full rounded-lg px-3 py-2 text-xs outline-none"
+                      style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+                      value={rmWmHeight}
+                      onChange={e => setRmWmHeight(Number(e.target.value))}
+                      min={1}
+                    />
+                  </FormRow>
+                </div>
+
+                <div>
+                  <label className="text-xs mb-2 block" style={{ color: 'var(--text-secondary)' }}>去除模式</label>
+                  <div className="flex gap-2">
+                    {[
+                      { key: 'blur', label: '模糊遮盖', desc: '使用模糊效果遮盖水印区域' },
+                      { key: 'fill', label: '填充遮盖', desc: '使用周围像素填充水印区域' },
+                      { key: 'inpaint', label: '智能修复', desc: '自动插值修复水印区域' },
+                    ].map(m => (
+                      <button 
+                        key={m.key} 
+                        onClick={() => setRmWmMode(m.key as 'blur' | 'fill' | 'inpaint')} 
+                        className="flex-1 p-3 rounded-lg text-left transition-all"
+                        style={{
+                          backgroundColor: rmWmMode === m.key ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-tertiary)',
+                          border: `1px solid ${rmWmMode === m.key ? 'var(--warning-color)' : 'transparent'}`,
+                        }}
+                      >
+                        <div className="text-xs font-medium" style={{ color: rmWmMode === m.key ? 'var(--warning-color)' : 'var(--text-primary)' }}>{m.label}</div>
+                        <div className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{m.desc}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {rmWmMode === 'blur' && (
+                  <Slider label="模糊强度" value={rmWmBlurStrength} onChange={setRmWmBlurStrength} min={1} max={20} suffix="" />
+                )}
+
+                <div>
+                  <label className="text-xs mb-2 block" style={{ color: 'var(--text-secondary)' }}>导出格式</label>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => setRmWmOutputFormat('video')} 
+                      className="flex-1 p-2 rounded-lg text-center transition-all"
+                      style={{
+                        backgroundColor: rmWmOutputFormat === 'video' ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-tertiary)',
+                        border: `1px solid ${rmWmOutputFormat === 'video' ? 'var(--warning-color)' : 'transparent'}`,
+                      }}
+                    >
+                      <div className="text-xs font-medium" style={{ color: rmWmOutputFormat === 'video' ? 'var(--warning-color)' : 'var(--text-primary)' }}>
+                        视频格式 (.mp4)
+                      </div>
+                    </button>
+                    <button 
+                      onClick={() => setRmWmOutputFormat('image')} 
+                      className="flex-1 p-2 rounded-lg text-center transition-all"
+                      style={{
+                        backgroundColor: rmWmOutputFormat === 'image' ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-tertiary)',
+                        border: `1px solid ${rmWmOutputFormat === 'image' ? 'var(--warning-color)' : 'transparent'}`,
+                      }}
+                    >
+                      <div className="text-xs font-medium" style={{ color: rmWmOutputFormat === 'image' ? 'var(--warning-color)' : 'var(--text-primary)' }}>
+                        图片格式
+                      </div>
+                    </button>
+                  </div>
+                </div>
+
+                {rmWmOutputFormat === 'image' && (
+                  <FormRow label="图片格式">
+                    <div className="flex gap-1.5">
+                      {['png', 'jpg', 'bmp', 'webp'].map(f => (
+                        <button key={f} onClick={() => setRmWmImageFormat(f)} className="px-3 py-1.5 rounded-md text-xs transition-all"
+                          style={{
+                            backgroundColor: rmWmImageFormat === f ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-tertiary)',
+                            color: rmWmImageFormat === f ? 'var(--warning-color)' : 'var(--text-secondary)',
+                            border: `1px solid ${rmWmImageFormat === f ? 'var(--warning-color)' : 'transparent'}`,
+                          }}>
+                          .{f}
+                        </button>
+                      ))}
+                    </div>
+                  </FormRow>
+                )}
+
+                {mainFile?.mediaInfo?.video && (
+                  <div 
+                    className="p-3 rounded-lg"
+                    style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                  >
+                    <div className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>视频尺寸参考</div>
+                    <div className="flex items-center gap-4 text-xs">
+                      <span style={{ color: 'var(--text-primary)' }}>
+                        宽度: <span style={{ color: 'var(--warning-color)' }}>{mainFile.mediaInfo.video.width}</span> px
+                      </span>
+                      <span style={{ color: 'var(--text-primary)' }}>
+                        高度: <span style={{ color: 'var(--warning-color)' }}>{mainFile.mediaInfo.video.height}</span> px
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

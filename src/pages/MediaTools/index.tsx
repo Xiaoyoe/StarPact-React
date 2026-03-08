@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Clapperboard, FileType, Music, Terminal as TerminalIcon, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight } from 'lucide-react';
+import { Clapperboard, FileType, Music, Terminal as TerminalIcon, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon } from 'lucide-react';
 import { Tabs, ProgressBar } from '@/components/ffmpeg';
 import { FormatConvert } from './FormatConvert';
 import { AudioProcess } from './AudioProcess';
 import { AdvancedTools } from './AdvancedTools';
 import { CommandBuilder } from './CommandBuilder';
+import { IcoConverter } from './IcoConverter';
 import { FFmpegConfigModal } from '@/components/FFmpegConfigModal';
 import { useFFmpegStore, type ProcessingModule, type ProcessingTask } from '@/stores/ffmpegStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,6 +27,39 @@ function TaskItem({
   isExpanded: boolean;
   onToggleExpand: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyLogs = async () => {
+    const logContent = task.logs.join('\n');
+    try {
+      await navigator.clipboard.writeText(logContent);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('复制失败:', err);
+    }
+  };
+
+  const handleCopyTaskInfo = async () => {
+    const info = [
+      `文件名: ${task.fileName}`,
+      `模块: ${getTypeLabel(task.module)}`,
+      `状态: ${task.status}`,
+      `进度: ${Math.floor(task.progress)}%`,
+      `输入路径: ${task.inputPath}`,
+      `输出路径: ${task.outputPath}`,
+      task.error ? `错误: ${task.error}` : '',
+    ].filter(Boolean).join('\n');
+    
+    try {
+      await navigator.clipboard.writeText(info);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('复制失败:', err);
+    }
+  };
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending':
@@ -112,6 +146,15 @@ function TaskItem({
             {formatTime(task.startTime)}
           </span>
           <div className="flex items-center gap-1">
+            <button
+              onClick={handleCopyTaskInfo}
+              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors"
+              style={{ color: 'var(--text-tertiary)' }}
+              title="复制任务信息"
+            >
+              {copied ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
+              {copied ? '已复制' : '复制'}
+            </button>
             {task.status === 'processing' && (
               <button
                 onClick={() => onStop(task.id)}
@@ -162,6 +205,20 @@ function TaskItem({
             <div 
               className="px-3 pb-3 pt-1"
             >
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                  日志记录 ({task.logs.length} 条)
+                </span>
+                <button
+                  onClick={handleCopyLogs}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors"
+                  style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-tertiary)' }}
+                  title="复制全部日志"
+                >
+                  {copied ? <Check className="w-2.5 h-2.5" /> : <Copy className="w-2.5 h-2.5" />}
+                  {copied ? '已复制' : '复制日志'}
+                </button>
+              </div>
               <div 
                 className="h-24 overflow-y-auto rounded-lg p-2 text-[10px] font-mono"
                 style={{ backgroundColor: 'var(--bg-tertiary)' }}
@@ -208,6 +265,7 @@ export function MediaToolsPage() {
     { key: 'format', label: '格式转换', icon: <FileType className="w-4 h-4" /> },
     { key: 'audio', label: '音频处理', icon: <Music className="w-4 h-4" /> },
     { key: 'advanced', label: '高级工具', icon: <Settings className="w-4 h-4" /> },
+    { key: 'ico', label: 'ICO转换', icon: <ImageIcon className="w-4 h-4" /> },
     { key: 'command', label: '命令构建', icon: <TerminalIcon className="w-4 h-4" /> },
   ];
 
@@ -219,6 +277,8 @@ export function MediaToolsPage() {
         return <AudioProcess />;
       case 'advanced':
         return <AdvancedTools />;
+      case 'ico':
+        return <IcoConverter />;
       case 'command':
         return <CommandBuilder />;
       default:

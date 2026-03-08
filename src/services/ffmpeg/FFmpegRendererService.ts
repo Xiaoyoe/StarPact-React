@@ -651,6 +651,53 @@ class FFmpegRendererService {
     return args;
   }
 
+  buildRemoveWatermarkArgs(
+    inputPath: string,
+    outputPath: string,
+    options: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      mode: 'blur' | 'fill' | 'inpaint';
+      blurStrength?: number;
+      outputFormat?: 'video' | 'image';
+    }
+  ): string[] {
+    const args: string[] = ['-i', inputPath];
+
+    const { x, y, width, height, mode, outputFormat = 'video' } = options;
+
+    let filter: string;
+
+    switch (mode) {
+      case 'blur':
+        filter = `delogo=x=${x}:y=${y}:w=${width}:h=${height}`;
+        break;
+      case 'fill':
+        filter = `delogo=x=${x}:y=${y}:w=${width}:h=${height}:show=0`;
+        break;
+      case 'inpaint':
+        filter = `delogo=x=${x}:y=${y}:w=${width}:h=${height}`;
+        break;
+      default:
+        filter = `delogo=x=${x}:y=${y}:w=${width}:h=${height}`;
+    }
+
+    args.push('-vf', filter);
+
+    if (outputFormat === 'image') {
+      args.push('-vframes', '1');
+      args.push('-update', '1');
+    } else {
+      args.push('-c:a', 'copy');
+    }
+    
+    args.push(outputPath);
+
+    return args;
+  }
+
   destroy() {
     if (this.unsubscribeProgress) {
       this.unsubscribeProgress();

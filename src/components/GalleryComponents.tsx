@@ -699,6 +699,7 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
   const dragStart = useRef({ x: 0, y: 0 });
   const posStart = useRef({ x: 0, y: 0 });
   const zoomTimer = useRef<NodeJS.Timeout | null>(null);
+  const wheelContainerRef = useRef<HTMLDivElement>(null);
 
   const image = images[index];
   const isLong = image.isLongImage || image.height / image.width > 2;
@@ -742,25 +743,30 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [navigate, onClose, resetView]);
 
-  const handleWheel = (e: React.WheelEvent) => {
-    if (longImageMode) return;
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setZoom(z => Math.max(0.25, Math.min(5, z + delta)));
-    
-    // 显示缩放百分比
-    setShowZoomPercent(true);
-    
-    // 清除之前的定时器
-    if (zoomTimer.current) {
-      clearTimeout(zoomTimer.current);
-    }
-    
-    // 0.5秒后自动隐藏
-    zoomTimer.current = setTimeout(() => {
-      setShowZoomPercent(false);
-    }, 500);
-  };
+  useEffect(() => {
+    const container = wheelContainerRef.current;
+    if (!container) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (longImageMode) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setZoom(z => Math.max(0.25, Math.min(5, z + delta)));
+      
+      setShowZoomPercent(true);
+      
+      if (zoomTimer.current) {
+        clearTimeout(zoomTimer.current);
+      }
+      
+      zoomTimer.current = setTimeout(() => {
+        setShowZoomPercent(false);
+      }, 500);
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [longImageMode]);
 
   const handleMouseDown = (e: React.MouseEvent) => {
     if (longImageMode) return;
@@ -798,28 +804,28 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-white/90 flex flex-col">
-      <div className="absolute top-0 left-0 right-0 h-14 bg-gradient-to-b from-white/80 to-transparent z-20 flex items-center justify-between px-4">
+    <div className="fixed inset-0 z-50 bg-black/90 flex flex-col">
+      <div className="absolute top-0 left-0 right-0 h-14 z-20 flex items-center justify-between px-4" style={{ background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)' }}>
         <div>
-          <p className="text-sm text-black font-medium">{image.name}</p>
-          <p className="text-xs text-black/50">{index + 1} / {images.length}</p>
+          <p className="text-sm font-medium text-white">{image.name}</p>
+          <p className="text-xs text-white/50">{index + 1} / {images.length}</p>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setShowInfo(!showInfo)}
-            className={cn("p-2 rounded-lg transition-colors", showInfo ? "bg-black/20 text-black" : "hover:bg-black/10 text-black/80 hover:text-black")}
+            className={cn("p-2 rounded-lg transition-colors", showInfo ? "bg-white/20 text-white" : "hover:bg-white/10 text-white/80 hover:text-white")}
             title="图片信息"
           >
             <Info size={18} />
           </button>
           <button
             onClick={() => onEdit(image)}
-            className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black"
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/80 hover:text-white"
             title="编辑"
           >
             <Edit3 size={18} />
           </button>
-          <button onClick={onClose} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black">
+          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/80 hover:text-white">
             <CloseIcon size={20} />
           </button>
         </div>
@@ -844,12 +850,12 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
 
       <div className="flex-1 overflow-hidden">
         <div
+        ref={wheelContainerRef}
         className={cn(
           "h-full flex items-center justify-center",
           longImageMode ? "overflow-y-auto overflow-x-hidden" : "overflow-hidden",
           isDragging ? "cursor-grabbing" : zoom > 1 ? "cursor-grab" : "cursor-default"
         )}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
@@ -898,14 +904,15 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
 
       {/* 右下角垂直工具栏 */}
       <div className="absolute right-4 bottom-18 z-20 flex flex-col gap-1.5">
-        <div className="bg-white/90 backdrop-blur-sm rounded-xl border border-gray-200 p-1.5 flex flex-col gap-1">
+        <div className="backdrop-blur-sm rounded-xl p-1.5 flex flex-col gap-1" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
           {isLong && (
             <button
               onClick={() => { setLongImageMode(!longImageMode); setZoom(1); setPosition({ x: 0, y: 0 }); }}
               className={cn(
                 "p-2 rounded-lg transition-colors",
-                longImageMode ? "bg-violet-600 text-white" : "hover:bg-black/10 text-black/80 hover:text-black"
+                longImageMode ? "bg-violet-600 text-white" : "hover:bg-[var(--bg-tertiary)]"
               )}
+              style={{ color: longImageMode ? 'white' : 'var(--text-secondary)' }}
               title="长图模式"
             >
               <ArrowUpDownIcon size={18} />
@@ -913,29 +920,31 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
           )}
           <button
             onClick={() => setShowThumbnails(true)}
-            className="p-2 rounded-lg transition-colors hover:bg-black/10 text-black/80 hover:text-black"
+            className="p-2 rounded-lg transition-colors hover:bg-[var(--bg-tertiary)]"
+            style={{ color: 'var(--text-secondary)' }}
             title="显示缩略图"
           >
             <Images size={18} />
           </button>
           <button
             onClick={() => onToggleFavorite(image.id)}
-            className={cn("p-2 rounded-lg transition-colors", image.favorite ? "text-red-400" : "hover:bg-black/10 text-black/80 hover:text-black")}
+            className={cn("p-2 rounded-lg transition-colors", image.favorite ? "" : "hover:bg-[var(--bg-tertiary)]")}
+            style={{ color: image.favorite ? 'rgb(248 113 113)' : 'var(--text-secondary)' }}
             title="收藏"
           >
             <Heart size={18} fill={image.favorite ? 'currentColor' : 'none'} />
           </button>
-          <div className="h-px bg-gray-200 my-0.5" />
-          <button onClick={() => setZoom(z => Math.min(z + 0.25, 5))} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="放大">
+          <div className="h-px my-0.5" style={{ backgroundColor: 'var(--border-color)' }} />
+          <button onClick={() => setZoom(z => Math.min(z + 0.25, 5))} className="p-2 rounded-lg transition-colors hover:bg-[var(--bg-tertiary)]" style={{ color: 'var(--text-secondary)' }} title="放大">
             <ZoomIn size={18} />
           </button>
-          <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.25))} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="缩小">
+          <button onClick={() => setZoom(z => Math.max(z - 0.25, 0.25))} className="p-2 rounded-lg transition-colors hover:bg-[var(--bg-tertiary)]" style={{ color: 'var(--text-secondary)' }} title="缩小">
             <ZoomOut size={18} />
           </button>
-          <button onClick={() => setRotation(r => r + 90)} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="旋转">
+          <button onClick={() => setRotation(r => r + 90)} className="p-2 rounded-lg transition-colors hover:bg-[var(--bg-tertiary)]" style={{ color: 'var(--text-secondary)' }} title="旋转">
             <RotateCw size={18} />
           </button>
-          <button onClick={resetView} className="p-2 hover:bg-black/10 rounded-lg transition-colors text-black/80 hover:text-black" title="适应窗口">
+          <button onClick={resetView} className="p-2 rounded-lg transition-colors hover:bg-[var(--bg-tertiary)]" style={{ color: 'var(--text-secondary)' }} title="适应窗口">
             <Maximize2 size={18} />
           </button>
         </div>
@@ -943,7 +952,7 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
 
       {/* 独立的缩略图区域 */}
       {images.length > 1 && showThumbnails && (
-        <div className="absolute bottom-0 left-0 right-0 h-16 bg-white/90 border-t border-gray-200 z-20 flex items-center px-4 transition-transform duration-300 ease-in-out">
+        <div className="absolute bottom-0 left-0 right-0 h-16 z-20 flex items-center px-4 transition-transform duration-300 ease-in-out" style={{ backgroundColor: 'var(--bg-secondary)', borderTop: '1px solid var(--border-color)' }}>
           <div 
             className="flex items-center justify-center gap-1.5 overflow-x-auto max-w-full py-1 flex-1"
             onWheel={(e) => {
@@ -969,17 +978,18 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
           </div>
           <button
             onClick={() => setShowThumbnails(false)}
-            className="w-8 h-8 rounded-full bg-black/20 flex items-center justify-center hover:bg-black/30 transition-colors ml-2"
+            className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--bg-tertiary)] transition-colors ml-2"
+            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}
             title="隐藏缩略图"
           >
-            <ChevronDown size={16} style={{ color: 'var(--text-primary)' }} />
+            <ChevronDown size={16} />
           </button>
         </div>
       )}
 
       {showInfo && (
-        <div className="absolute top-14 right-0 w-72 bg-white/95 backdrop-blur border-l border-gray-200 h-[calc(100%-3.5rem)] z-20 p-4 overflow-y-auto">
-          <h3 className="text-sm font-medium text-black mb-4">图片信息</h3>
+        <div className="absolute top-14 right-0 w-72 backdrop-blur h-[calc(100%-3.5rem)] z-20 p-4 overflow-y-auto" style={{ backgroundColor: 'var(--bg-secondary)', borderLeft: '1px solid var(--border-color)' }}>
+          <h3 className="text-sm font-medium mb-4" style={{ color: 'var(--text-primary)' }}>图片信息</h3>
           <div className="space-y-3">
             {
               [
@@ -992,17 +1002,17 @@ export function ImageViewer({ images, currentIndex, onClose, onEdit, onToggleFav
                 { label: '添加日期', value: image.dateAdded.toLocaleDateString('zh-CN') },
               ].map(item => (
                 <div key={item.label} className="flex justify-between items-center">
-                  <span className="text-xs text-gray-500">{item.label}</span>
-                  <span className="text-xs text-gray-700">{item.value}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{item.label}</span>
+                  <span className="text-xs" style={{ color: 'var(--text-primary)' }}>{item.value}</span>
                 </div>
               ))
             }
             {image.tags.length > 0 && (
               <div>
-                <span className="text-xs text-gray-500 block mb-2">标签</span>
+                <span className="text-xs block mb-2" style={{ color: 'var(--text-tertiary)' }}>标签</span>
                 <div className="flex flex-wrap gap-1.5">
                   {image.tags.map(tag => (
-                    <span key={tag} className="text-[10px] bg-violet-500/20 text-violet-600 px-2 py-0.5 rounded-full">
+                    <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}>
                       {tag}
                     </span>
                   ))}
@@ -1129,30 +1139,25 @@ export function GalleryToolbar({
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="relative">
+        <div className="relative group">
           <Search size={14} style={{ color: 'var(--text-tertiary)' }} className="absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="搜索图片..."
             value={searchQuery}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-48 rounded-lg pl-8 pr-8 py-1.5 text-xs focus:outline-none focus:ring-1 transition-all"
+            className="w-48 rounded-lg pl-8 pr-8 py-1.5 text-xs focus:outline-none focus:ring-1 transition-all hover:border-[var(--primary-color)]"
             style={{
               backgroundColor: 'var(--bg-tertiary)',
               border: '1px solid var(--border-color)',
               color: 'var(--text-secondary)',
-              placeholderColor: 'var(--text-tertiary)',
-              '&:focus': {
-                borderColor: 'var(--primary-color)',
-                boxShadow: '0 0 0 1px var(--primary-color)'
-              }
             }}
           />
           {searchQuery && (
             <button
               onClick={() => onSearchChange('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2"
-              style={{ color: 'var(--text-tertiary)', '&:hover': { color: 'var(--text-secondary)' } }}
+              className="absolute right-2 top-1/2 -translate-y-1/2 transition-colors hover:text-[var(--text-primary)]"
+              style={{ color: 'var(--text-tertiary)' }}
             >
               <CloseIcon size={12} />
             </button>
@@ -1165,14 +1170,11 @@ export function GalleryToolbar({
           <select
             value={sortBy}
             onChange={(e) => onSortByChange(e.target.value as SortBy)}
-            className="rounded-lg px-2 py-1.5 text-xs focus:outline-none cursor-pointer"
+            className="rounded-lg px-2 py-1.5 text-xs focus:outline-none cursor-pointer hover:border-[var(--primary-color)] transition-colors"
             style={{
               backgroundColor: 'var(--bg-tertiary)',
               border: '1px solid var(--border-color)',
               color: 'var(--text-secondary)',
-              '&:focus': {
-                borderColor: 'var(--primary-color)'
-              }
             }}
           >
             {sortOptions.map(opt => (
@@ -1181,8 +1183,8 @@ export function GalleryToolbar({
           </select>
           <button
             onClick={() => onSortOrderChange(sortOrder === 'asc' ? 'desc' : 'asc')}
-            className="p-1.5 rounded-lg transition-colors"
-            style={{ backgroundColor: 'transparent', '&:hover': { backgroundColor: 'var(--bg-tertiary)' }, color: 'var(--text-secondary)' }}
+            className="p-1.5 rounded-lg transition-all duration-200 hover:bg-[var(--bg-tertiary)] hover:scale-110"
+            style={{ backgroundColor: 'transparent', color: 'var(--text-secondary)' }}
             title={sortOrder === 'asc' ? '升序' : '降序'}
           >
             {sortOrder === 'asc' ? <SortAsc size={16} /> : <SortDesc size={16} />}
@@ -1196,7 +1198,12 @@ export function GalleryToolbar({
             <button
               key={vm.mode}
               onClick={() => onViewModeChange(vm.mode)}
-              className="p-1.5 rounded-md transition-all"
+              className={cn(
+                "p-1.5 rounded-md transition-all duration-200",
+                viewMode === vm.mode 
+                  ? "hover:opacity-90" 
+                  : "hover:bg-[var(--bg-secondary)] hover:text-[var(--text-primary)]"
+              )}
               style={{
                 backgroundColor: viewMode === vm.mode ? 'var(--primary-color)' : 'transparent',
                 color: viewMode === vm.mode ? 'white' : 'var(--text-tertiary)',
@@ -1218,27 +1225,21 @@ export function GalleryToolbar({
             </span>
             <button
               onClick={onDeselectAll}
-              className="px-2.5 py-1.5 text-xs rounded-lg transition-colors"
+              className="px-2.5 py-1.5 text-xs rounded-lg transition-all duration-200 hover:bg-[var(--bg-secondary)] hover:border-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:scale-105"
               style={{
                 backgroundColor: 'var(--bg-tertiary)',
                 border: '1px solid var(--border-color)',
                 color: 'var(--text-secondary)',
-                '&:hover': {
-                  backgroundColor: 'var(--bg-secondary)'
-                }
               }}
             >
               取消选择
             </button>
             <button
               onClick={onDeleteSelected}
-              className="px-2.5 py-1.5 text-xs rounded-lg transition-colors flex items-center gap-1"
+              className="px-2.5 py-1.5 text-xs rounded-lg transition-all duration-200 hover:bg-[rgba(239,68,68,0.3)] hover:scale-105 flex items-center gap-1"
               style={{
                 backgroundColor: 'rgba(239, 68, 68, 0.2)',
                 color: 'rgb(239, 68, 68)',
-                '&:hover': {
-                  backgroundColor: 'rgba(239, 68, 68, 0.3)'
-                }
               }}
             >
               <Trash2 size={12} />
@@ -1249,21 +1250,18 @@ export function GalleryToolbar({
           <>
             <button
               onClick={onSelectAll}
-              className="p-2 rounded-lg transition-colors"
-              style={{ backgroundColor: 'transparent', '&:hover': { backgroundColor: 'var(--bg-tertiary)' }, color: 'var(--text-secondary)' }}
+              className="p-2 rounded-lg transition-all duration-200 hover:bg-[var(--bg-tertiary)] hover:scale-110"
+              style={{ backgroundColor: 'transparent', color: 'var(--text-secondary)' }}
               title="全选"
             >
               <CheckSquare size={16} />
             </button>
             <button
               onClick={onImport}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:opacity-90 hover:scale-105"
               style={{
                 backgroundColor: 'var(--primary-color)',
                 color: 'white',
-                '&:hover': {
-                  opacity: 0.9
-                }
               }}
             >
               <Upload size={14} />
@@ -1271,14 +1269,11 @@ export function GalleryToolbar({
             </button>
             <button
               onClick={onImportFolder}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:bg-[var(--bg-secondary)] hover:border-[var(--text-tertiary)] hover:scale-105"
               style={{
                 backgroundColor: 'var(--bg-tertiary)',
                 border: '1px solid var(--border-color)',
                 color: 'var(--text-secondary)',
-                '&:hover': {
-                  backgroundColor: 'var(--bg-secondary)'
-                }
               }}
             >
               <FolderOpen size={14} />
@@ -1287,13 +1282,10 @@ export function GalleryToolbar({
             {!isSystemAlbum && (
               <button
                 onClick={onClearAlbum}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:bg-[rgba(239,68,68,0.3)] hover:scale-105"
                 style={{
                   backgroundColor: 'rgba(239, 68, 68, 0.2)',
                   color: 'rgb(239, 68, 68)',
-                  '&:hover': {
-                    backgroundColor: 'rgba(239, 68, 68, 0.3)'
-                  }
                 }}
               >
                 <Trash2 size={14} />
@@ -1302,14 +1294,11 @@ export function GalleryToolbar({
             )}
             <button
               onClick={onToggleSidebar}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:bg-[var(--bg-secondary)] hover:border-[var(--text-tertiary)] hover:scale-105"
               style={{
                 backgroundColor: 'var(--bg-tertiary)',
                 border: '1px solid var(--border-color)',
                 color: 'var(--text-secondary)',
-                '&:hover': {
-                  backgroundColor: 'var(--bg-secondary)'
-                }
               }}
             >
               <PanelLeftClose size={14} />
