@@ -99,6 +99,21 @@ body {
   background: var(--text-tertiary);
 }
 
+.scrollbar-transparent::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-transparent::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-transparent::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 3px;
+}
+.scrollbar-transparent::-webkit-scrollbar-thumb:hover {
+  background: transparent;
+}
+
 ::selection {
   background-color: var(--primary-color);
   color: var(--text-inverse);

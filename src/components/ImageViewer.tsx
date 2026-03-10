@@ -116,7 +116,7 @@ export function ImageViewer({ images, currentIndex, isOpen, onClose, onPrev, onN
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="fixed inset-0 z-[100] flex items-center justify-center"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.9)', cursor: isDragging ? 'grabbing' : 'grab' }}
+          style={{ backgroundColor: 'rgba(0, 0, 0, 0.75)', cursor: isDragging ? 'grabbing' : 'grab' }}
         >
           {/* Right Toolbar */}
           <div 
@@ -192,6 +192,17 @@ export function ImageViewer({ images, currentIndex, isOpen, onClose, onPrev, onN
             <div className="text-white text-xs font-medium py-2 px-3 text-center" style={{ color: 'rgba(255, 255, 255, 0.9)' }}>
               {currentIndex + 1} / {images.length}
             </div>
+            
+            <div className="w-full h-px my-1" style={{ backgroundColor: 'rgba(255, 255, 255, 0.2)' }} />
+            
+            {/* Bottom Close Button */}
+            <button
+              onClick={onClose}
+              className="flex h-10 w-10 items-center justify-center rounded-lg transition-colors text-white hover:bg-red-500/50"
+              title="关闭 (Esc)"
+            >
+              <X size={20} />
+            </button>
           </div>
 
           {/* Navigation Buttons */}

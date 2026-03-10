@@ -185,19 +185,39 @@ interface AppState {
   // Performance Metrics
   performanceMetrics: {
     requestId: string;
+    modelName: string;
+    timestamp: number;
     modelLoadTime: number;
+    promptEvalTime: number;
     inferenceTime: number;
+    totalTime: number;
     totalTokens: number;
     throughput: number;
     firstTokenTime: number;
     promptTokens: number;
     completionTokens: number;
-    memoryUsage: string;
-    gpuUsage: string;
     temperature: number;
     topP: number;
+    contextLength: number;
+    numCtx: number;
+    currentRoundTokens: {
+      prompt: number;
+      completion: number;
+      total: number;
+    };
+    previousRoundTokens: {
+      prompt: number;
+      completion: number;
+      total: number;
+    } | null;
+    totalConversationTokens: {
+      prompt: number;
+      completion: number;
+      total: number;
+    };
   } | null;
   setPerformanceMetrics: (metrics: any) => void;
+  resetPerformanceMetrics: () => void;  resetPerformanceMetrics: () => void;
 
   // Persistence
   isHydrated: boolean;

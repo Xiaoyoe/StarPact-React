@@ -64,7 +64,7 @@ interface MessageBubbleProps {
   isLast: boolean;
   compactMode: boolean;
   onImageClick: (images: string[], index: number) => void;
-  onRegenerate?: (content: string) => void;
+  onRegenerate?: (content: string, images?: string[]) => void;
   onDelete?: (messageId: string) => void;
 }
 
@@ -100,9 +100,9 @@ export const MessageBubble = memo(function MessageBubble({
 
   const handleRegenerate = useCallback(() => {
     if (onRegenerate) {
-      onRegenerate(message.content);
+      onRegenerate(message.content, message.images);
     }
-  }, [message.content, onRegenerate]);
+  }, [message.content, message.images, onRegenerate]);
 
   const handleDelete = useCallback(() => {
     if (onDelete) {

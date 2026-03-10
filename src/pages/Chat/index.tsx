@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
-  ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare, Trash2, Settings, Eye, EyeOff, Sliders
+  ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare, Trash2, Settings, Eye, EyeOff, Sliders, RefreshCw
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -11,6 +11,7 @@ import { configStorage } from '@/services/storage/ConfigStorage';
 import { useToast } from '@/components/Toast';
 import { notificationService } from '@/utils/notification';
 import { PerformanceModal } from '@/components/PerformanceModal';
+import { PerformancePanel } from '@/components/PerformancePanel';
 import { ImageViewer } from '@/components/ImageViewer';
 import { ChatWelcome } from '@/components/ChatWelcome';
 import { ChatControlPanel } from '@/components/ChatControlPanel';
@@ -28,9 +29,9 @@ export function ChatPage() {
     addLog,
     chatWallpaper, setChatWallpaper,
     compactMode, setCompactMode,
-    ollamaModels, activeOllamaModel, setActiveOllamaModel,
-    ollamaStatus,
-    ollamaVerboseMode, setPerformanceMetrics,
+    ollamaModels, setOllamaModels, activeOllamaModel, setActiveOllamaModel,
+    ollamaStatus, setOllamaStatus,
+    ollamaVerboseMode, setPerformanceMetrics, performanceMetrics,
     ollamaThinkMode,
     ollamaChatMode,
     includeImagesInContext,
@@ -49,8 +50,22 @@ export function ChatPage() {
   const [switchingModel, setSwitchingModel] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editingTitle, setEditingTitle] = useState('');
-  const [showPerfPanel, setShowPerfPanel] = useState(false);
+  const [perfPanelExpanded, setPerfPanelExpanded] = useState(false);
   const [uploadedImages, setUploadedImages] = useState<{ id: string; data: string; preview: string }[]>([]);
+  const previousRoundTokensRef = useRef<{
+    prompt: number;
+    completion: number;
+    total: number;
+  } | null>(null);
+  const totalConversationTokensRef = useRef<{
+    prompt: number;
+    completion: number;
+    total: number;
+  }>({
+    prompt: 0,
+    completion: 0,
+    total: 0,
+  });
   const abortControllerRef = useRef<AbortController | null>(null);
   const [imageViewerState, setImageViewerState] = useState<{
     isOpen: boolean;
@@ -133,6 +148,62 @@ export function ChatPage() {
       notificationService.requestPermission();
     }
   }, []);
+
+  const [isActivatingOllama, setIsActivatingOllama] = useState(false);
+
+  const handleActivateOllama = async () => {
+    setIsActivatingOllama(true);
+    try {
+      const config = { host: 'localhost', port: 11434 };
+      
+      const checkStatus = () => {
+        return new Promise((resolve) => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+          fetch(`http://${config.host}:${config.port}/api/tags`, {
+            method: 'GET',
+            signal: controller.signal,
+          })
+            .then((response) => {
+              clearTimeout(timeoutId);
+              if (response.ok) {
+                resolve({ isRunning: true, port: config.port });
+              } else {
+                resolve({ isRunning: false, port: config.port });
+              }
+            })
+            .catch(() => {
+              clearTimeout(timeoutId);
+              resolve({ isRunning: false, port: config.port });
+            });
+        });
+      };
+
+      const status: any = await checkStatus();
+      setOllamaStatus(status);
+
+      if (status.isRunning) {
+        try {
+          const response = await fetch(`http://${config.host}:${config.port}/api/tags`);
+          if (response.ok) {
+            const data = await response.json();
+            const models = data.models || [];
+            setOllamaModels(models);
+            toast.success(`Ollama 已激活，加载了 ${models.length} 个模型`, { duration: 2000 });
+          }
+        } catch {
+          toast.success('Ollama 已激活', { duration: 2000 });
+        }
+      } else {
+        toast.error('Ollama 未运行，请在模型管理中启动 Ollama 服务', { duration: 3000 });
+      }
+    } catch (error) {
+      toast.error('激活 Ollama 失败', { duration: 2000 });
+    } finally {
+      setIsActivatingOllama(false);
+    }
+  };
 
   const handleSwitchOllamaModel = async (newModelName: string) => {
     if (ollamaModelService.isSwitching()) {
@@ -404,20 +475,41 @@ export function ChatPage() {
               const promptEvalCount = lastPerfData.prompt_eval_count || 0;
               const throughput = evalDuration > 0 ? evalCount / evalDuration : 0;
               
+              const currentRoundTokens = {
+                prompt: promptEvalCount,
+                completion: evalCount,
+                total: evalCount + promptEvalCount,
+              };
+              
+              totalConversationTokensRef.current = {
+                prompt: totalConversationTokensRef.current.prompt + promptEvalCount,
+                completion: totalConversationTokensRef.current.completion + evalCount,
+                total: totalConversationTokensRef.current.total + evalCount + promptEvalCount,
+              };
+              
               setPerformanceMetrics({
                 requestId: `req-${Date.now().toString(36)}`,
+                modelName: activeOllamaModel || 'unknown',
+                timestamp: Date.now(),
                 modelLoadTime: loadDuration,
+                promptEvalTime: promptEvalDuration,
                 inferenceTime: evalDuration,
+                totalTime: totalDuration,
                 totalTokens: evalCount + promptEvalCount,
                 throughput: throughput,
                 firstTokenTime: firstTokenTime,
                 promptTokens: promptEvalCount,
                 completionTokens: evalCount,
-                memoryUsage: '-',
-                gpuUsage: '-',
                 temperature: 0.7,
                 topP: 0.9,
+                contextLength: activeConversation?.messages.length || 0,
+                numCtx: 4096,
+                currentRoundTokens: currentRoundTokens,
+                previousRoundTokens: previousRoundTokensRef.current,
+                totalConversationTokens: totalConversationTokensRef.current,
               });
+              
+              previousRoundTokensRef.current = currentRoundTokens;
               
               toast.success(`${activeOllamaModel} 回复完成 (${throughput.toFixed(1)} tokens/s)`, { duration: 2000 });
             } else {
@@ -579,20 +671,41 @@ export function ChatPage() {
             const promptEvalCount = lastPerfData.prompt_eval_count || 0;
             const throughput = evalDuration > 0 ? evalCount / evalDuration : 0;
             
+            const currentRoundTokens = {
+              prompt: promptEvalCount,
+              completion: evalCount,
+              total: evalCount + promptEvalCount,
+            };
+            
+            totalConversationTokensRef.current = {
+              prompt: totalConversationTokensRef.current.prompt + promptEvalCount,
+              completion: totalConversationTokensRef.current.completion + evalCount,
+              total: totalConversationTokensRef.current.total + evalCount + promptEvalCount,
+            };
+            
             setPerformanceMetrics({
               requestId: `req-${Date.now().toString(36)}`,
+              modelName: activeOllamaModel || 'unknown',
+              timestamp: Date.now(),
               modelLoadTime: loadDuration,
+              promptEvalTime: promptEvalDuration,
               inferenceTime: evalDuration,
+              totalTime: totalDuration,
               totalTokens: evalCount + promptEvalCount,
               throughput: throughput,
               firstTokenTime: firstTokenTime,
               promptTokens: promptEvalCount,
               completionTokens: evalCount,
-              memoryUsage: '-',
-              gpuUsage: '-',
               temperature: 0.7,
               topP: 0.9,
+              contextLength: activeConversation?.messages.length || 0,
+              numCtx: 4096,
+              currentRoundTokens: currentRoundTokens,
+              previousRoundTokens: previousRoundTokensRef.current,
+              totalConversationTokens: totalConversationTokensRef.current,
             });
+            
+            previousRoundTokensRef.current = currentRoundTokens;
             
             toast.success(`${activeOllamaModel} 回复完成 (${throughput.toFixed(1)} tokens/s)`, { duration: 2000 });
           } else {
@@ -797,8 +910,16 @@ export function ChatPage() {
     }, 100);
   };
 
-  const handleRegenerate = (content: string) => {
+  const handleRegenerate = (content: string, images?: string[]) => {
     setInputValue(content);
+    if (images && images.length > 0) {
+      const newImages = images.map(img => ({
+        id: generateId(),
+        data: img,
+        preview: img,
+      }));
+      setUploadedImages(newImages);
+    }
     setTimeout(() => {
       inputRef.current?.focus();
     }, 100);
@@ -852,15 +973,16 @@ export function ChatPage() {
       backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
       ...wallpaperStyle
     }}>
-      {/* 快速导航组件 */}
-    {showNav && activeConversation && activeConversation.messages.length > 0 && (
-      <ChatQuickNav 
-        messages={activeConversation.messages} 
-        onHoverMessage={setHoveredMessage}
-      />
-    )}
-      
-      {/* Header */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* 快速导航组件 */}
+      {showNav && activeConversation && activeConversation.messages.length > 0 && (
+        <ChatQuickNav 
+          messages={activeConversation.messages} 
+          onHoverMessage={setHoveredMessage}
+        />
+      )}
+        
+        {/* Header */}
       <header
         className="flex items-center justify-between border-b px-6 no-select"
         style={{
@@ -928,18 +1050,18 @@ export function ChatPage() {
             </span>
           )}
           {showTokenEstimate && activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (
-            <span className="text-xs ml-2 px-2 py-0.5 rounded" style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}>
+            <span className="text-xs ml-2 px-2 py-0.5 rounded transition-transform hover:scale-110 cursor-default" style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}>
               {formatTokenCount(totalTokens)}
             </span>
           )}
           {activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (
-            <span className="text-xs ml-2 px-2 py-0.5 rounded flex items-center gap-1" style={{ color: ollamaThinkMode ? 'var(--success-color)' : 'var(--text-tertiary)', backgroundColor: ollamaThinkMode ? 'rgba(34, 197, 94, 0.1)' : 'var(--bg-tertiary)' }}>
+            <span className="text-xs ml-2 px-2 py-0.5 rounded flex items-center gap-1 transition-transform hover:scale-110 cursor-default" style={{ color: ollamaThinkMode ? 'var(--success-color)' : 'var(--text-tertiary)', backgroundColor: ollamaThinkMode ? 'rgba(34, 197, 94, 0.1)' : 'var(--bg-tertiary)' }}>
               <Brain size={10} />
               {ollamaThinkMode ? '思考' : '无思考'}
             </span>
           )}
           {activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (
-            <span className="text-xs ml-2 px-2 py-0.5 rounded flex items-center gap-1" style={{ color: ollamaChatMode === 'multi' ? 'var(--success-color)' : 'var(--text-tertiary)', backgroundColor: ollamaChatMode === 'multi' ? 'rgba(34, 197, 94, 0.1)' : 'var(--bg-tertiary)' }}>
+            <span className="text-xs ml-2 px-2 py-0.5 rounded flex items-center gap-1 transition-transform hover:scale-110 cursor-default" style={{ color: ollamaChatMode === 'multi' ? 'var(--success-color)' : 'var(--text-tertiary)', backgroundColor: ollamaChatMode === 'multi' ? 'rgba(34, 197, 94, 0.1)' : 'var(--bg-tertiary)' }}>
               <MessageSquare size={10} />
               {ollamaChatMode === 'multi' ? '多轮' : '单轮'}
             </span>
@@ -972,7 +1094,7 @@ export function ChatPage() {
           <div className="relative">
             <button
               onClick={() => setShowModelSelect(!showModelSelect)}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all group"
               style={{
                 backgroundColor: compactMode ? 'transparent' : 'var(--bg-secondary)',
                 color: 'var(--text-primary)',
@@ -980,7 +1102,7 @@ export function ChatPage() {
               }}
             >
               <Sparkles size={14} style={{ color: 'var(--primary-color)' }} />
-              <span>{activeOllamaModel || activeModel?.name || '选择模型'}</span>
+              <span className="group-hover:text-[var(--primary-color)] transition-colors">{activeOllamaModel || activeModel?.name || '选择模型'}</span>
               <ChevronDown size={14} style={{ color: 'var(--text-tertiary)' }} />
             </button>
 
@@ -1041,14 +1163,27 @@ export function ChatPage() {
                             </button>
                           ))
                         ) : (
-                          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                          <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
                             <HardDrive size={24} className="mb-2 opacity-30" style={{ color: 'var(--text-tertiary)' }} />
                             <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
                               {ollamaStatus?.isRunning ? '暂无本地模型' : 'Ollama 未连接'}
                             </div>
-                            <div className="text-xs mt-1" style={{ color: 'var(--text-tertiary)', opacity: 0.6 }}>
+                            <div className="text-xs mt-1 mb-3" style={{ color: 'var(--text-tertiary)', opacity: 0.6 }}>
                               请在模型管理中启动 Ollama
                             </div>
+                            <button
+                              onClick={handleActivateOllama}
+                              disabled={isActivatingOllama}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
+                              style={{
+                                backgroundColor: 'var(--primary-light)',
+                                color: 'var(--primary-color)',
+                                border: '1px solid var(--primary-color)',
+                              }}
+                            >
+                              <RefreshCw size={12} className={isActivatingOllama ? 'animate-spin' : ''} />
+                              {isActivatingOllama ? '激活中...' : '激活 Ollama'}
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1122,7 +1257,7 @@ export function ChatPage() {
           <div className="relative ml-2" ref={toolsMenuRef}>
             <button
               onClick={() => setShowToolsMenu(!showToolsMenu)}
-              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors"
+              className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-all group"
               style={{
                 backgroundColor: showToolsMenu ? 'var(--primary-color)' : (compactMode ? 'transparent' : 'var(--bg-secondary)'),
                 color: showToolsMenu ? 'white' : 'var(--text-primary)',
@@ -1130,7 +1265,7 @@ export function ChatPage() {
               }}
             >
               <Settings size={14} />
-              <span>工具</span>
+              <span className={`transition-colors ${!showToolsMenu ? 'group-hover:text-[var(--primary-color)]' : ''}`}>工具</span>
               <ChevronDown size={14} style={{ color: showToolsMenu ? 'white' : 'var(--text-tertiary)' }} />
             </button>
 
@@ -1193,18 +1328,6 @@ export function ChatPage() {
                       </button>
 
                       <button
-                        onClick={() => setShowPerfPanel(!showPerfPanel)}
-                        className="flex flex-col items-center gap-1.5 p-3 rounded-lg transition-all"
-                        style={{ 
-                          backgroundColor: showPerfPanel ? 'var(--primary-light)' : 'var(--bg-secondary)',
-                          border: `1px solid ${showPerfPanel ? 'var(--primary-color)' : 'var(--border-color)'}`,
-                        }}
-                      >
-                        <Timer size={18} style={{ color: showPerfPanel ? 'var(--primary-color)' : 'var(--text-tertiary)' }} />
-                        <span className="text-xs font-medium" style={{ color: showPerfPanel ? 'var(--primary-color)' : 'var(--text-primary)' }}>性能面板</span>
-                      </button>
-
-                      <button
                         onClick={() => {
                           setShowChatControl(!showChatControl);
                           setShowToolsMenu(false);
@@ -1225,8 +1348,6 @@ export function ChatPage() {
             </div>
         </div>
       </header>
-
-      <PerformanceModal isOpen={showPerfPanel} onClose={() => setShowPerfPanel(false)} />
 
       {/* Messages */}
       <div
@@ -1293,11 +1414,19 @@ export function ChatPage() {
 
       {/* Input Area */}
       <div
-        className="p-4 no-select"
+        className="p-4 no-select relative"
         style={{
           backgroundColor: compactMode ? 'transparent' : 'var(--bg-primary)',
         }}
       >
+        {/* Performance Panel */}
+        {ollamaVerboseMode && (
+          <PerformancePanel 
+            isExpanded={perfPanelExpanded}
+            onToggle={() => setPerfPanelExpanded(!perfPanelExpanded)}
+          />
+        )}
+        
         <div className="mx-auto max-w-4xl">
           {/* Image Preview Area */}
           {uploadedImages.length > 0 && (
@@ -1305,7 +1434,7 @@ export function ChatPage() {
               className="mb-2 flex flex-wrap gap-2 p-2 rounded-xl"
               style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
             >
-              {uploadedImages.map((img) => (
+              {uploadedImages.map((img, idx) => (
                 <div 
                   key={img.id} 
                   className="relative group"
@@ -1313,11 +1442,15 @@ export function ChatPage() {
                   <img 
                     src={img.preview} 
                     alt="上传的图片" 
-                    className="h-16 w-16 object-cover rounded-lg border"
+                    className="h-16 w-16 object-cover rounded-lg border cursor-pointer hover:opacity-80 transition-opacity"
                     style={{ borderColor: 'var(--border-color)' }}
+                    onClick={() => openImageViewer(uploadedImages.map(i => i.data), idx)}
                   />
                   <button
-                    onClick={() => handleRemoveImage(img.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRemoveImage(img.id);
+                    }}
                     className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                     style={{ backgroundColor: 'var(--error-color)', color: 'white' }}
                   >
@@ -1357,7 +1490,7 @@ export function ChatPage() {
             />
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors hover:bg-opacity-80"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all hover:scale-110"
               style={{ 
                 color: uploadedImages.length > 0 ? 'var(--primary-color)' : 'var(--text-tertiary)',
                 backgroundColor: uploadedImages.length > 0 ? 'var(--primary-light)' : 'transparent'
@@ -1393,7 +1526,7 @@ export function ChatPage() {
             <button
               onClick={isStreaming ? handleStopGeneration : handleSend}
               disabled={(!inputValue.trim() && uploadedImages.length === 0) && !isStreaming}
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all active:scale-95"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all hover:scale-110 active:scale-95"
               style={{
                 backgroundColor: (inputValue.trim() || isStreaming || uploadedImages.length > 0) ? 'var(--primary-color)' : 'var(--bg-tertiary)',
                 color: (inputValue.trim() || isStreaming || uploadedImages.length > 0) ? 'white' : 'var(--text-tertiary)',
@@ -1405,6 +1538,7 @@ export function ChatPage() {
             </button>
           </div>
         </div>
+      </div>
       </div>
 
       {/* Image Viewer */}

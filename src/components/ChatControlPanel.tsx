@@ -127,7 +127,7 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
     <div className="relative" ref={containerRef}>
       <button
         onClick={onToggle}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all hover:scale-110"
         style={{
           backgroundColor: isOpen ? 'var(--primary-color)' : 'var(--bg-secondary)',
           color: isOpen ? 'white' : 'var(--text-tertiary)',
