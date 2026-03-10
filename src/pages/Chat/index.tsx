@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
-  ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare, Trash2, Settings, Eye, EyeOff, Sliders, RefreshCw
+  ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare, Trash2, Settings, Eye, EyeOff, Sliders, RefreshCw, Database
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -18,7 +18,7 @@ import { ChatControlPanel } from '@/components/ChatControlPanel';
 import { MessageBubble } from '@/components/MessageBubble';
 import { ollamaModelService } from '@/services/OllamaModelService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { estimateConversationTokens, formatTokenCount } from '@/utils/tokenEstimator';
+
 import { useWallpaperStyle } from '@/hooks';
 
 export function ChatPage() {
@@ -36,7 +36,6 @@ export function ChatPage() {
     ollamaChatMode,
     includeImagesInContext,
     deleteConfirmEnabled,
-    showTokenEstimate,
   } = useStore();
 
   const toast = useToast();
@@ -113,12 +112,6 @@ export function ChatPage() {
     };
   }, [showToolsMenu]);
 
-  const totalTokens = useMemo(() => {
-    if (!activeConversation || activeConversation.messages.length === 0) return 0;
-    const stableMessages = activeConversation.messages.filter(msg => !msg.isStreaming);
-    return estimateConversationTokens(stableMessages);
-  }, [activeConversation?.messages.filter(msg => !msg.isStreaming).map(m => m.id + m.content.length).join(',')]);
-
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
@@ -128,6 +121,23 @@ export function ChatPage() {
       scrollToBottom();
     }
   }, [activeConversation?.messages, scrollToBottom]);
+
+  useEffect(() => {
+    if (activeConversation?.totalTokens) {
+      totalConversationTokensRef.current = {
+        prompt: 0,
+        completion: 0,
+        total: activeConversation.totalTokens,
+      };
+    } else {
+      totalConversationTokensRef.current = {
+        prompt: 0,
+        completion: 0,
+        total: 0,
+      };
+    }
+    previousRoundTokensRef.current = null;
+  }, [activeConversationId]);
 
   useEffect(() => {
     const savedWallpaper = configStorage.get('chatWallpaper');
@@ -490,6 +500,7 @@ export function ChatPage() {
               setPerformanceMetrics({
                 requestId: `req-${Date.now().toString(36)}`,
                 modelName: activeOllamaModel || 'unknown',
+                conversationTitle: activeConversation?.title || '未知对话',
                 timestamp: Date.now(),
                 modelLoadTime: loadDuration,
                 promptEvalTime: promptEvalDuration,
@@ -510,6 +521,12 @@ export function ChatPage() {
               });
               
               previousRoundTokensRef.current = currentRoundTokens;
+              
+              if (activeConversationId) {
+                updateConversation(activeConversationId, {
+                  totalTokens: totalConversationTokensRef.current.total
+                });
+              }
               
               toast.success(`${activeOllamaModel} 回复完成 (${throughput.toFixed(1)} tokens/s)`, { duration: 2000 });
             } else {
@@ -686,6 +703,7 @@ export function ChatPage() {
             setPerformanceMetrics({
               requestId: `req-${Date.now().toString(36)}`,
               modelName: activeOllamaModel || 'unknown',
+              conversationTitle: activeConversation?.title || '未知对话',
               timestamp: Date.now(),
               modelLoadTime: loadDuration,
               promptEvalTime: promptEvalDuration,
@@ -706,6 +724,12 @@ export function ChatPage() {
             });
             
             previousRoundTokensRef.current = currentRoundTokens;
+            
+            if (activeConversationId) {
+              updateConversation(activeConversationId, {
+                totalTokens: totalConversationTokensRef.current.total
+              });
+            }
             
             toast.success(`${activeOllamaModel} 回复完成 (${throughput.toFixed(1)} tokens/s)`, { duration: 2000 });
           } else {
@@ -1049,9 +1073,10 @@ export function ChatPage() {
               {activeConversation.messages.length} 条消息
             </span>
           )}
-          {showTokenEstimate && activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (
-            <span className="text-xs ml-2 px-2 py-0.5 rounded transition-transform hover:scale-110 cursor-default" style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}>
-              {formatTokenCount(totalTokens)}
+          {activeConversation && activeConversation.totalTokens && activeConversation.totalTokens > 0 && !isEditingTitle && (
+            <span className="text-xs ml-2 px-2 py-0.5 rounded flex items-center gap-1 transition-transform hover:scale-110 cursor-default" style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}>
+              <Database size={10} />
+              {activeConversation.totalTokens >= 1000 ? `${(activeConversation.totalTokens / 1000).toFixed(1)}K` : activeConversation.totalTokens} tokens
             </span>
           )}
           {activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (

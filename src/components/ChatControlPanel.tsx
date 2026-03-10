@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store';
 import { useToast } from '@/components/Toast';
 import { configStorage } from '@/services/storage/ConfigStorage';
-import { Database, Activity, Brain, MessageCircle, Image as ImageIcon, ChevronDown, Settings2, AlertTriangle } from 'lucide-react';
+import { Activity, Brain, MessageCircle, Image as ImageIcon, ChevronDown, Settings2, AlertTriangle } from 'lucide-react';
 
 interface ChatControlPanelProps {
   isOpen: boolean;
@@ -16,7 +16,6 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
   const containerRef = useRef<HTMLDivElement>(null);
   
   const {
-    showTokenEstimate, setShowTokenEstimate,
     ollamaVerboseMode, setOllamaVerboseMode,
     ollamaThinkMode, setOllamaThinkMode,
     ollamaChatMode, setOllamaChatMode,
@@ -54,19 +53,6 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
         setDeleteConfirmEnabled(newValue);
         configStorage.set('deleteConfirmEnabled', newValue);
         toast.info(newValue ? '已开启删除确认' : '已关闭删除确认', { duration: 2000 });
-      },
-    },
-    {
-      id: 'token',
-      icon: Database,
-      label: 'Token 估算',
-      description: '显示对话 token 数',
-      checked: showTokenEstimate,
-      onChange: () => {
-        const newValue = !showTokenEstimate;
-        setShowTokenEstimate(newValue);
-        configStorage.set('showTokenEstimate', newValue);
-        toast.info(newValue ? '已开启 Token 估算显示' : '已关闭 Token 估算显示', { duration: 2000 });
       },
     },
     {

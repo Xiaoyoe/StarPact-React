@@ -29,7 +29,6 @@ export interface AppConfig {
   ollamaChatMode: 'single' | 'multi';
   includeImagesInContext: boolean;
   deleteConfirmEnabled: boolean;
-  showTokenEstimate: boolean;
   showChatWelcome: boolean;
   splashScreenType: SplashScreenType;
   splashScreenEnabled: boolean;
@@ -76,7 +75,6 @@ export class ConfigStorage {
       ollamaChatMode: 'multi',
       includeImagesInContext: true,
       deleteConfirmEnabled: true,
-      showTokenEstimate: true,
       showChatWelcome: true,
       splashScreenType: 'full',
       splashScreenEnabled: true,

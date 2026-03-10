@@ -1,4 +1,4 @@
-import { Timer, X, RefreshCw, ChevronDown, ChevronUp, Activity, Clock, Zap, Database, Settings2, TrendingUp } from 'lucide-react';
+import { Timer, X, RefreshCw, ChevronDown, ChevronUp, Activity, Clock, Zap, Database, Settings2, TrendingUp, MessageSquare } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store';
 import { useState } from 'react';
@@ -6,6 +6,7 @@ import { useState } from 'react';
 const defaultMetrics = {
   requestId: '-',
   modelName: '-',
+  conversationTitle: '-',
   timestamp: 0,
   modelLoadTime: 0,
   promptEvalTime: 0,
@@ -118,6 +119,12 @@ export function PerformancePanel({ isExpanded, onToggle }: PerformancePanelProps
                     {formatTime(metrics.totalTime)}
                   </span>
                 </div>
+                <div className="flex items-center gap-1">
+                  <Database size={12} style={{ color: 'var(--primary-color)' }} />
+                  <span className="text-xs font-semibold" style={{ color: 'var(--primary-color)' }}>
+                    {metrics.totalConversationTokens.total > 0 ? formatNumber(metrics.totalConversationTokens.total) : '0'}
+                  </span>
+                </div>
               </div>
             )}
             {isExpanded && (
@@ -173,6 +180,19 @@ export function PerformancePanel({ isExpanded, onToggle }: PerformancePanelProps
                   </div>
                 ) : (
                   <>
+                    <div
+                      className="px-2 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2"
+                      style={{ 
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)'
+                      }}
+                    >
+                      <MessageSquare size={12} style={{ color: 'var(--primary-color)' }} />
+                      <span style={{ color: 'var(--text-primary)' }} className="truncate">
+                        {metrics.conversationTitle}
+                      </span>
+                    </div>
+
                     <div
                       className="px-2 py-1 rounded text-xs font-medium inline-block"
                       style={{ 

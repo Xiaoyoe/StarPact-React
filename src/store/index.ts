@@ -62,6 +62,7 @@ export interface Conversation {
   createdAt: number;
   updatedAt: number;
   isFavorite: boolean;
+  totalTokens?: number;
 }
 
 export interface LogEntry {
@@ -175,8 +176,6 @@ interface AppState {
   setIncludeImagesInContext: (include: boolean) => void;
   deleteConfirmEnabled: boolean;
   setDeleteConfirmEnabled: (enabled: boolean) => void;
-  showTokenEstimate: boolean;
-  setShowTokenEstimate: (show: boolean) => void;
 
   // Ollama Pull Tasks
   pullTasks: Map<string, import('@/services/OllamaPullService').PullTask>;
@@ -186,6 +185,7 @@ interface AppState {
   performanceMetrics: {
     requestId: string;
     modelName: string;
+    conversationTitle: string;
     timestamp: number;
     modelLoadTime: number;
     promptEvalTime: number;
@@ -770,8 +770,6 @@ export const useStore = create<AppState>((set, get) => {
   setIncludeImagesInContext: (include) => set({ includeImagesInContext: include }),
   deleteConfirmEnabled: true,
   setDeleteConfirmEnabled: (enabled) => set({ deleteConfirmEnabled: enabled }),
-  showTokenEstimate: true,
-  setShowTokenEstimate: (show) => set({ showTokenEstimate: show }),
 
   // Ollama Pull Tasks
   pullTasks: new Map(),

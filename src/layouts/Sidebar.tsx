@@ -1047,6 +1047,12 @@ export function Sidebar() {
                           <span>{convModel?.name || '未知模型'}</span>
                           <span>·</span>
                           <span>{formatTime(conv.updatedAt)}</span>
+                          {conv.totalTokens && conv.totalTokens > 0 && (
+                            <>
+                              <span>·</span>
+                              <span style={{ color: 'var(--primary-color)' }}>{conv.totalTokens >= 1000 ? `${(conv.totalTokens / 1000).toFixed(1)}K` : conv.totalTokens} tokens</span>
+                            </>
+                          )}
                         </div>
                       </div>
                       {hoveredConv === conv.id && (
