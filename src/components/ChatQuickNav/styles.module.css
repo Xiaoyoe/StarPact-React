@@ -7,7 +7,8 @@
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  z-index: 100;
+  z-index: 50;
+  pointer-events: none;
 }
 
 .navButton {
@@ -22,6 +23,7 @@
   border: 1px solid var(--border-color);
   cursor: pointer;
   transition: all 0.2s ease;
+  pointer-events: auto;
 }
 
 .navButton:hover {
@@ -47,6 +49,7 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
   position: relative;
+  pointer-events: none;
 }
 
 .navPointsContainer::-webkit-scrollbar {
@@ -61,6 +64,7 @@
   cursor: pointer;
   padding: 8px 10px;
   transition: all 0.2s ease;
+  pointer-events: auto;
 }
 
 .navPoint::before {
