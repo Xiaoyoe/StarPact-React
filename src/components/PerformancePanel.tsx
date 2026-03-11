@@ -45,6 +45,14 @@ function formatTime(seconds: number): string {
   return `${seconds.toFixed(2)}s`;
 }
 
+function formatDuration(seconds: number): string {
+  if (seconds === 0) return '-';
+  if (seconds < 60) return `${seconds.toFixed(1)}秒`;
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}分${remainingSeconds.toFixed(1)}秒`;
+}
+
 function formatTimestamp(timestamp: number): string {
   if (!timestamp) return '-';
   const date = new Date(timestamp);
@@ -119,12 +127,6 @@ export function PerformancePanel({ isExpanded, onToggle }: PerformancePanelProps
                     {formatTime(metrics.totalTime)}
                   </span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Database size={12} style={{ color: 'var(--primary-color)' }} />
-                  <span className="text-xs font-semibold" style={{ color: 'var(--primary-color)' }}>
-                    {metrics.totalConversationTokens.total > 0 ? formatNumber(metrics.totalConversationTokens.total) : '0'}
-                  </span>
-                </div>
               </div>
             )}
             {isExpanded && (
@@ -137,6 +139,11 @@ export function PerformancePanel({ isExpanded, onToggle }: PerformancePanelProps
                 <span className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>
                   性能监控
                 </span>
+                {performanceMetrics && (
+                  <span className="text-xs font-semibold" style={{ color: 'var(--primary-color)' }}>
+                    {metrics.totalConversationTokens.total > 0 ? formatNumber(metrics.totalConversationTokens.total) : '0'} tokens
+                  </span>
+                )}
               </motion.div>
             )}
           </div>
@@ -255,6 +262,15 @@ export function PerformancePanel({ isExpanded, onToggle }: PerformancePanelProps
                           </div>
                           <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
                             {formatTime(metrics.totalTime)}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: '#06B6D4' }} />
+                            <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>回复时长</span>
+                          </div>
+                          <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
+                            {formatDuration(metrics.totalTime)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
