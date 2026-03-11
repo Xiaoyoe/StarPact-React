@@ -1135,7 +1135,7 @@ export function GalleryToolbar({
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200",
                   isActive 
                     ? "shadow-md" 
-                    : "hover:bg-[var(--bg-secondary)]"
+                    : "hover:bg-[var(--bg-secondary)] hover:scale-105"
                 )}
                 style={{
                   backgroundColor: isActive ? 'var(--primary-color)' : 'transparent',
@@ -1183,11 +1183,16 @@ export function GalleryToolbar({
           <>
             <button
               onClick={onSelectAll}
-              className="p-2 rounded-lg transition-all duration-200 hover:bg-[var(--bg-tertiary)] hover:scale-110"
-              style={{ backgroundColor: 'transparent', color: 'var(--text-secondary)' }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
+              style={{
+                backgroundColor: 'var(--bg-tertiary)',
+                border: '1px solid var(--border-color)',
+                color: 'var(--text-secondary)',
+              }}
               title="全选"
             >
-              <CheckSquare size={16} />
+              <CheckSquare size={14} />
+              <span>全选</span>
             </button>
             <button
               onClick={onImport}

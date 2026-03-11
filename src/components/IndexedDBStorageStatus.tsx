@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { Database, RefreshCw, Trash2, FolderOutput, FolderInput, Download, Upload } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Database, RefreshCw, Trash2, FolderOutput, FolderInput, Download, Upload, Loader2 } from 'lucide-react';
 import { StorageMonitor } from '@/services/storage/StorageMonitor';
 import type { StorageHealthReport } from '@/services/storage/StorageMonitor';
 import { useStore } from '@/store';
@@ -29,6 +30,8 @@ const STORE_LABELS: Record<string, string> = {
 
 export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProps) {
   const [storageReport, setStorageReport] = useState<StorageHealthReport | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [isExportingToFolder, setIsExportingToFolder] = useState(false);
   const [isExportingToCustomFolder, setIsExportingToCustomFolder] = useState(false);
   const [isImportingBackup, setIsImportingBackup] = useState(false);
@@ -48,14 +51,6 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
   const toast = useToast();
 
   useEffect(() => {
-    const loadStorageReport = async () => {
-      const report = await StorageMonitor.getHealthReport();
-      setStorageReport(report);
-    };
-    loadStorageReport();
-  }, []);
-
-  useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setShowStoreMenu(false);
@@ -66,9 +61,15 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
   }, []);
 
   const handleRefresh = async () => {
-    const report = await StorageMonitor.getHealthReport();
-    setStorageReport(report);
-    onRefresh?.();
+    setIsLoading(true);
+    try {
+      const report = await StorageMonitor.getHealthReport();
+      setStorageReport(report);
+      setIsLoaded(true);
+      onRefresh?.();
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleClear = async () => {
@@ -705,7 +706,7 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
         </h3>
       </div>
 
-      {storageReport ? (
+      {isLoaded && storageReport ? (
         <>
           <div className="flex items-center gap-2 mb-3">
             <div
@@ -751,64 +752,101 @@ export function IndexedDBStorageStatus({ onRefresh }: IndexedDBStorageStatusProp
               </div>
             ))}
           </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t" style={{ borderColor: 'var(--border-color)' }}>
+            <button
+              onClick={handleRefresh}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+            >
+              <RefreshCw size={12} />
+              刷新
+            </button>
+            <button
+              onClick={handleClear}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-all hover:opacity-80 hover:scale-105 active:scale-95"
+              style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+            >
+              <Trash2 size={12} />
+              清空
+            </button>
+            {window.electronAPI?.storage?.backupData && (
+              <button
+                onClick={handleExportToFolder}
+                disabled={isExportingToFolder}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-all hover:opacity-90 hover:scale-105 active:scale-95"
+                style={{ backgroundColor: 'var(--primary-color)', color: 'white', opacity: isExportingToFolder ? 0.6 : 1 }}
+              >
+                <FolderOutput size={12} />
+                {isExportingToFolder ? '备份中...' : '快速备份'}
+              </button>
+            )}
+            {window.electronAPI?.file?.selectFolder && (
+              <button
+                onClick={handleExportToCustomFolder}
+                disabled={isExportingToCustomFolder}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-all hover:opacity-80 hover:scale-105 active:scale-95"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', opacity: isExportingToCustomFolder ? 0.6 : 1 }}
+              >
+                <FolderInput size={12} />
+                {isExportingToCustomFolder ? '备份中...' : '另存'}
+              </button>
+            )}
+            {window.electronAPI?.file?.selectFile && (
+              <button
+                onClick={handleImportBackup}
+                disabled={isImportingBackup}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-all hover:opacity-80 hover:scale-105 active:scale-95"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', opacity: isImportingBackup ? 0.6 : 1 }}
+              >
+                <Upload size={12} />
+                {isImportingBackup ? '导入中...' : '导入备份'}
+              </button>
+            )}
+          </div>
         </>
       ) : (
-        <p className="text-xs mb-4" style={{ color: 'var(--text-tertiary)' }}>
-          正在加载存储状态...
-        </p>
+        <div className="flex items-center justify-between py-4 px-4 rounded-xl" style={{ backgroundColor: 'var(--bg-primary)' }}>
+          <div className="flex items-center gap-3">
+            <div 
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ backgroundColor: 'var(--primary-light)' }}
+            >
+              {isLoading ? (
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
+                >
+                  <Loader2 size={16} style={{ color: 'var(--primary-color)' }} />
+                </motion.div>
+              ) : (
+                <Database size={16} style={{ color: 'var(--primary-color)' }} />
+              )}
+            </div>
+            <div>
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                {isLoading ? '正在加载...' : 'IndexedDB 存储状态未加载'}
+              </span>
+              <span className="text-xs ml-2" style={{ color: 'var(--text-tertiary)' }}>
+                {isLoading ? '请稍候' : '点击右侧按钮加载'}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={handleRefresh}
+            disabled={isLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90 hover:scale-105 active:scale-95"
+            style={{ 
+              backgroundColor: 'var(--primary-color)', 
+              color: 'white',
+              opacity: isLoading ? 0.6 : 1
+            }}
+          >
+            <RefreshCw size={12} className={isLoading ? 'animate-spin' : ''} />
+            {isLoading ? '加载中' : '加载'}
+          </button>
+        </div>
       )}
-
-      <div className="flex items-center justify-end gap-2 pt-3 border-t" style={{ borderColor: 'var(--border-color)' }}>
-        <button
-          onClick={handleRefresh}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
-          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
-        >
-          <RefreshCw size={12} />
-          刷新
-        </button>
-        <button
-          onClick={handleClear}
-          className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
-          style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
-        >
-          <Trash2 size={12} />
-          清空
-        </button>
-        {window.electronAPI?.storage?.backupData && (
-          <button
-            onClick={handleExportToFolder}
-            disabled={isExportingToFolder}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
-            style={{ backgroundColor: 'var(--primary-color)', color: 'white', opacity: isExportingToFolder ? 0.6 : 1 }}
-          >
-            <FolderOutput size={12} />
-            {isExportingToFolder ? '备份中...' : '快速备份'}
-          </button>
-        )}
-        {window.electronAPI?.file?.selectFolder && (
-          <button
-            onClick={handleExportToCustomFolder}
-            disabled={isExportingToCustomFolder}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
-            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', opacity: isExportingToCustomFolder ? 0.6 : 1 }}
-          >
-            <FolderInput size={12} />
-            {isExportingToCustomFolder ? '备份中...' : '另存为'}
-          </button>
-        )}
-        {window.electronAPI?.file?.selectFile && (
-          <button
-            onClick={handleImportBackup}
-            disabled={isImportingBackup}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs transition-colors"
-            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)', opacity: isImportingBackup ? 0.6 : 1 }}
-          >
-            <Upload size={12} />
-            {isImportingBackup ? '导入中...' : '导入备份'}
-          </button>
-        )}
-      </div>
 
       {showStoreMenu && selectedStore && (
         <div

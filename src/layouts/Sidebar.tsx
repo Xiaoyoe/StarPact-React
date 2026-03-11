@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
   ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle, Image as ImageIcon, AlertTriangle, Maximize2, Monitor, Download, Sliders
@@ -52,6 +53,8 @@ export function Sidebar() {
   const toast = useToast();
 
   const [hoveredConv, setHoveredConv] = useState<string | null>(null);
+  const [hoveredConvRect, setHoveredConvRect] = useState<DOMRect | null>(null);
+  const convItemRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [bottomPanelsVisible, setBottomPanelsVisible] = useState(true);
   const [contextMenu, setContextMenu] = useState<{
     visible: boolean;
@@ -1036,7 +1039,22 @@ export function Sidebar() {
                   }}
                 >
                   {sidebarCollapsed ? (
-                    <MessageSquare size={16} style={{ color: 'var(--text-secondary)' }} />
+                    <div 
+                      ref={(el) => {
+                        if (el) convItemRefs.current.set(conv.id, el);
+                      }}
+                      onMouseEnter={(e) => {
+                        setHoveredConv(conv.id);
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setHoveredConvRect(rect);
+                      }}
+                      onMouseLeave={() => {
+                        setHoveredConv(null);
+                        setHoveredConvRect(null);
+                      }}
+                    >
+                      <MessageSquare size={16} style={{ color: 'var(--text-secondary)' }} />
+                    </div>
                   ) : (
                     <>
                       <div className="min-w-0 flex-1">
@@ -1104,7 +1122,7 @@ export function Sidebar() {
             >
               <div className="px-3 py-2 space-y-1" style={{ maxHeight: '200px', overflowY: 'auto', paddingRight: '4px' }}>
                 {orderedPanelItems.map((item, index) => (
-                  <div
+                  <motion.div
                     key={item.id}
                     draggable
                     onDragStart={(e) => handleDragStart(e, index)}
@@ -1118,8 +1136,9 @@ export function Sidebar() {
                       backgroundColor: draggedIndex === index ? 'var(--bg-tertiary)' : 'var(--bg-primary)', 
                       border: `1px solid ${dragOverIndex === index ? 'var(--primary-color)' : 'var(--border-light)'}`,
                       opacity: draggedIndex === index ? 0.5 : 1,
-                      transform: dragOverIndex === index ? 'scale(1.02)' : 'scale(1)',
                     }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     <div
                       className="flex h-7 w-7 items-center justify-center rounded-md"
@@ -1136,7 +1155,7 @@ export function Sidebar() {
                       </div>
                     </div>
                     <MoreHorizontal size={14} style={{ color: 'var(--text-tertiary)' }} />
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </motion.div>
@@ -1159,94 +1178,99 @@ export function Sidebar() {
         }}
       >
         {sidebarCollapsed ? (
-          /* 侧边栏收缩状态：垂直排列，只显示三个按钮 */
           <div className="flex flex-col items-center justify-center py-2 gap-2">
-            {/* Web shortcut button */}
-            <button
+            <motion.button
               onClick={() => setWebShortcutPopupOpen(true)}
-              className="flex items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              className="flex items-center justify-center p-2 rounded-lg transition-colors"
               style={{ color: 'var(--text-secondary)' }}
               title="快捷网页"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-md">
                 <Globe size={18} />
               </div>
-            </button>
+            </motion.button>
 
-            {/* Ollama manager button */}
-            <button
+            <motion.button
               onClick={() => setOllamaModalOpen(true)}
-              className="flex items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              className="flex items-center justify-center p-2 rounded-lg transition-colors"
               style={{ color: 'var(--text-secondary)' }}
               title="Ollama 管理器"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-md">
                 <Cpu size={18} />
               </div>
-            </button>
+            </motion.button>
 
-            {/* Theme toggle button */}
-            <button
+            <motion.button
               onClick={handleThemeToggle}
-              className="flex items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              className="flex items-center justify-center p-2 rounded-lg transition-colors"
               style={{ color: 'var(--text-secondary)' }}
               title={isLightTheme ? '切换到深色主题' : '切换到浅色主题'}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-md">
                 {isLightTheme ? '☀️' : '🌙'}
               </div>
-            </button>
+            </motion.button>
           </div>
         ) : (
-          /* 侧边栏展开状态：水平排列，显示四个按钮 */
           <div className="flex items-center justify-around py-2">
-            {/* Theme toggle button */}
-            <button
+            <motion.button
               onClick={handleThemeToggle}
-              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors"
               style={{ color: 'var(--text-secondary)' }}
               title={isLightTheme ? '切换到深色主题' : '切换到浅色主题'}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-md">
                 {isLightTheme ? '☀️' : '🌙'}
               </div>
-            </button>
+            </motion.button>
 
-            {/* Web shortcut button */}
-            <button
+            <motion.button
               onClick={() => setWebShortcutPopupOpen(true)}
-              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors"
               style={{ color: 'var(--text-secondary)' }}
               title="快捷网页"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-md">
                 <Globe size={18} />
               </div>
-            </button>
+            </motion.button>
 
-            {/* Ollama manager button */}
-            <button
+            <motion.button
               onClick={() => setOllamaModalOpen(true)}
-              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors"
               style={{ color: 'var(--text-secondary)' }}
               title="Ollama 管理器"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-md">
                 <Cpu size={18} />
               </div>
-            </button>
+            </motion.button>
 
-            {/* Expand/collapse button */}
-            <button
+            <motion.button
               onClick={() => setBottomPanelsVisible(!bottomPanelsVisible)}
-              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors hover:bg-slate-100/50"
+              className="flex flex-col items-center justify-center p-2 rounded-lg transition-colors"
               style={{ color: 'var(--text-secondary)' }}
               title={bottomPanelsVisible ? '收起面板' : '展开面板'}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.95 }}
             >
               <div className="flex h-8 w-8 items-center justify-center rounded-md">
                 {bottomPanelsVisible ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
               </div>
-            </button>
+            </motion.button>
           </div>
         )}
       </motion.div>
@@ -1270,6 +1294,59 @@ export function Sidebar() {
         isOpen={downloadGuideOpen} 
         onClose={() => setDownloadGuideOpen(false)} 
       />
+
+      {hoveredConv && hoveredConvRect && sidebarCollapsed && createPortal(
+        <motion.div
+          initial={{ opacity: 0, x: -8 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -8 }}
+          transition={{ duration: 0.15 }}
+          style={{
+            position: 'fixed',
+            left: hoveredConvRect.right + 12,
+            top: hoveredConvRect.top + hoveredConvRect.height / 2,
+            transform: 'translateY(-50%)',
+            zIndex: 9999,
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            className="px-3 py-2 rounded-lg whitespace-nowrap"
+            style={{
+              backgroundColor: 'var(--bg-primary)',
+              border: '1px solid var(--border-color)',
+              boxShadow: 'var(--shadow-md)',
+              maxWidth: '200px',
+            }}
+          >
+            <div className="flex items-center gap-1.5">
+              {conversations.find(c => c.id === hoveredConv)?.isFavorite && (
+                <Star size={12} style={{ color: 'var(--warning-color)' }} fill="var(--warning-color)" />
+              )}
+              <span
+                className="text-sm font-medium truncate"
+                style={{
+                  color: activeConversationId === hoveredConv ? 'var(--primary-color)' : 'var(--text-primary)',
+                  maxWidth: '160px',
+                }}
+              >
+                {conversations.find(c => c.id === hoveredConv)?.title}
+              </span>
+            </div>
+            <div className="flex items-center gap-1 text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+              <span>{models.find(m => m.id === conversations.find(c => c.id === hoveredConv)?.modelId)?.name || '未知模型'}</span>
+              <span>·</span>
+              <span>{formatTime(conversations.find(c => c.id === hoveredConv)?.updatedAt || 0)}</span>
+            </div>
+            {conversations.find(c => c.id === hoveredConv)?.messages?.length ? (
+              <div className="text-xs mt-0.5" style={{ color: 'var(--text-tertiary)' }}>
+                {conversations.find(c => c.id === hoveredConv)?.messages.length} 条消息
+              </div>
+            ) : null}
+          </div>
+        </motion.div>,
+        document.body
+      )}
     </>
   );
 }

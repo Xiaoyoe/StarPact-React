@@ -27,7 +27,7 @@ if (!isDev) {
 let mainWindow = null;
 let currentProcess = null;
 let currentTaskId = null;
-let devToolsEnabled = false;
+let devToolsEnabled = true;
 
 // FFmpeg Service
 const ffmpegService = {

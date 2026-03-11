@@ -29,6 +29,7 @@ const PAGE_SIZE = 20;
 const MAX_PREVIEW_LENGTH = 500;
 const LARGE_DATA_COUNT_THRESHOLD = 100;
 const LARGE_DATA_SIZE_THRESHOLD = 1 * 1024 * 1024;
+const VERY_LARGE_DATA_SIZE_THRESHOLD = 100 * 1024 * 1024;
 
 interface StoreInfo {
   name: string;
@@ -51,8 +52,13 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
   const [totalCount, setTotalCount] = useState(0);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState<{
     open: boolean;
+    storeName: string;
+    storeInfo: StoreInfo;
+  } | null>(null);
+  const [secondConfirmDialog, setSecondConfirmDialog] = useState<{
     storeName: string;
     storeInfo: StoreInfo;
   } | null>(null);
@@ -66,6 +72,7 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
     try {
       const infos = await fetchStoreInfos();
       setStoreInfos(infos);
+      setHasLoaded(true);
       if (infos.length > 0 && !selectedStore) {
         const configStore = infos.find(s => s.name === 'config');
         setSelectedStore(configStore ? configStore.name : infos[0].name);
@@ -100,7 +107,10 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
 
   useEffect(() => {
     if (isOpen) {
-      loadStoreInfos();
+      setHasLoaded(false);
+      setStoreInfos([]);
+      setSelectedStore(null);
+      setStoreData([]);
     }
   }, [isOpen]);
 
@@ -135,9 +145,28 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
 
   const handleConfirmLoad = () => {
     if (confirmDialog) {
-      setSelectedStore(confirmDialog.storeName);
-      setConfirmDialog(null);
+      if (confirmDialog.storeInfo.size > VERY_LARGE_DATA_SIZE_THRESHOLD) {
+        setSecondConfirmDialog({
+          storeName: confirmDialog.storeName,
+          storeInfo: confirmDialog.storeInfo
+        });
+        setConfirmDialog(null);
+      } else {
+        setSelectedStore(confirmDialog.storeName);
+        setConfirmDialog(null);
+      }
     }
+  };
+
+  const handleSecondConfirmLoad = () => {
+    if (secondConfirmDialog) {
+      setSelectedStore(secondConfirmDialog.storeName);
+      setSecondConfirmDialog(null);
+    }
+  };
+
+  const handleCancelSecondConfirm = () => {
+    setSecondConfirmDialog(null);
   };
 
   const handleCancelLoad = () => {
@@ -222,7 +251,7 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                   <button
                     onClick={handleRefresh}
                     disabled={isLoadingStores}
-                    className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-all"
+                    className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-all hover:opacity-80"
                     style={{
                       color: 'var(--primary-color)',
                       opacity: isLoadingStores ? 0.6 : 1
@@ -232,7 +261,27 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                   </button>
                 </div>
 
-                {storeInfos.length > 0 ? (
+                {!hasLoaded ? (
+                  <div className="flex flex-col items-center justify-center py-8">
+                    <Database size={24} className="mb-2" style={{ color: 'var(--text-tertiary)' }} />
+                    <p className="text-xs mb-3" style={{ color: 'var(--text-tertiary)' }}>
+                      点击右上角刷新按钮加载
+                    </p>
+                    <button
+                      onClick={handleRefresh}
+                      disabled={isLoadingStores}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:opacity-90 hover:scale-105 active:scale-95"
+                      style={{ 
+                        backgroundColor: 'var(--primary-color)', 
+                        color: 'white',
+                        opacity: isLoadingStores ? 0.6 : 1
+                      }}
+                    >
+                      <RefreshCw size={12} className={isLoadingStores ? 'animate-spin' : ''} />
+                      {isLoadingStores ? '加载中' : '加载'}
+                    </button>
+                  </div>
+                ) : storeInfos.length > 0 ? (
                   <div className="space-y-0.5">
                     {storeInfos.map((store) => {
                       const isSelected = selectedStore === store.name;
@@ -540,6 +589,84 @@ export function DataManager({ isOpen, onClose }: DataManagerProps) {
                     onClick={handleConfirmLoad}
                     className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors"
                     style={{ backgroundColor: 'var(--primary-color)' }}
+                  >
+                    确认加载
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {secondConfirmDialog && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[70] flex items-center justify-center"
+              style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
+              onClick={handleCancelSecondConfirm}
+            >
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="w-full max-w-md rounded-2xl p-6 shadow-2xl"
+                style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid #EF4444' }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)' }}>
+                    <AlertTriangle size={20} style={{ color: '#EF4444' }} />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold" style={{ color: '#EF4444' }}>超大数据警告</h3>
+                    <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>数据量极大，请谨慎操作</p>
+                  </div>
+                </div>
+
+                <div className="mb-4 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>存储表</span>
+                    <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>
+                      {STORE_LABELS[secondConfirmDialog.storeName] || secondConfirmDialog.storeName}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>记录数量</span>
+                    <span className="text-xs font-medium" style={{ color: '#EF4444' }}>
+                      {secondConfirmDialog.storeInfo.count} 条
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>数据大小</span>
+                    <span className="text-xs font-medium" style={{ color: '#EF4444' }}>
+                      {formatSize(secondConfirmDialog.storeInfo.size)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mb-5 p-3 rounded-lg" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                  <p className="text-xs" style={{ color: '#EF4444' }}>
+                    数据量超过 100MB，加载可能导致应用严重卡顿甚至无响应。建议先清理不必要的数据后再尝试加载。
+                  </p>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                  <button
+                    onClick={handleCancelSecondConfirm}
+                    className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                    style={{ 
+                      backgroundColor: 'var(--bg-secondary)', 
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-secondary)' 
+                    }}
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleSecondConfirmLoad}
+                    className="px-4 py-2 rounded-lg text-sm font-medium text-white transition-colors"
+                    style={{ backgroundColor: '#EF4444' }}
                   >
                     确认加载
                   </button>

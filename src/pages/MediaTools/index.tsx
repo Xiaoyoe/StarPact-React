@@ -111,7 +111,7 @@ function TaskItem({
           </div>
           <button
             onClick={onToggleExpand}
-            className="p-1 rounded transition-colors"
+            className="p-1 rounded transition-all duration-200 hover:scale-110"
             style={{ color: 'var(--text-tertiary)' }}
           >
             {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
@@ -149,7 +149,7 @@ function TaskItem({
           <div className="flex items-center gap-1">
             <button
               onClick={handleCopyTaskInfo}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors"
+              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all duration-200 hover:scale-105"
               style={{ color: 'var(--text-tertiary)' }}
               title="复制任务信息"
             >
@@ -159,7 +159,7 @@ function TaskItem({
             {task.status === 'processing' && (
               <button
                 onClick={() => onStop(task.id)}
-                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors"
+                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all duration-200 hover:scale-105"
                 style={{ color: 'var(--error-color)' }}
               >
                 <Square className="w-2.5 h-2.5" />
@@ -169,7 +169,7 @@ function TaskItem({
             {(task.status === 'completed' || task.status === 'error' || task.status === 'stopped') && (
               <button
                 onClick={() => onRemove(task.id)}
-                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors"
+                className="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all duration-200 hover:scale-105"
                 style={{ color: 'var(--text-tertiary)' }}
               >
                 <Trash2 className="w-2.5 h-2.5" />
@@ -178,7 +178,7 @@ function TaskItem({
             )}
             <button
               onClick={() => onOpenFolder(task.outputPath)}
-              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-colors"
+              className="flex items-center gap-1 px-2 py-1 rounded text-[10px] transition-all duration-200 hover:scale-105"
               style={{ color: 'var(--primary-color)' }}
             >
               <FolderOpen className="w-2.5 h-2.5" />
@@ -212,7 +212,7 @@ function TaskItem({
                 </span>
                 <button
                   onClick={handleCopyLogs}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-colors"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] transition-all duration-200 hover:scale-105"
                   style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-tertiary)' }}
                   title="复制全部日志"
                 >
@@ -329,7 +329,7 @@ export function MediaToolsPage() {
           <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
           <button
             onClick={() => setShowFFmpegConfig(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 hover:scale-105"
             style={{
               backgroundColor: 'var(--bg-tertiary)',
               color: 'var(--text-secondary)',
@@ -341,7 +341,7 @@ export function MediaToolsPage() {
           </button>
           <button
             onClick={() => setShowTaskList(!showTaskList)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all"
+            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 hover:scale-105"
             style={{
               backgroundColor: showTaskList ? 'var(--primary-light)' : 'var(--bg-tertiary)',
               color: showTaskList ? 'var(--primary-color)' : 'var(--text-secondary)',
@@ -403,7 +403,7 @@ export function MediaToolsPage() {
                   {completedTasks.length > 0 && (
                     <button
                       onClick={clearCompletedTasks}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-all hover:opacity-70"
+                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-all duration-200 hover:scale-105"
                       style={{ color: 'var(--text-tertiary)' }}
                     >
                       <Trash2 className="w-3 h-3" />

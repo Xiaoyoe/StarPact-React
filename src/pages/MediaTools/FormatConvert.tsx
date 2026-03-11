@@ -45,7 +45,7 @@ function CollapsibleSection({ title, icon, children, defaultOpen = true }: Colla
     >
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 transition-all duration-200 hover:brightness-[0.98]"
         style={{ backgroundColor: isOpen ? 'var(--bg-tertiary)' : 'transparent' }}
       >
         <div className="flex items-center gap-2">
@@ -346,7 +346,7 @@ export function FormatConvert() {
                 </div>
                 <button
                   onClick={clearAllFiles}
-                  className="text-xs px-2 py-1 rounded-md transition-colors hover:opacity-80"
+                  className="text-xs px-2 py-1 rounded-md transition-all duration-200 hover:scale-105"
                   style={{ backgroundColor: 'var(--error-light)', color: 'var(--error-color)' }}
                 >
                   清空
@@ -433,7 +433,7 @@ export function FormatConvert() {
                 <button
                   key={f}
                   onClick={() => setTargetFormat(f)}
-                  className="px-2 py-1.5 rounded-md text-xs font-medium transition-all text-center"
+                  className="px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200 hover:scale-105 text-center"
                   style={{
                     backgroundColor: targetFormat === f ? 'var(--primary-light)' : 'var(--bg-tertiary)',
                     color: targetFormat === f ? 'var(--primary-color)' : 'var(--text-secondary)',
@@ -512,7 +512,7 @@ export function FormatConvert() {
               <button 
                 onClick={isCurrentModuleProcessing ? handleStop : handleStart} 
                 disabled={!isConfigured || !isElectronEnv}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all shadow-lg"
+                className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all duration-200 hover:scale-105 shadow-lg"
                 style={{ 
                   background: isCurrentModuleProcessing 
                     ? 'linear-gradient(135deg, var(--error-color), #ef4444)' 
@@ -562,7 +562,7 @@ export function FormatConvert() {
                 <button
                   key={p.name}
                   onClick={() => { setCrf(p.crf); setPreset(p.preset); }}
-                  className="p-3 rounded-lg text-left transition-all"
+                  className="p-3 rounded-lg text-left transition-all duration-200 hover:scale-105"
                   style={{
                     backgroundColor: crf === p.crf && preset === p.preset ? 'var(--primary-light)' : 'var(--bg-tertiary)',
                     border: `1px solid ${crf === p.crf && preset === p.preset ? 'var(--primary-color)' : 'transparent'}`,
@@ -711,7 +711,7 @@ export function FormatConvert() {
               />
               <button
                 onClick={() => setShowFullscreen(false)}
-                className="absolute -top-3 -right-3 p-2 rounded-full transition-all"
+                className="absolute -top-3 -right-3 p-2 rounded-full transition-all duration-200 hover:scale-110"
                 style={{ backgroundColor: 'var(--bg-secondary)' }}
               >
                 <X className="w-5 h-5" style={{ color: 'var(--text-primary)' }} />

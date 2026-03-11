@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '@/store';
 import { useToast } from '@/components/Toast';
 import { configStorage } from '@/services/storage/ConfigStorage';
-import { Activity, Brain, MessageCircle, Image as ImageIcon, ChevronDown, Settings2, AlertTriangle } from 'lucide-react';
+import { Activity, Brain, MessageCircle, Image as ImageIcon, AlertTriangle, Settings2, X } from 'lucide-react';
 
 interface ChatControlPanelProps {
   isOpen: boolean;
@@ -46,7 +46,6 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
       id: 'deleteConfirm',
       icon: AlertTriangle,
       label: '删除确认',
-      description: '删除消息前确认',
       checked: deleteConfirmEnabled,
       onChange: () => {
         const newValue = !deleteConfirmEnabled;
@@ -59,7 +58,6 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
       id: 'verbose',
       icon: Activity,
       label: '详细模式',
-      description: '显示性能指标',
       checked: ollamaVerboseMode,
       onChange: () => {
         const newValue = !ollamaVerboseMode;
@@ -72,7 +70,6 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
       id: 'think',
       icon: Brain,
       label: '思考模式',
-      description: '启用模型思考能力',
       checked: ollamaThinkMode,
       onChange: () => {
         const newValue = !ollamaThinkMode;
@@ -84,8 +81,7 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
     {
       id: 'chat',
       icon: MessageCircle,
-      label: '对话模式',
-      description: ollamaChatMode === 'multi' ? '多轮对话(有记忆)' : '单轮对话(无记忆)',
+      label: '多轮对话',
       checked: ollamaChatMode === 'multi',
       onChange: () => {
         const newMode = ollamaChatMode === 'multi' ? 'single' : 'multi';
@@ -98,7 +94,6 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
       id: 'images',
       icon: ImageIcon,
       label: '携带图片',
-      description: '多轮对话包含图片',
       checked: includeImagesInContext,
       onChange: () => {
         const newValue = !includeImagesInContext;
@@ -113,7 +108,7 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
     <div className="relative" ref={containerRef}>
       <button
         onClick={onToggle}
-        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all hover:scale-110"
+        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200 hover:scale-110"
         style={{
           backgroundColor: isOpen ? 'var(--primary-color)' : 'var(--bg-secondary)',
           color: isOpen ? 'white' : 'var(--text-tertiary)',
@@ -121,113 +116,91 @@ export function ChatControlPanel({ isOpen, onClose, onToggle }: ChatControlPanel
         }}
         title={isOpen ? '隐藏聊天控制' : '显示聊天控制'}
       >
-        <Settings2 size={18} />
+        <Settings2 size={18} style={{ color: 'inherit' }} />
       </button>
 
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ y: 20, opacity: 0, scale: 0.95 }}
+            initial={{ y: 10, opacity: 0, scale: 0.95 }}
             animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ y: 20, opacity: 0, scale: 0.95 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-            className="absolute bottom-full right-0 mb-5 z-50"
+            exit={{ y: 10, opacity: 0, scale: 0.95 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 400 }}
+            className="absolute bottom-full right-0 mb-3 z-50"
           >
             <div
               className="rounded-2xl overflow-hidden"
               style={{
                 backgroundColor: 'var(--bg-primary)',
                 border: '1px solid var(--border-color)',
-                boxShadow: 'var(--shadow-lg)',
-                width: '260px',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+                width: '220px',
               }}
             >
               <div
-                className="flex items-center justify-between px-4 py-3 border-b"
-                style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}
+                className="flex items-center justify-between px-4 py-2.5 border-b"
+                style={{ borderColor: 'var(--border-color)' }}
               >
-                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>聊天控制</span>
+                <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>聊天控制</span>
                 <button
                   onClick={onClose}
-                  className="p-1 rounded-lg transition-colors hover:bg-opacity-80"
+                  className="p-1 rounded-md transition-all duration-150 hover:scale-110 hover:bg-[var(--bg-secondary)]"
                   style={{ color: 'var(--text-tertiary)' }}
                 >
-                  <ChevronDown size={16} />
+                  <X size={14} />
                 </button>
               </div>
 
-              <div className="p-3 space-y-2 max-h-80 overflow-y-auto">
+              <div className="p-2 space-y-1">
                 {controls.map((control) => (
-                  <div
+                  <motion.div
                     key={control.id}
-                    className="flex items-center justify-between p-3 rounded-xl transition-colors cursor-pointer"
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    className="flex items-center justify-between px-3 py-2.5 rounded-xl transition-all duration-150 cursor-pointer"
                     style={{
                       backgroundColor: control.checked ? 'var(--primary-light)' : 'var(--bg-secondary)',
-                      border: `1px solid ${control.checked ? 'var(--primary-color)' : 'var(--border-color)'}`,
                     }}
                     onClick={control.onChange}
                   >
-                    <div className="flex items-center gap-3">
-                      <control.icon
-                        size={18}
-                        style={{ color: control.checked ? 'var(--primary-color)' : 'var(--text-tertiary)' }}
-                      />
-                      <div>
-                        <div
-                          className="text-sm font-medium"
-                          style={{ color: control.checked ? 'var(--primary-color)' : 'var(--text-primary)' }}
-                        >
-                          {control.label}
-                        </div>
-                        <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                          {control.description}
-                        </div>
-                      </div>
-                    </div>
-                    <div
-                      className="relative w-11 h-6 rounded-full shrink-0"
-                      style={{
-                        backgroundColor: control.checked 
-                          ? 'var(--primary-color)' 
-                          : 'var(--bg-tertiary)',
-                        boxShadow: control.checked 
-                          ? '0 0 8px rgba(59, 130, 246, 0.35)' 
-                          : 'inset 0 1px 2px rgba(0, 0, 0, 0.1)',
-                        transition: 'background-color 0.2s, box-shadow 0.2s',
-                      }}
-                    >
+                    <div className="flex items-center gap-2.5">
                       <div
-                        className="absolute top-0.5 w-5 h-5 rounded-full flex items-center justify-center"
+                        className="flex items-center justify-center w-7 h-7 rounded-lg transition-all duration-200"
                         style={{
-                          backgroundColor: 'white',
-                          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.12)',
-                          transform: control.checked ? 'translateX(20px)' : 'translateX(0)',
-                          transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-                          willChange: 'transform',
+                          backgroundColor: control.checked ? 'var(--primary-color)' : 'var(--bg-tertiary)',
                         }}
                       >
-                        {control.checked && (
-                          <svg
-                            width="10"
-                            height="10"
-                            viewBox="0 0 10 10"
-                            fill="none"
-                            style={{ 
-                              animation: 'checkIn 0.15s ease-out forwards',
-                            }}
-                          >
-                            <path
-                              d="M1.5 5L4 7.5L8.5 2.5"
-                              stroke="var(--primary-color)"
-                              strokeWidth="1.5"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            />
-                          </svg>
-                        )}
+                        <control.icon
+                          size={14}
+                          style={{ color: control.checked ? 'white' : 'var(--text-tertiary)' }}
+                        />
                       </div>
+                      <span
+                        className="text-xs font-medium"
+                        style={{ color: control.checked ? 'var(--primary-color)' : 'var(--text-primary)' }}
+                      >
+                        {control.label}
+                      </span>
                     </div>
-                  </div>
+                    <div
+                      className="relative w-9 h-5 rounded-full shrink-0 transition-all duration-200"
+                      style={{
+                        backgroundColor: control.checked ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                      }}
+                    >
+                      <motion.div
+                        className="absolute top-0.5 w-4 h-4 rounded-full"
+                        style={{
+                          backgroundColor: 'white',
+                          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.15)',
+                        }}
+                        animate={{
+                          x: control.checked ? 16 : 2,
+                        }}
+                        transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                      />
+                    </div>
+                  </motion.div>
                 ))}
               </div>
             </div>

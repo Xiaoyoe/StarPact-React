@@ -468,7 +468,7 @@ function VideoPlayerPage() {
                       <div className="flex items-center gap-3">
                         <button
                           onClick={openFilePicker}
-                          className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-300"
+                          className="flex items-center gap-2 px-4 py-1.5 rounded-full text-sm font-medium transition-all duration-200 hover:scale-105"
                           style={{ 
                             background: 'rgba(0,0,0,0.3)',
                             color: 'white',
@@ -487,7 +487,7 @@ function VideoPlayerPage() {
                             configStorage.set('videoAutoPlay', newAutoPlay);
                             toast.success(newAutoPlay ? '自动播放已开启' : '自动播放已关闭');
                           }}
-                          className="flex items-center justify-center w-9 h-9 rounded-full transition-colors"
+                          className="flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-110"
                           style={{ 
                             backgroundColor: autoPlay ? 'var(--primary-color)' : 'rgba(0,0,0,0.3)', 
                             color: 'white',
@@ -502,7 +502,7 @@ function VideoPlayerPage() {
                         </button>
                         <button
                           onClick={() => setShowShortcuts(true)}
-                          className="flex items-center justify-center w-9 h-9 rounded-full transition-colors"
+                          className="flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-110"
                           style={{ 
                             backgroundColor: 'rgba(0,0,0,0.3)', 
                             color: 'white',
@@ -520,7 +520,7 @@ function VideoPlayerPage() {
                             setSidebarOpen(newSidebarOpen);
                             setShowToolbar(newSidebarOpen);
                           }}
-                          className="flex items-center justify-center w-9 h-9 rounded-full transition-colors"
+                          className="flex items-center justify-center w-9 h-9 rounded-full transition-all duration-200 hover:scale-110"
                           style={{ 
                             backgroundColor: 'rgba(0,0,0,0.3)', 
                             color: 'white',
@@ -649,7 +649,7 @@ function VideoPlayerPage() {
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => setSidebarOpen(false)}
-                  className="flex items-center gap-2 transition-opacity hover:opacity-70"
+                  className="flex items-center gap-2 transition-all duration-200 hover:scale-105"
                   title="隐藏侧边栏"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ color: 'var(--primary-color)' }}>
@@ -678,13 +678,18 @@ function VideoPlayerPage() {
                   <p className="text-sm mb-4" style={{ color: 'var(--text-tertiary)' }}>添加视频文件开始播放</p>
                   <button
                     onClick={openFilePicker}
-                    className="px-4 py-2 rounded-full text-sm font-medium transition-all"
+                    className="group flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 hover:scale-105"
                     style={{ 
-                      background: 'linear-gradient(to right, var(--primary-color), var(--primary-dark))',
-                      color: 'white'
+                      backgroundColor: 'var(--primary-color)',
+                      color: 'white',
+                      border: '1px solid var(--primary-color)',
+                      boxShadow: '0 2px 8px color-mix(in srgb, var(--primary-color) 30%, transparent)'
                     }}
                   >
-                    添加视频文件
+                    <svg className="w-4 h-4 transition-transform duration-200 group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                    </svg>
+                    <span>添加视频文件</span>
                   </button>
                 </div>
               ) : (
@@ -743,7 +748,7 @@ function VideoPlayerPage() {
                         e.stopPropagation();
                         removeFile(video.id);
                       }}
-                      className="flex items-center justify-center w-8 h-8 rounded-full transition-colors bg-[var(--bg-primary)] text-[var(--text-secondary)] border border-[var(--border-color)] hover:bg-red-500/20 hover:text-red-500 hover:border-red-500/30"
+                      className="flex items-center justify-center w-8 h-8 rounded-full transition-all duration-200 bg-[var(--bg-primary)] text-[var(--text-secondary)] border border-[var(--border-color)] hover:bg-red-500/20 hover:text-red-500 hover:border-red-500/30 hover:scale-110"
                       title="删除"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -763,7 +768,7 @@ function VideoPlayerPage() {
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={openFilePicker}
-                    className="px-2 py-1.5 rounded-md text-xs font-medium transition-all"
+                    className="px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200 hover:scale-105"
                     style={{
                       backgroundColor: 'var(--primary-color)',
                       color: 'white'
@@ -773,7 +778,7 @@ function VideoPlayerPage() {
                   </button>
                   <button
                     onClick={clearPlaylist}
-                    className="px-2 py-1.5 rounded-md text-xs font-medium transition-all"
+                    className="px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200 hover:scale-105"
                     style={{
                       backgroundColor: 'var(--bg-tertiary)',
                       color: 'var(--text-secondary)',
@@ -790,7 +795,7 @@ function VideoPlayerPage() {
                     <button
                       key={mode}
                       onClick={() => setRepeatMode(mode)}
-                      className="flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all"
+                      className="flex-1 px-2 py-1.5 rounded-md text-xs font-medium transition-all duration-200 hover:scale-105"
                       style={{
                         backgroundColor: repeatMode === mode ? 'var(--primary-color)' : 'transparent',
                         color: repeatMode === mode ? 'white' : 'var(--text-secondary)'

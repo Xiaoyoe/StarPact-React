@@ -869,7 +869,7 @@ export default function PromptTemplatesPage() {
             {hasFilters && (
               <button
                 onClick={() => { setSearchQuery(''); setFilterCategory(''); setFilterTag(''); }}
-                className="inline-flex items-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-medium hover:bg-red-100 transition-colors"
+                className="inline-flex items-center gap-1 rounded-xl border px-3 py-2.5 text-xs font-medium transition-all duration-200 hover:scale-105"
                 style={{ 
                   borderColor: 'var(--error-color)',
                   backgroundColor: 'var(--bg-primary)',
@@ -882,53 +882,57 @@ export default function PromptTemplatesPage() {
             )}
 
             {/* 分类筛选 */}
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-tertiary)' }} />
+            <div className="relative group">
+              <Filter className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 pointer-events-none z-10" style={{ color: filterCategory ? 'var(--primary-color)' : 'var(--text-tertiary)' }} />
               <select
                 value={filterCategory}
                 onChange={e => setFilterCategory(e.target.value)}
                 className={cn(
-                  "appearance-none rounded-xl border pl-8 pr-8 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all cursor-pointer",
-                  filterCategory ? "border-violet-300" : "border-slate-200"
+                  "appearance-none rounded-xl border pl-8 pr-8 py-2.5 text-sm outline-none transition-all cursor-pointer hover:scale-105",
+                  filterCategory 
+                    ? "border-[var(--primary-color)] shadow-sm" 
+                    : "hover:border-[var(--primary-light)]"
                 )}
                 style={{ 
-                  borderColor: filterCategory ? 'var(--primary-light)' : 'var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
+                  borderColor: filterCategory ? 'var(--primary-color)' : 'var(--border-color)',
+                  backgroundColor: filterCategory ? 'var(--primary-light)' : 'var(--bg-primary)',
                   color: filterCategory ? 'var(--primary-color)' : 'var(--text-secondary)'
                 }}
               >
                 <option value="">全部分类</option>
                 {usedCategories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <SlidersHorizontal className="absolute right-3 top-1/2 h-3 w-3 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-tertiary)' }} />
+              <ChevronDown className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 pointer-events-none transition-transform group-hover:translate-y-[-40%]" style={{ color: filterCategory ? 'var(--primary-color)' : 'var(--text-tertiary)' }} />
             </div>
 
             {/* 标签筛选 */}
-            <div className="relative">
-              <Tag className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-tertiary)' }} />
+            <div className="relative group">
+              <Tag className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 pointer-events-none z-10" style={{ color: filterTag ? 'var(--primary-color)' : 'var(--text-tertiary)' }} />
               <select
                 value={filterTag}
                 onChange={e => setFilterTag(e.target.value)}
                 className={cn(
-                  "appearance-none rounded-xl border pl-8 pr-8 py-2.5 text-sm outline-none focus:border-violet-400 focus:ring-2 focus:ring-violet-100 transition-all cursor-pointer",
-                  filterTag ? "border-violet-300" : "border-slate-200"
+                  "appearance-none rounded-xl border pl-8 pr-8 py-2.5 text-sm outline-none transition-all cursor-pointer hover:scale-105",
+                  filterTag 
+                    ? "border-[var(--primary-color)] shadow-sm" 
+                    : "hover:border-[var(--primary-light)]"
                 )}
                 style={{ 
-                  borderColor: filterTag ? 'var(--primary-light)' : 'var(--border-color)',
-                  backgroundColor: 'var(--bg-primary)',
+                  borderColor: filterTag ? 'var(--primary-color)' : 'var(--border-color)',
+                  backgroundColor: filterTag ? 'var(--primary-light)' : 'var(--bg-primary)',
                   color: filterTag ? 'var(--primary-color)' : 'var(--text-secondary)'
                 }}
               >
                 <option value="">全部标签</option>
                 {allTags.map(t => <option key={t} value={t}>{t}</option>)}
               </select>
-              <SlidersHorizontal className="absolute right-3 top-1/2 h-3 w-3 -translate-y-1/2 pointer-events-none" style={{ color: 'var(--text-tertiary)' }} />
+              <ChevronDown className="absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 pointer-events-none transition-transform group-hover:translate-y-[-40%]" style={{ color: filterTag ? 'var(--primary-color)' : 'var(--text-tertiary)' }} />
             </div>
 
             {/* 新增模板按钮 */}
             <button
               onClick={openAdd}
-              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-all shadow-md active:scale-95"
+              className="inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:scale-105 shadow-md"
               style={{ backgroundColor: 'var(--primary-color)', boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
             >
               <Plus className="h-4 w-4" />

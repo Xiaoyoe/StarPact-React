@@ -19,7 +19,7 @@ export function Tabs({ tabs, active, onChange }: TabsProps) {
         <button
           key={t.key}
           onClick={() => onChange(t.key)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 hover:scale-105"
           style={{
             backgroundColor: active === t.key ? 'var(--primary-light)' : 'transparent',
             color: active === t.key ? 'var(--primary-color)' : 'var(--text-secondary)',

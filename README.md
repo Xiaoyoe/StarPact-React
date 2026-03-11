@@ -1,347 +1,381 @@
-# 星约 (Starpact)
+<div align="center">
 
-一个基于 React、Electron 和 Node.js 的多功能智能桌面应用程序，集成了 AI 模型管理、对话功能、高级代码编辑、视频播放、图片管理等多种实用功能，提供丰富的主题选择和良好的用户体验。
+# ✨ 星约 Starpact
 
-## 技术栈
+**多功能智能桌面应用**
 
-### 前端核心
-- **React 19.2.3** - 用户界面框架
-- **TypeScript 5.9.3** - 类型安全
-- **Vite 7.2.4** - 构建工具
-- **Tailwind CSS 4.1.17** - 样式框架
-- **Framer Motion 12.33.0** - 动画库
-- **Zustand 5.0.11** - 状态管理
-- **Lucide React 0.563.0** - 图标库
+*如同星辰之间的约定，连接用户与智能、创意与效率*
 
-### 桌面应用
-- **Electron 28.0.0** - 桌面应用框架
-- **Electron Builder 24.0.0** - 应用打包工具
-- **Electron Store 11.0.2** - 本地存储
+[![React](https://img.shields.io/badge/React-19.2.3-61DAFB?style=flat-square&logo=react)](https://reactjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9.3-3178C6?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
+[![Electron](https://img.shields.io/badge/Electron-28.0.0-47848F?style=flat-square&logo=electron)](https://www.electronjs.org/)
+[![Vite](https://img.shields.io/badge/Vite-7.2.4-646CFF?style=flat-square&logo=vite)](https://vitejs.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind-4.1.17-06B6D4?style=flat-square&logo=tailwindcss)](https://tailwindcss.com/)
 
-### 功能依赖
-- **React Markdown 10.1.0** - Markdown 渲染
-- **React Syntax Highlighter 16.1.0** - 代码高亮
-- **clsx 2.1.1** - 类名工具
-- **tailwind-merge 3.4.0** - Tailwind 类名合并
-- **uuid 13.0.0** - 唯一 ID 生成
-- **sharp 0.34.5** - 图像处理
+</div>
 
-## 项目结构
+---
+
+## 📖 目录
+
+- [项目概述](#-项目概述)
+- [功能特性](#-功能特性)
+- [技术架构](#-技术架构)
+- [界面主题](#-界面主题)
+- [安装与运行](#-安装与运行)
+- [Ollama 集成](#-ollama-集成)
+- [存储系统](#-存储系统)
+- [开发指南](#-开发指南)
+- [常见问题](#-常见问题)
+- [更新日志](#-更新日志)
+
+---
+
+## 🌟 项目概述
+
+**星约 (Starpact)** 是一款集成了人工智能对话、媒体处理、数据管理等多种功能于一体的现代化桌面应用程序。
+
+### 核心亮点
+
+| 特性 | 描述 |
+|------|------|
+| 🤖 **多模型AI对话** | 支持 Ollama 本地模型 + OpenAI/Claude/DeepSeek 等远程 API |
+| 🎬 **媒体工具箱** | 基于 FFmpeg 的视频转换、音频处理、图片格式转换 |
+| 🎨 **13种精美主题** | 从浅色到深色，从科技蓝到樱花粉，满足个性化需求 |
+| 💾 **本地数据存储** | 基于 IndexedDB 的安全本地存储，保护您的隐私 |
+| ⚡ **高性能架构** | React 19 + Vite 7 + Electron 28，流畅体验 |
+
+### 技术栈
 
 ```
-React_UI_Web/
-├── backend/                # 后端服务
-│   ├── main.py             # 后端入口
-│   └── requirements.txt    # 后端依赖
-├── dist/                   # 构建输出
-├── src/                    # 源代码
-│   ├── components/         # 可复用组件
-│   │   ├── ChatQuickNav/   # 聊天快捷导航
-│   │   ├── DataManager/    # 数据管理
-│   │   ├── ffmpeg/         # FFmpeg 相关组件
-│   │   │   ├── Badge.tsx
-│   │   │   ├── FileDropZone.tsx
-│   │   │   ├── FormRow.tsx
-│   │   │   ├── ProgressBar.tsx
-│   │   │   ├── SectionCard.tsx
-│   │   │   ├── Slider.tsx
-│   │   │   ├── Tabs.tsx
-│   │   │   ├── Terminal.tsx
-│   │   │   ├── Toggle.tsx
-│   │   │   └── index.ts
-│   │   ├── ChatWelcome.tsx # 聊天欢迎页面
-│   │   ├── CodeEditor.tsx  # 高级代码编辑器组件
-│   │   ├── ConfirmDialog.tsx # 确认对话框组件
-│   │   ├── ConversationContextMenu.tsx # 对话右键菜单组件
-│   │   ├── CustomTitleBar.tsx # 自定义标题栏
-│   │   ├── FFmpegConfigModal.tsx # FFmpeg 配置弹窗
-│   │   ├── GalleryComponents.tsx # 图片管理组件
-│   │   ├── ImageViewer.tsx # 图片查看器组件
-│   │   ├── IndexedDBStorageStatus.tsx # IndexedDB 存储状态
-│   │   ├── LogsPanel.tsx   # 日志面板组件
-│   │   ├── NovelEditor.tsx # 小说编辑器组件
-│   │   ├── OllamaModal.tsx # Ollama 管理弹窗组件
-│   │   ├── PerformanceModal.tsx # 性能监控弹窗
-│   │   ├── Toast.tsx       # 提示组件
-│   │   ├── VideoPlayer.tsx # 视频播放器组件
-│   │   └── WebShortcutPopup.tsx # 网页快捷方式弹窗组件
-│   ├── constants/          # 常量定义
-│   │   ├── config.ts       # 配置常量
-│   │   └── themes.ts       # 主题常量
-│   ├── hooks/              # 自定义 hooks
-│   │   ├── index.ts        # hooks 导出
-│   │   ├── useDebounce.ts  # 防抖 hook
-│   │   └── useTheme.ts     # 主题 hook
-│   ├── images/             # 图片资源
-│   │   └── background/     # 背景图片
-│   ├── layouts/            # 布局组件
-│   │   ├── styles/         # 布局样式
-│   │   │   └── index.module.css
-│   │   └── Sidebar.tsx     # 侧边栏布局
-│   ├── main/               # Electron 主进程
-│   │   ├── ipc/            # IPC 通信
-│   │   │   ├── channels.ts # IPC 通道定义
-│   │   │   ├── ffmpegHandlers.ts # FFmpeg IPC 处理器
-│   │   │   ├── fileHandlers.ts # 文件 IPC 处理器
-│   │   │   ├── ollamaHandlers.ts # Ollama IPC 处理器
-│   │   │   ├── storageHandlers.ts # 存储 IPC 处理器
-│   │   │   └── windowHandlers.ts # 窗口 IPC 处理器
-│   │   ├── preload/        # 预加载脚本
-│   │   │   ├── index.cjs   # 预加载入口 (CommonJS)
-│   │   │   └── index.ts    # 预加载入口 (TypeScript)
-│   │   ├── services/       # 后端服务
-│   │   │   ├── ffmpeg/     # FFmpeg 服务
-│   │   │   │   └── FFmpegService.ts
-│   │   │   └── ollama/     # Ollama 服务
-│   │   │       ├── OllamaAPIClient.ts       # API 客户端
-│   │   │       └── OllamaServiceManager.ts  # 服务管理
-│   │   └── index.ts        # 主进程入口
-│   ├── pages/              # 页面组件
-│   │   ├── Chat/           # 聊天页面
-│   │   │   ├── styles/     # 聊天页面样式
-│   │   │   │   └── index.module.css
-│   │   │   └── index.tsx   # 聊天页面组件
-│   │   ├── Compare/        # 对比页面
-│   │   │   ├── components/ # 对比页面组件
-│   │   │   │   ├── CompareStats.tsx
-│   │   │   │   ├── DiffResultView.tsx
-│   │   │   │   ├── FloatingToolbar.tsx
-│   │   │   │   ├── SaveModal.tsx
-│   │   │   │   ├── SavedItem.tsx
-│   │   │   │   ├── Splitter.tsx
-│   │   │   │   └── ToolButton.tsx
-│   │   │   ├── hooks/      # 对比页面 hooks
-│   │   │   │   ├── useAutoSave.ts
-│   │   │   │   ├── useCompareState.ts
-│   │   │   │   ├── useKeyboardShortcuts.ts
-│   │   │   │   └── useSavedFiles.ts
-│   │   │   ├── styles/     # 对比页面样式
-│   │   │   │   └── index.module.css
-│   │   │   ├── utils/      # 对比页面工具
-│   │   │   │   └── storage.ts
-│   │   │   └── index.tsx   # 对比页面组件
-│   │   ├── Gallery/        # 图片管理页面
-│   │   │   └── index.tsx
-│   │   ├── IniConfig/      # INI 配置页面
-│   │   │   ├── styles/
-│   │   │   │   └── index.module.css
-│   │   │   └── index.tsx
-│   │   ├── MediaTools/     # 媒体工具页面
-│   │   │   ├── AdvancedTools.tsx
-│   │   │   ├── AudioProcess.tsx
-│   │   │   ├── CommandBuilder.tsx
-│   │   │   ├── FormatConvert.tsx
-│   │   │   └── index.tsx
-│   │   ├── Models/         # 模型管理页面
-│   │   │   ├── styles/
-│   │   │   │   └── index.module.css
-│   │   │   ├── OllamaManager.tsx
-│   │   │   └── index.tsx
-│   │   ├── PromptTemplates/ # 提示模板页面
-│   │   │   └── index.tsx
-│   │   ├── Settings/       # 设置页面
-│   │   │   ├── styles/
-│   │   │   │   └── index.module.css
-│   │   │   ├── about.tsx
-│   │   │   ├── index.tsx
-│   │   │   └── path.tsx
-│   │   └── VideoPlayer/    # 视频播放器页面
-│   │       ├── styles/
-│   │       │   ├── index.module.css
-│   │       │   └── scroll-title.css
-│   │       └── index.tsx
-│   ├── services/           # 前端服务
-│   │   ├── ffmpeg/         # FFmpeg 渲染服务
-│   │   │   └── FFmpegRendererService.ts
-│   │   └── storage/        # 存储服务
-│   │       ├── ChatModelStorage.ts      # 聊天模型存储
-│   │       ├── ConfigStorage.ts         # 配置存储
-│   │       ├── FFmpegConfigStorage.ts   # FFmpeg 配置存储
-│   │       ├── GalleryStorage.ts        # 图库存储
-│   │       ├── IndexedDBStorage.ts      # IndexedDB 存储
-│   │       ├── IndexedDBStorageOptimized.ts # 优化版 IndexedDB 存储
-│   │       ├── LogStorage.ts            # 日志存储
-│   │       ├── MigrationTool.ts         # 迁移工具
-│   │       ├── OllamaModelStorage.ts    # Ollama 模型存储
-│   │       ├── PromptTemplateStorage.ts # 提示模板存储
-│   │       ├── StorageManager.ts        # 存储管理
-│   │       ├── StorageMonitor.ts        # 存储监控
-│   │       ├── StorageTest.ts           # 存储测试
-│   │       ├── TextContrastStorage.ts   # 文本对比存储
-│   │       ├── VideoPlaylistStorage.ts  # 视频播放列表存储
-│   │       ├── VideoStorage.ts          # 视频存储
-│   │       ├── VideoStorageTest.ts      # 视频存储测试
-│   │       └── WebShortcutStorage.ts    # 网页快捷方式存储
-│   ├── shared/             # 共享代码
-│   │   └── types/          # 类型定义
-│   │       └── ollama.ts   # Ollama 类型
-│   ├── store/              # 状态管理
-│   │   ├── index.ts        # Zustand store
-│   │   └── webShortcutStore.ts # 网页快捷方式 store
-│   ├── stores/             # 其他状态管理
-│   │   └── ffmpegStore.ts  # FFmpeg store
-│   ├── styles/             # 样式文件
-│   │   ├── themes/         # 主题样式
-│   │   │   ├── quotes/     # 每日名言
-│   │   │   │   └── daily_quotes.json
-│   │   │   ├── amber-gold.css    # 琥珀金主题
-│   │   │   ├── caramel-brown.css # 焦糖棕主题
-│   │   │   ├── coral-orange.css  # 珊瑚橙主题
-│   │   │   ├── dark.css           # 暗色主题
-│   │   │   ├── deep-sea-blue.css  # 深海蓝主题
-│   │   │   ├── eye-care.css       # 护眼主题
-│   │   │   ├── forest-green.css   # 森林绿主题
-│   │   │   ├── lavender-purple.css # 薰衣草紫主题
-│   │   │   ├── light.css          # 亮色主题
-│   │   │   ├── midnight-blue.css  # 午夜蓝主题
-│   │   │   ├── mint-cyan.css      # 薄荷青主题
-│   │   │   ├── sakura-pink.css    # 樱花粉主题
-│   │   │   └── tech-blue.css      # 科技蓝主题
-│   ├── types/              # 类型定义
-│   │   ├── gallery.ts      # 图片管理类型
-│   │   ├── index.ts        # 类型导出
-│   │   └── video.ts        # 视频管理类型
-│   ├── utils/              # 工具函数
-│   │   ├── cn.ts           # 类名工具
-│   │   ├── diffEngine.ts   # 差异比较引擎
-│   │   ├── formatters.ts   # 格式化工具
-│   │   └── notification.ts # 通知工具
-│   ├── App.tsx             # 应用根组件
-│   ├── index.css           # 全局样式
-│   └── main.tsx            # 应用入口
-├── .gitignore              # Git 忽略文件
-├── README.md               # 项目文档
-├── index.html              # HTML 入口
-├── main.cjs                # Electron 主入口
-├── package-lock.json       # npm 锁定文件
-├── package.json            # 项目配置
-├── storage-test.html       # 存储测试页面
-├── tsconfig.json           # TypeScript 配置
-└── vite.config.ts          # Vite 配置
+┌─────────────────────────────────────────────────────────────┐
+│                        前端核心                               │
+│  React 19.2.3  │  TypeScript 5.9.3  │  Vite 7.2.4           │
+│  Tailwind CSS  │  Framer Motion     │  Zustand 5.0.11       │
+├─────────────────────────────────────────────────────────────┤
+│                        桌面应用                               │
+│  Electron 28.0.0  │  Electron Builder 24.0.0                │
+├─────────────────────────────────────────────────────────────┤
+│                        功能依赖                               │
+│  React Markdown  │  React Syntax Highlighter  │  Sharp      │
+│  Lucide Icons    │  clsx + tailwind-merge      │  uuid      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## 功能特性
+---
 
-### 1. AI 模型管理
-- **多模型支持**：远程模型（OpenAI、Claude、通义千问、DeepSeek）和本地模型
-- **参数自定义**：Temperature、Top P、Max Tokens 等参数可调节
-- **模型分组**：按提供商和类型分组管理
-- **收藏功能**：快速访问常用模型
-- **使用统计**：跟踪模型调用次数、成功率和响应时间
-- **模型连通性测试**：验证模型配置是否正确
+## 🚀 功能特性
 
-### 2. Ollama 本地 AI 集成
-- **服务检测**：自动检测本地 Ollama 服务状态
-- **实时监控**：查看服务运行状态和资源使用
-- **模型管理**：
-  - 查看已安装的本地模型
-  - 拉取新模型（支持进度显示）
-  - 删除不需要的模型
-- **配置管理**：自定义 Ollama 主机地址和端口
-- **聊天功能**：与本地 AI 模型进行对话（支持流式输出）
-- **操作日志**：记录所有 Ollama 相关操作
-- **思考模式控制**：支持开启/关闭模型的思考模式（--think 参数）
-- **思考内容显示**：在聊天中显示模型的思考过程
-- **多模态支持**：支持图片上传和多模态模型对话
+### 1. 🤖 智能对话系统
 
-### 3. 智能聊天系统
-- **多模型切换**：在对话中快速切换不同 AI 模型
-- **Markdown 渲染**：支持富文本格式，包括代码块、列表等
-- **代码高亮**：自动识别和高亮多种编程语言
-- **对话历史**：保存和管理历史对话记录
-- **对话标题**：自动生成对话标题，便于识别
-- **收藏对话**：标记重要对话以便快速访问
-- **右键菜单**：对话记录支持右键菜单，显示对话信息和快捷删除
-- **删除确认**：删除对话前弹出确认对话框，防止误删
-- **文件上传**：支持图片文件上传（适配多模态模型）
-- **全屏图片查看器**：点击图片可全屏查看，支持缩放、旋转、拖拽
-- **欢迎页面**：精美的欢迎页面，包含快捷建议和统计数据
-- **欢迎页面开关**：可控制是否每次进入聊天时显示欢迎页面（IndexedDB 持久化）
+星约的核心功能模块，提供强大的人工智能对话能力。
 
-### 4. 高级代码编辑器
-- **语法高亮**：支持 INI 文件和普通文本的语法高亮
-- **行号显示**：清晰的行号标识，便于定位
-- **撤销/重做**：支持 Ctrl+Z（撤回）和 Ctrl+Y（重做）
-- **智能缩进**：自动处理 Tab 缩进和取消缩进
-- **行操作**：支持 Ctrl+D 复制当前行
-- **光标定位**：实时显示当前光标位置（行、列）
-- **高亮行**：可指定高亮显示特定行
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     智能对话系统                              │
+├─────────────────────────────────────────────────────────────┤
+│  ◆ 多模型支持                                                │
+│    ├─ Ollama 本地模型：保障数据隐私，离线可用                 │
+│    ├─ 远程 API：OpenAI、Claude、DeepSeek、通义千问           │
+│    └─ 一键切换：满足不同场景需求                              │
+│                                                              │
+│  ◆ 对话模式                                                  │
+│    ├─ 多轮对话：保持上下文连贯                                │
+│    ├─ 单轮对话：快速问答                                      │
+│    └─ 思考模式：可视化 AI 推理过程                            │
+│                                                              │
+│  ◆ 流式响应                                                  │
+│    ├─ 实时显示：逐字呈现，无需等待                            │
+│    ├─ 打字机效果：模拟真实对话                                │
+│    └─ 中断控制：随时停止生成                                  │
+│                                                              │
+│  ◆ 上下文管理                                                │
+│    ├─ Token 统计：精确计算上下文长度                          │
+│    ├─ 长度配置：1K-131K tokens 范围调节                       │
+│    └─ 对话历史：完整记录与管理                                │
+│                                                              │
+│  ◆ 多媒体支持                                                │
+│    ├─ 图片上传：拖拽或点击上传                                │
+│    ├─ 图片识别：AI 视觉理解                                   │
+│    └─ 壁纸背景：自定义聊天界面                                │
+│                                                              │
+│  ◆ 性能监控                                                  │
+│    ├─ 推理时间统计    ├─ Token 速率显示                       │
+│    └─ 内存占用监控    └─ 性能数据可视化                       │
+└─────────────────────────────────────────────────────────────┘
+```
 
-### 5. 图片管理系统
-- **图片浏览**：支持本地图片预览和管理
-- **图片查看器**：支持缩放、旋转、拖拽等操作
-- **缩略图导航**：独立的缩略图区域，支持滚轮切换
-- **图片编辑**：基础的图片编辑功能
-- **文件操作**：支持图片重命名、删除等操作
-- **主题适配**：自动适配应用主题色彩
-- **响应式设计**：适配不同屏幕尺寸
+### 2. 🎛️ 模型管理中心
 
-### 6. 视频播放器
-- **视频播放**：支持本地视频文件播放
-- **播放控制**：播放/暂停、音量调节、进度条
-- **全屏模式**：支持全屏播放
-- **播放列表**：管理和切换多个视频
-- **视频信息**：显示视频分辨率、时长等信息
+统一的 AI 模型管理平台。
 
-### 7. 内容比较工具
-- **文本对比**：比较两个文本内容的差异
-- **高亮显示**：清晰标记添加、删除和修改的内容
-- **实时对比**：编辑时实时更新对比结果
-- **自动保存**：支持自动保存对比内容
-- **文件管理**：保存和管理多个对比文件
+| 功能模块 | 详细说明 |
+|---------|---------|
+| **远程模型配置** | OpenAI、Claude、DeepSeek、通义千问、自定义 API |
+| **Ollama 管理** | 模型列表、拉取进度、删除模型、详细信息 |
+| **状态监控** | 服务在线状态、GPU/CPU/内存占用 |
+| **预设配置** | 温度参数、Top-P 采样、最大 Token、系统提示词 |
 
-### 8. 媒体工具（FFmpeg）
-- **格式转换**：支持多种音视频格式转换
-- **音频处理**：音频提取、音量调整等
-- **高级工具**：视频剪辑、合并、水印等功能
-- **命令生成器**：可视化生成 FFmpeg 命令
-- **进度监控**：实时显示处理进度
+### 3. 🎬 媒体工具箱
 
-### 9. 日志系统
-- **多级日志**：info、warn、error、debug 等级别
-- **模块化日志**：按功能模块分类记录
-- **日志面板**：可折叠的实时日志查看面板
-- **日志清空**：一键清空日志记录
+基于 FFmpeg 的强大媒体处理工具集。
 
-### 10. 提示模板管理
-- **模板库**：预设常用提示模板
-- **模板编辑**：创建和修改自定义模板
-- **快速应用**：在聊天中快速插入模板
+```
+媒体工具箱
+│
+├── 📹 视频格式转换
+│   ├── 格式支持：MP4、AVI、MKV、MOV、WebM、FLV
+│   ├── 编码选择：H.264、H.265、VP9
+│   ├── 质量控制：CRF 参数调节
+│   └── 分辨率/帧率/比特率调节
+│
+├── 🎵 音频处理
+│   ├── 音频提取：从视频提取音轨
+│   ├── 格式转换：MP3、AAC、WAV、FLAC
+│   ├── 音质设置：比特率、采样率
+│   └── 音量调节、声道处理
+│
+├── 🔧 高级工具
+│   ├── 视频剪辑/合并    ├── GIF 制作
+│   ├── 视频压缩         ├── 视频截图
+│   └── 水印添加
+│
+├── 🖼️ 图片格式转换
+│   ├── 格式互转：PNG、JPG、WebP、BMP、GIF
+│   ├── 质量调节
+│   └── 批量处理
+│
+├── 🎨 ICO 图标转换
+│   ├── 多尺寸支持：16x16 ~ 256x256
+│   └── 透明度保留
+│
+└── ⌨️ FFmpeg 命令构建器
+    ├── 可视化参数配置
+    ├── 命令实时预览
+    └── 一键复制命令
+```
 
-### 11. 主题系统
-- **13 种主题**：亮色、暗色、科技蓝、护眼、午夜蓝、森林绿、珊瑚橙、薰衣草紫、薄荷青、焦糖棕、樱花粉、深海蓝、琥珀金
-- **CSS 变量**：统一的主题变量管理
-- **实时切换**：无需重启即可切换主题
-- **组件适配**：所有组件自动适配当前主题
+### 4. 🖼️ 图片画廊
 
-### 12. 网页快捷方式
-- **快捷访问**：快速打开常用网页
-- **分类管理**：支持添加、编辑、删除网页快捷方式
-- **收藏功能**：标记常用网页为星标
-- **排序功能**：支持随机排序、正序和倒序
-- **JSON导入导出**：批量导入导出网页快捷方式
-- **主题适配**：自动适配应用主题颜色
-- **默认浏览器打开**：使用系统默认浏览器打开网页
+本地图片资源管理工具。
 
-### 13. 开发者模式控制
-- **默认禁用**：程序启动后默认禁用 F12 和 Ctrl+Shift+I 开发者工具快捷键
-- **右键菜单禁用**：默认禁用右键菜单，防止通过菜单打开开发者工具
-- **安全解锁**：在设置 → 关于页面，双击顶部 AI 图标区域可弹出开发者模式设置
-- **状态持久化**：开发者模式状态仅在当前会话有效，重启后需要重新启用
-- **开发者调试**：启用后可使用 F12 或 Ctrl+Shift+I 打开开发者工具
+- 📁 图片浏览：网格/列表视图切换
+- 🏷️ 相册分类：按文件夹或自定义分类
+- 🔍 图片预览：全屏查看大图
+- ⬆️ 图片上传：导入本地图片资源
 
-### 14. 存储管理
-- **配置存储**：保存应用配置和用户偏好
-- **路径配置**：自定义各模块的存储路径
-- **数据持久化**：确保数据在应用重启后保持
-- **IndexedDB 优化**：优化的数据存储和访问
-- **存储监控**：实时监控存储状态
+### 5. 📺 视频播放器
 
-## 安装和运行
+内置视频播放功能。
+
+- 🎬 格式支持：MP4、WebM、MKV 等
+- ⏯️ 播放控制：播放/暂停/快进/快退
+- 🔊 音量调节
+- 📺 全屏播放
+- 📋 播放列表管理
+
+### 6. 📝 提示词模板库
+
+提示词模板管理系统。
+
+- ✏️ 模板创建与编辑
+- 📂 分类管理
+- ⚡ 快速插入对话
+- 🔍 模板搜索
+
+### 7. 🔍 文本对比工具
+
+专业的文本差异对比工具。
+
+```
+┌──────────────────┐     ┌──────────────────┐
+│    原始文本       │     │    对比文本       │
+│                  │     │                  │
+│  差异高亮显示     │ ←→  │  新增/删除/修改   │
+│                  │     │  不同颜色标识     │
+└──────────────────┘     └──────────────────┘
+           ↓
+    ┌─────────────────┐
+    │    统计信息      │
+    │  差异行数/字符数  │
+    └─────────────────┘
+```
+
+### 8. ⚙️ INI 配置编辑器
+
+INI 格式配置文件编辑工具。
+
+- 📄 文件加载与保存
+- 🎨 语法高亮
+- ✅ 格式验证
+- 📂 节点折叠
+
+### 9. ⚙️ 系统设置
+
+应用程序全局设置中心。
+
+| 设置类别 | 功能项 |
+|---------|-------|
+| **外观设置** | 主题切换、字体大小、布局模式 |
+| **存储设置** | 存储路径、存储监控、数据管理 |
+| **对话设置** | 发送方式、默认模型、上下文长度 |
+| **FFmpeg 设置** | 可执行文件路径、输出目录 |
+
+### 10. 🔗 网页快捷方式
+
+- ⚡ 快捷访问常用网页
+- ⭐ 收藏功能
+- 📋 JSON 导入导出
+- 🔄 排序功能
+
+### 11. 🔐 开发者模式控制
+
+- 🔒 默认禁用 F12 和右键菜单
+- 🔓 设置页面双击解锁
+- 💾 状态仅在当前会话有效
+
+---
+
+## 🏗️ 技术架构
+
+### 整体架构
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        渲染进程 (Renderer)                        │
+│  ┌──────────────────────────────────────────────────────────┐   │
+│  │                    React 应用层                           │   │
+│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐        │   │
+│  │  │  Pages  │ │Components│ │  Hooks  │ │  Store  │        │   │
+│  │  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘        │   │
+│  │       └───────────┴──────────┴──────────┘                │   │
+│  │                          │                                │   │
+│  │  ┌───────────────────────┴───────────────────────┐       │   │
+│  │  │              Services 服务层                    │       │   │
+│  │  │  Storage │ Ollama │ FFmpeg │ Notification      │       │   │
+│  │  └───────────────────────┬───────────────────────┘       │   │
+│  └──┼──────────────────────────┼────────────────────────────┼───┘
+│     │                          │ IPC通信                     │
+│  ┌──┼──────────────────────────┼────────────────────────────┼───┐
+│  │  │                    主进程 (Main)                       │   │
+│  │  │  ┌───────────────────────┴───────────────────────┐    │   │
+│  │  │  │              IPC Handlers 处理器               │    │   │
+│  │  │  │  FFmpeg │ File │ Ollama │ Shell │ Storage     │    │   │
+│  │  │  └───────────────────────┬───────────────────────┘    │   │
+│  │  │                          │                             │   │
+│  │  │  ┌───────────────────────┴───────────────────────┐    │   │
+│  │  │  │            主进程服务层                         │    │   │
+│  │  │  │  FFmpegService │ OllamaService │ WindowManager │    │   │
+│  │  └────────────────────────────────────────────────────┘    │   │
+│  └─────────────────────────────────────────────────────────────┘
+```
+
+### 目录结构
+
+```
+src/
+├── components/          # 公共 UI 组件
+│   ├── ffmpeg/         # FFmpeg 相关组件
+│   ├── ChatQuickNav/   # 聊天快速导航
+│   └── DataManager/    # 数据管理器
+├── constants/          # 常量配置
+├── hooks/              # 自定义 React Hooks
+├── layouts/            # 布局组件
+├── main/               # Electron 主进程
+│   ├── ipc/           # IPC 通信处理
+│   ├── preload/       # 预加载脚本
+│   └── services/      # 主进程服务
+├── pages/              # 页面组件
+│   ├── Chat/          # 智能对话
+│   ├── Compare/       # 文本对比
+│   ├── Gallery/       # 图片画廊
+│   ├── IniConfig/     # INI 配置
+│   ├── MediaTools/    # 媒体工具
+│   ├── Models/        # 模型管理
+│   ├── PromptTemplates/ # 提示词模板
+│   ├── Settings/      # 系统设置
+│   └── VideoPlayer/   # 视频播放器
+├── services/           # 渲染进程服务
+│   ├── storage/       # 存储服务
+│   └── ffmpeg/        # FFmpeg 服务
+├── store/              # Zustand 状态管理
+├── styles/             # 样式文件
+│   └── themes/        # 主题样式
+├── types/              # TypeScript 类型
+└── utils/              # 工具函数
+```
+
+### 核心组件
+
+| 组件名称 | 功能描述 |
+|---------|---------|
+| `Sidebar` | 侧边栏导航，对话列表，模型选择 |
+| `MessageBubble` | 聊天消息气泡，支持 Markdown 渲染 |
+| `MessageList` | 消息列表，虚拟滚动优化 |
+| `ChatControlPanel` | 聊天控制面板，参数配置 |
+| `ImageViewer` | 图片查看器，支持缩放旋转 |
+| `VideoPlayer` | 视频播放器，播放控制 |
+| `CodeEditor` | 代码编辑器，语法高亮 |
+| `PerformancePanel` | 性能监控面板 |
+
+### 服务层
+
+```
+存储服务：
+├── IndexedDBStorage      # IndexedDB 底层封装
+├── ConfigStorage         # 应用配置存储
+├── ChatModelStorage      # 聊天模型存储
+├── GalleryStorage        # 图片库存储
+├── VideoStorage          # 视频存储
+├── PromptTemplateStorage # 提示词模板存储
+├── OllamaModelStorage    # Ollama 模型存储
+├── FFmpegConfigStorage   # FFmpeg 配置存储
+├── StorageManager        # 存储管理器
+└── MigrationTool         # 数据迁移工具
+
+业务服务：
+├── OllamaModelService    # Ollama 模型管理
+├── OllamaPullService     # Ollama 模型拉取
+└── FFmpegRendererService # FFmpeg 渲染进程服务
+```
+
+---
+
+## 🎨 界面主题
+
+星约提供 **13 种精美主题**，满足不同场景和个人偏好：
+
+| 主题 ID | 主题名称 | 描述 |
+|---------|---------|------|
+| `light` | 浅色主题 | 经典明亮风格，清爽简洁 |
+| `dark` | 深色主题 | 护眼暗色风格，夜间友好 |
+| `tech-blue` | 科技蓝 | 专业科技风格，商务大气 |
+| `eye-care` | 护眼绿 | 自然舒适风格，长时间使用不疲劳 |
+| `midnight-blue` | 午夜蓝 | 深邃沉稳风格 |
+| `forest-green` | 森林绿 | 清新自然风格 |
+| `coral-orange` | 珊瑚橙 | 活力温暖风格 |
+| `lavender-purple` | 薰衣草紫 | 优雅浪漫风格 |
+| `mint-cyan` | 薄荷青 | 清凉舒爽风格 |
+| `caramel-brown` | 焦糖棕 | 温暖复古风格 |
+| `sakura-pink` | 樱花粉 | 甜美可爱风格 |
+| `deep-sea-blue` | 深海蓝 | 深邃神秘风格 |
+| `amber-gold` | 琥珀金 | 高贵典雅风格 |
+
+**主题特性：**
+- 🔄 CSS 变量驱动，实时切换无需刷新
+- 🎨 完整的颜色体系：背景、文字、强调色、边框等
+- 💻 代码块语法高亮适配
+- 📜 滚动条样式适配
+- ✨ 动画效果适配
+
+---
+
+## 📥 安装与运行
 
 ### 前置要求
-- **Node.js 18+**：运行时环境
-- **npm 或 yarn**：包管理工具
+
+- **Node.js 18+**
+- **npm 或 yarn**
 - **Ollama**（可选）：用于本地 AI 功能
 - **FFmpeg**（可选）：用于媒体处理功能
 
@@ -353,49 +387,45 @@ npm install
 
 ### 开发模式
 
-#### Web 开发（仅前端功能）
 ```bash
+# Web 开发（仅前端功能）
 npm run dev
-```
 
-#### Electron 开发（完整功能）
-```bash
+# Electron 开发（完整功能）
 npm run electron:dev
 ```
 
 ### 构建
 
 ```bash
+# 构建生产版本
 npm run build
+
+# 预览构建结果
+npm run preview
 ```
 
 ### 打包桌面应用
 
-#### 构建所有类型（默认）
-
 ```bash
+# 构建所有类型（默认）
 npm run electron:build
-```
 
-#### 构建NSIS安装包
-
-```bash
+# 构建 NSIS 安装包
 npm run electron:build:nsis
-```
 
-#### 构建便携式应用
-
-```bash
+# 构建便携式应用
 npm run electron:build:portable
 ```
 
-#### 打包输出
+**打包输出：**
+- 输出目录：`dist-electron/`
+- NSIS 安装包：`星约 Setup {版本号}.exe`
+- 便携式应用：`星约-Portable-{版本号}.exe`
 
-- **输出目录**：`dist-electron/`
-- **NSIS安装包**：`dist-electron/星约 Setup {版本号}.exe`
-- **便携式应用**：`dist-electron/星约-Portable-{版本号}.exe`
+---
 
-## Ollama 集成说明
+## 🦙 Ollama 集成
 
 ### 安装 Ollama
 
@@ -404,62 +434,91 @@ npm run electron:build:portable
 
 ### 使用 Ollama 功能
 
-1. 在终端中启动 Ollama 服务：
-   ```bash
-   ollama serve
-   ```
+```bash
+# 启动 Ollama 服务
+ollama serve
+```
 
-2. 启动应用后，点击侧边栏底部的 **"Ollama 管理"** 按钮
-
-3. 在弹窗中点击右上角的 **刷新按钮** 检查服务状态
-
-4. 拉取模型：
-   - 在"拉取新模型"输入框中输入模型名称（如 `llama3.2`）
-   - 点击"拉取模型"按钮
-   - 等待下载完成
-
-5. 管理模型：
-   - 查看已安装的本地模型
-   - 删除不需要的模型
-   - 查看模型详细信息
+1. 启动应用后，点击侧边栏底部的 **"Ollama 管理"** 按钮
+2. 在弹窗中点击右上角的 **刷新按钮** 检查服务状态
+3. 拉取模型：输入模型名称（如 `llama3.2`）并点击"拉取模型"
+4. 管理模型：查看、删除已安装的本地模型
 
 ### 思考模式控制
 
-在侧边栏可以找到思考模式控制按钮：
-- **开启思考模式**：模型会显示思考过程（适用于支持思考功能的模型）
-- **关闭思考模式**：模型直接输出结果，不显示思考过程
+- **开启思考模式**：模型会显示思考过程
+- **关闭思考模式**：模型直接输出结果
 
-思考模式设置会保存到 IndexedDB 的 config 中，重启应用后保持设置。
+设置会保存到 IndexedDB，重启应用后保持。
 
 ### 多模态功能
 
-对于支持多模态的模型（如 llava、moondream 等）：
-1. 在聊天页面点击输入框左侧的文件上传按钮
-2. 选择图片文件（支持 JPG、PNG、GIF 等格式）
-3. 输入文本提示
-4. 发送消息，模型会分析图片并回复
+对于支持多模态的模型（如 llava、moondream）：
+
+1. 点击输入框左侧的文件上传按钮
+2. 选择图片文件（支持 JPG、PNG、GIF）
+3. 输入文本提示并发送
 
 ### 常用模型
 
-- `llama3.2` - Meta 的 Llama 3.2 模型
-- `llama3.2:3b` - 轻量级 Llama 3.2 模型
-- `qwen2.5` - 阿里通义千问
-- `qwen2.5:3b` - 轻量级通义千问
-- `mistral` - Mistral AI 模型
-- `codellama` - 代码专用模型
-- `gemma2` - Google 的 Gemma 2 模型
-- `llava` - 多模态视觉语言模型
-- `moondream` - 轻量级多模态模型
+| 模型名称 | 描述 |
+|---------|------|
+| `llama3.2` | Meta 的 Llama 3.2 模型 |
+| `qwen2.5` | 阿里通义千问 |
+| `mistral` | Mistral AI 模型 |
+| `codellama` | 代码专用模型 |
+| `llava` | 多模态视觉语言模型 |
 
-### Ollama API
+---
 
-项目通过以下方式与 Ollama 交互：
+## 💾 存储系统
 
-1. **服务管理**：使用 `OllamaServiceManager` 类管理 Ollama 进程
-2. **API 调用**：使用 `OllamaAPIClient` 类调用 Ollama REST API
-3. **IPC 通信**：通过 Electron IPC 在主进程和渲染进程间通信
+### 存储机制
 
-## 开发指南
+项目使用 **IndexedDB** 作为核心存储机制，结合 Electron 的文件系统访问能力。
+
+### 存储结构
+
+```
+数据库名：starpact-db
+
+对象存储 (Object Stores)：
+├── configs           # 应用配置
+├── chat-models       # 聊天模型配置
+├── conversations     # 对话记录
+├── gallery           # 图片库
+├── videos            # 视频库
+├── video-playlists   # 播放列表
+├── prompt-templates  # 提示词模板
+├── web-shortcuts     # 网页快捷方式
+├── backgrounds       # 背景壁纸
+├── logs              # 日志记录
+├── ollama-models     # Ollama 模型信息
+├── ffmpeg-configs    # FFmpeg 配置
+└── text-contrasts    # 文本对比记录
+```
+
+### 存储位置
+
+**便携式 (Portable)：**
+- 数据存储在应用程序目录下的 `user-data` 文件夹
+
+**安装式 (NSIS)：**
+- Windows：`C:\Users\{用户名}\AppData\Local\星约\User Data\Default\IndexedDB`
+- macOS：`~/Library/Application Support/星约/Default/IndexedDB`
+- Linux：`~/.config/星约/Default/IndexedDB`
+
+### 存储特性
+
+- ✅ 异步非阻塞操作
+- ✅ 支持大容量存储
+- ✅ 数据持久化
+- ✅ 自动迁移升级
+- ✅ 存储使用监控
+
+---
+
+## 🛠️ 开发指南
 
 ### 添加新页面
 
@@ -475,52 +534,22 @@ npm run electron:build:portable
 3. 在 `src/styles/index.css` 中导入新主题
 4. 在 `src/constants/themes.ts` 中添加主题配置
 
-### 使用 CodeEditor 组件
+### 使用组件
 
 ```tsx
+// CodeEditor 组件
 import { CodeEditor } from '@/components/CodeEditor';
 
-// 基本用法
 <CodeEditor
-  value={iniContent}
-  onChange={handleIniChange}
+  value={content}
+  onChange={handleChange}
   language="ini"
   fontSize={13}
   showLineNumbers={true}
   highlightActiveLine={true}
-  tabSize={2}
-  wordWrap={false}
-  onCursorChange={(line, col) => {
-    console.log(`光标位置: 行 ${line}, 列 ${col}`);
-  }}
 />
 
-// 高级用法（带高亮行）
-<CodeEditor
-  value={modelContent}
-  onChange={handleModelChange}
-  language="ini"
-  highlightLine={5} // 高亮第5行
-  showLineNumbers={true}
-  readOnly={false}
-/>
-```
-
-### 使用 VideoPlayer 组件
-
-```tsx
-import { VideoPlayer } from '@/components/VideoPlayer';
-
-<VideoPlayer
-  videoUrl={videoUrl}
-  onEnded={() => console.log('视频播放结束')}
-  onError={(error) => console.error('视频播放错误:', error)}
-/>
-```
-
-### 使用 ImageViewer 组件
-
-```tsx
+// ImageViewer 组件
 import { ImageViewer } from '@/components/ImageViewer';
 
 <ImageViewer
@@ -529,411 +558,132 @@ import { ImageViewer } from '@/components/ImageViewer';
   isOpen={isOpen}
   onClose={() => setIsOpen(false)}
 />
+
+// VideoPlayer 组件
+import { VideoPlayer } from '@/components/VideoPlayer';
+
+<VideoPlayer
+  videoUrl={videoUrl}
+  onEnded={() => console.log('播放结束')}
+/>
 ```
-
-### 扩展 Ollama 功能
-
-Ollama 集成采用模块化设计，易于扩展：
-
-1. **服务层**：在 `src/main/services/ollama/` 中添加新功能
-2. **IPC 层**：在 `src/main/ipc/` 中添加新的 IPC 通道
-3. **UI 层**：在 `src/components/OllamaModal.tsx` 中添加 UI 组件
 
 ### 状态管理
 
-使用 Zustand 进行状态管理，主要状态包括：
+使用 Zustand 进行状态管理：
+
 - 模型配置列表和激活状态
 - 对话历史和当前对话
 - 日志记录和日志面板状态
 - Ollama 服务状态和模型列表
 - 应用主题和布局设置
-- 存储路径配置
-- 网页快捷方式
 
-### 存储管理
+---
 
-项目使用分层存储架构：
-1. **配置存储**：保存应用设置和用户偏好
-2. **对话存储**：保存聊天历史记录
-3. **图库存储**：管理图片相关数据
-4. **视频存储**：管理视频播放列表
-5. **提示词模板存储**：管理预设和自定义提示词模板
-6. **网页快捷方式存储**：管理网页快捷方式数据
+## ❓ 常见问题
 
-## 存储系统详解
+<details>
+<summary><b>Q: Ollama 服务无法启动？</b></summary>
 
-### 存储机制
-
-项目主要使用 **IndexedDB** 作为核心存储机制，结合 Electron 的文件系统访问能力，实现数据的持久化存储。
-
-#### 核心存储服务
-
-| 存储服务 | 职责 | 文件位置 |
-|---------|------|----------|
-| `GalleryStorage` | 管理图片文件和相册 | `src/services/storage/GalleryStorage.ts` |
-| `VideoPlaylistStorage` | 管理视频文件和播放列表 | `src/services/storage/VideoPlaylistStorage.ts` |
-| `PromptTemplateStorage` | 管理提示词模板 | `src/services/storage/PromptTemplateStorage.ts` |
-| `ConfigStorage` | 管理应用配置 | `src/services/storage/ConfigStorage.ts` |
-| `StorageManager` | 统一存储管理接口 | `src/services/storage/StorageManager.ts` |
-| `IndexedDBStorage` | 管理网页快捷方式 | `src/services/storage/IndexedDBStorage.ts` |
-| `ChatModelStorage` | 管理聊天模型配置 | `src/services/storage/ChatModelStorage.ts` |
-| `OllamaModelStorage` | 管理 Ollama 模型 | `src/services/storage/OllamaModelStorage.ts` |
-| `LogStorage` | 管理日志记录 | `src/services/storage/LogStorage.ts` |
-
-### 存储位置
-
-#### Electron 开发模式
-
-在开发模式下，IndexedDB 数据存储位置：
-
-- **Windows**：`C:\Users\{用户名}\AppData\Local\{应用名}\User Data\Default\IndexedDB`
-- **macOS**：`~/Library/Application Support/{应用名}/Default/IndexedDB`
-- **Linux**：`~/.config/{应用名}/Default/IndexedDB`
-
-#### 打包应用
-
-##### 便携式（Portable）
-
-- 数据存储在应用程序目录下的 `user-data` 文件夹中
-- 优点：可以随应用一起移动，无需安装
-- 缺点：存储在移动设备上可能影响性能
-
-##### 安装式（NSIS）
-
-- **Windows**：`C:\Users\{用户名}\AppData\Local\{应用名}\User Data\Default\IndexedDB`
-- **macOS**：`~/Library/Application Support/{应用名}/Default/IndexedDB`
-- **Linux**：`~/.config/{应用名}/Default/IndexedDB`
-
-### 存储方式比较
-
-#### 图片管理页面
-
-- **存储内容**：图片文件、相册信息、缩略图
-- **存储方式**：IndexedDB 存储文件数据，生成临时 Blob URL 用于显示
-- **持久化**：完全持久化，重启应用后数据不丢失
-- **特殊处理**：自动生成和管理 Blob URL，确保图片资源正确加载
-
-#### 视频播放页面
-
-- **存储内容**：视频文件、播放列表信息
-- **存储方式**：IndexedDB 存储文件数据，生成临时 Blob URL 用于播放
-- **持久化**：完全持久化，重启应用后数据不丢失
-- **特殊处理**：自动生成和管理 Blob URL，确保视频资源正确加载
-
-#### 提示词模板页面
-
-- **存储内容**：提示词模板（文本数据）
-- **存储方式**：IndexedDB 存储文本数据
-- **持久化**：完全持久化，重启应用后数据不丢失
-- **特殊处理**：无需 Blob URL 管理，直接存储和读取文本数据
-
-### 存储工作流
-
-#### 图片存储工作流
-
-1. 用户选择图片文件
-2. `GalleryStorage.saveImageFile()` 处理文件
-3. 文件数据存储到 IndexedDB
-4. 生成唯一 ID 和 Blob URL
-5. 图片信息添加到相册
-6. UI 使用 Blob URL 显示图片
-7. 切换页面或重启应用时，自动重新生成 Blob URL
-
-#### 视频存储工作流
-
-1. 用户选择视频文件
-2. `VideoPlaylistStorage.processVideoFile()` 处理文件
-3. 文件数据存储到 IndexedDB
-4. 生成唯一 ID 和 Blob URL
-5. 视频信息添加到播放列表
-6. 播放器使用 Blob URL 播放视频
-7. 切换页面或重启应用时，自动重新生成 Blob URL
-
-#### 提示词模板存储工作流
-
-1. 用户创建或编辑提示词模板
-2. `PromptTemplateStorage.saveTemplate()` 保存模板
-3. 模板数据存储到 IndexedDB
-4. 模板列表实时更新
-5. 重启应用后，模板数据保持不变
-
-#### 网页快捷方式存储工作流
-
-1. 用户添加或编辑网页快捷方式
-2. `IndexedDBStorage` 保存快捷方式数据
-3. 数据存储到 IndexedDB 的 `web-shortcuts` 对象存储空间
-4. 快捷方式列表实时更新
-5. 重启应用后，快捷方式数据保持不变
-
-### 存储优化
-
-1. **Blob URL 管理**：自动生成和释放 Blob URL，避免内存泄漏
-2. **数据压缩**：对大型媒体文件进行适当压缩
-3. **索引优化**：为常用查询字段创建索引，提高查询速度
-4. **批量操作**：使用事务进行批量存储操作，提高性能
-5. **错误处理**：完善的错误处理机制，确保存储操作可靠
-
-### 存储安全
-
-1. **本地存储**：所有数据存储在本地，不上传到任何服务器
-2. **权限控制**：遵循 Electron 的安全模型，限制文件系统访问
-3. **数据隔离**：不同类型的数据存储在不同的对象存储空间中
-4. **备份建议**：建议定期备份 `user-data` 文件夹，防止数据丢失
-
-### 存储相关 API
-
-#### GalleryStorage
-
-- `saveImageFile(file: File, albumId: string): Promise<ImageFile>` - 保存图片文件
-- `getAllAlbums(): Promise<Album[]>` - 获取所有相册
-- `getImagesByAlbumId(albumId: string): Promise<ImageFile[]>` - 获取指定相册的图片
-
-#### VideoPlaylistStorage
-
-- `processVideoFile(file: File): Promise<VideoFile>` - 处理并保存视频文件
-- `getAllPlaylists(): Promise<VideoPlaylist[]>` - 获取所有播放列表
-- `getVideosByPlaylistId(playlistId: string): Promise<VideoFile[]>` - 获取指定播放列表的视频
-
-#### PromptTemplateStorage
-
-- `saveTemplate(template: PromptTemplate): Promise<void>` - 保存提示词模板
-- `getAllTemplates(): Promise<PromptTemplate[]>` - 获取所有提示词模板
-- `deleteTemplate(id: string): Promise<void>` - 删除提示词模板
-
-#### ConfigStorage
-
-- `getConfig(): Promise<Config>` - 获取配置
-- `saveConfig(config: Partial<Config>): Promise<void>` - 保存配置
-- `ollamaVerboseMode: boolean` - Ollama 详细模式
-- `ollamaThinkMode: boolean` - Ollama 思考模式
-- `showChatWelcome: boolean` - 是否显示聊天欢迎页面
-
-### 常见存储问题
-
-#### Q: 图片/视频在切换页面后无法加载？
-
-A: 这是因为 Blob URL 具有临时性，页面切换或刷新后会失效。项目已实现自动重新生成 Blob URL 的机制，确保资源正确加载。
-
-#### Q: 存储容量有限制吗？
-
-A: IndexedDB 存储容量由浏览器/Electron 限制，通常为磁盘空间的一定比例（如 50%）。对于大型媒体文件，建议定期清理不需要的文件。
-
-#### Q: 如何备份存储的数据？
-
-A: 找到对应平台的存储位置，复制 `IndexedDB` 文件夹到安全位置即可。
-
-#### Q: 存储路径可以自定义吗？
-
-A: 目前存储路径由 Electron 自动管理，未来版本计划支持自定义存储路径功能。
-
-## 架构设计
-
-### Electron 架构
-
-```
-┌─────────────────────────────────────┐
-│         渲染进程 (Renderer)         │
-│  React UI + Zustand Store           │
-└──────────────┬──────────────────────┘
-               │ IPC 通信
-┌──────────────▼──────────────────────┐
-│       预加载脚本 (Preload)          │
-│  暴露安全的 API 给渲染进程           │
-└──────────────┬──────────────────────┘
-               │ IPC 通信
-┌──────────────▼──────────────────────┐
-│         主进程 (Main)                │
-│  - 窗口管理                          │
-│  - IPC 处理器                        │
-│  - 服务管理                          │
-│  - Node.js 后端服务                  │
-└─────────────────────────────────────┘
-```
-
-### Ollama 集成架构
-
-```
-┌─────────────────────────────────────┐
-│      OllamaModal (UI)             │
-│  - 服务状态检测                      │
-│  - 模型管理                          │
-│  - 聊天界面                          │
-└──────────────┬──────────────────────┘
-               │ IPC 调用
-┌──────────────▼──────────────────────┐
-│      Ollama IPC Handlers            │
-│  - 处理渲染进程请求                  │
-│  - 调用服务层                        │
-└──────────────┬──────────────────────┘
-               │
-┌──────────────▼──────────────────────┐
-│    OllamaServiceManager             │
-│  - 检测 Ollama 服务状态               │
-│  - 状态监控                          │
-└──────────────┬──────────────────────┘
-               │
-┌──────────────▼──────────────────────┐
-│      OllamaAPIClient                │
-│  - HTTP API 调用                    │
-│  - 模型列表                          │
-│  - 聊天接口                          │
-└──────────────┬──────────────────────┘
-               │
-┌──────────────▼──────────────────────┐
-│         Ollama 服务                 │
-│  - 本地 AI 模型运行                  │
-└─────────────────────────────────────┘
-```
-
-### 存储架构
-
-```
-┌─────────────────────────────────────┐
-│         渲染进程 (Renderer)         │
-│  - 存储服务接口                      │
-└──────────────┬──────────────────────┘
-               │ IPC 通信
-┌──────────────▼──────────────────────┐
-│       主进程 (Main)                 │
-│  - Electron Store                   │
-│  - 文件系统操作                      │
-└──────────────┬──────────────────────┘
-               │
-┌──────────────▼──────────────────────┐
-│         本地存储                     │
-│  - 配置文件                          │
-│  - 对话历史                          │
-│  - 图库数据                          │
-│  - 视频播放列表                      │
-└─────────────────────────────────────┘
-```
-
-## 常见问题
-
-### Q: Ollama 服务无法启动？
-A: 确保：
+确保：
 1. 已正确安装 Ollama
 2. Ollama 可在命令行中使用
 3. 端口 11434 未被占用
+</details>
 
-### Q: 模型拉取失败？
-A: 检查：
+<details>
+<summary><b>Q: 模型拉取失败？</b></summary>
+
+检查：
 1. 网络连接是否正常
 2. 模型名称是否正确
 3. 磁盘空间是否充足
+</details>
 
-### Q: Electron 应用无法启动？
-A: 确保：
+<details>
+<summary><b>Q: Electron 应用无法启动？</b></summary>
+
+确保：
 1. 已执行 `npm install`
 2. Node.js 版本符合要求
 3. 端口 5173 未被占用
+</details>
 
-### Q: 在 Web 开发模式下无法使用 Ollama 功能？
-A: 这是正常现象。Ollama 功能需要 Electron 环境，请使用 `npm run electron:dev` 启动完整应用。
+<details>
+<summary><b>Q: Web 开发模式下无法使用 Ollama 功能？</b></summary>
 
-### Q: 视频播放器无法播放视频？
-A: 检查：
-1. 视频文件格式是否支持
-2. 文件路径是否正确
-3. 视频文件是否损坏
+这是正常现象。Ollama 功能需要 Electron 环境，请使用 `npm run electron:dev` 启动完整应用。
+</details>
 
-### Q: 存储路径配置失败？
-A: 确保：
-1. 路径存在且可访问
-2. 应用有足够的权限
-3. 路径格式正确
+<details>
+<summary><b>Q: 如何关闭欢迎页面？</b></summary>
 
-### Q: 如何关闭欢迎页面？
-A: 在侧边栏找到欢迎页面开关按钮，点击即可关闭。设置会自动保存到 IndexedDB。
+在侧边栏找到欢迎页面开关按钮，点击即可关闭。设置会自动保存到 IndexedDB。
+</details>
 
-### Q: 图片查看器如何使用？
-A: 点击聊天中的图片即可打开全屏查看器。支持滚轮缩放、鼠标拖拽、左右切换图片。
+<details>
+<summary><b>Q: 图片查看器如何使用？</b></summary>
 
-## 性能优化
+点击聊天中的图片即可打开全屏查看器。支持滚轮缩放、鼠标拖拽、左右切换图片。
+</details>
 
-1. **组件懒加载**：使用 React.lazy 和 Suspense 延迟加载大型组件
-2. **状态管理优化**：使用 Zustand 的切片功能，避免不必要的重渲染
-3. **图片优化**：使用 sharp 处理图片，减少内存使用
-4. **缓存策略**：缓存模型配置和常用数据
-5. **批量更新**：使用 React 的自动批处理功能
-6. **IndexedDB 优化**：使用优化的存储实现提高读写性能
+---
 
-## 安全注意事项
-
-1. **API 密钥管理**：API 密钥存储在本地，不会上传到任何服务器
-2. **IPC 安全**：使用上下文隔离和预加载脚本，确保 IPC 通信安全
-3. **文件系统访问**：仅在用户授权的情况下访问文件系统
-4. **网络请求**：仅向可信的 API 端点发送请求
-
-## 许可证
-
-MIT License
-
-## 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 更新日志
+## 📋 更新日志
 
 ### v1.2.0
-- 新增对话记录右键菜单功能
-  - 右键点击对话记录显示菜单弹窗
-  - 显示对话标题和消息数量
-  - 快捷删除按钮，带 hover 动画效果
-- 新增删除确认对话框
-  - 删除对话前弹出确认提示
-  - 弹窗带入场动画效果
-  - 按钮 hover 状态反馈
-- 优化 ConfirmDialog 组件
-  - 添加按钮 hover 效果
-  - 添加弹窗入场动画
-  - 添加图标旋转动画
+- ✨ 新增对话记录右键菜单功能
+- ✨ 新增删除确认对话框
+- 🎨 优化 ConfirmDialog 组件动画效果
 
 ### v1.1.0
-- 新增 Ollama 思考模式控制功能
-- 新增聊天中显示 think 内容功能，适配所有 Ollama 模型
-- 完善消息发送栏左边的文件上传功能，适配 Ollama 多模态模型
-- 重新设计点击查看图片功能为全屏效果
-- 图片查看器支持缩放、旋转、拖动功能
-- 重新设计欢迎页面布局样式
-- 新增欢迎页面开关按钮，支持 IndexedDB 数据持久化
-- 新增 MediaTools 页面，集成 FFmpeg 媒体处理功能
-- 新增开发者模式控制功能，默认禁用 F12 开发者工具
-- 在设置关于页面双击可启用/禁用开发者模式
-- 网页快捷方式使用默认浏览器打开外部链接
-- 优化 IndexedDB 存储性能
-- 新增多个存储服务和工具组件
+- ✨ 新增 Ollama 思考模式控制功能
+- ✨ 新增聊天中显示 think 内容功能
+- ✨ 完善 Ollama 多模态模型支持
+- 🎨 重新设计图片查看器为全屏效果
+- ✨ 新增 MediaTools 页面，集成 FFmpeg
+- ✨ 新增开发者模式控制功能
+- ⚡ 优化 IndexedDB 存储性能
 
 ### v1.0.0
-- 初始版本发布
-- 支持 AI 模型管理和聊天功能
-- 集成 Ollama 本地 AI 支持
-- 高级代码编辑器
-- 图片管理系统
-- 视频播放器
-- 内容比较工具
-- 日志系统
-- 提示模板管理
-- 网页快捷方式功能
-- 13 种主题支持
-- 存储管理系统
+- 🎉 初始版本发布
+- ✨ 支持 AI 模型管理和聊天功能
+- ✨ 集成 Ollama 本地 AI 支持
+- ✨ 高级代码编辑器
+- ✨ 图片管理系统
+- ✨ 视频播放器
+- ✨ 内容比较工具
+- ✨ 13 种主题支持
 
 ### 未来计划
 - [ ] 多语言支持
 - [ ] 插件系统
 - [ ] 云同步功能
-- [ ] 更多 AI 模型集成
+- [ ] macOS/Linux 版本
 - [ ] 高级数据分析工具
-- [ ] 批量图像处理功能
-- [ ] 视频编辑功能
-
-## 联系我们
-
-如有任何问题或建议，请通过以下方式联系我们：
-
-- Issue 追踪：[GitHub Issues](https://github.com/yourusername/react-electron-ai-app/issues)
-- 邮箱：contact@example.com
 
 ---
 
-**感谢使用星约 (Starpact)！**
+## 📄 许可证
+
+MIT License
+
+---
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+---
+
+<div align="center">
+
+**星约 Starpact**
+
+*如同星辰之间的约定，连接用户与智能、创意与效率*
+
+感谢您选择星约，让我们一起探索星辰大海 ✨
+
+**Copyright © 2025 Starpact Team**
+
+</div>

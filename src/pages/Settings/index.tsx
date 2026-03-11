@@ -510,7 +510,7 @@ export function SettingsPage() {
                     <button
                       key={level.id}
                       onClick={() => handleLogFilterChange(level.id)}
-                      className="px-2.5 py-1 rounded-md text-xs font-medium"
+                      className="px-2.5 py-1 rounded-md text-xs font-medium transition-all duration-200 hover:scale-105"
                       style={{
                         backgroundColor: logFilterLevel === level.id ? level.color : 'var(--bg-secondary)',
                         color: logFilterLevel === level.id ? 'white' : 'var(--text-secondary)',
@@ -552,7 +552,7 @@ export function SettingsPage() {
                     <button
                       onClick={() => setLogCurrentPage(p => Math.max(1, p - 1))}
                       disabled={logCurrentPage === 1}
-                      className="p-1 rounded disabled:opacity-30"
+                      className="p-1 rounded disabled:opacity-30 transition-all duration-200 hover:scale-110 enabled:hover:bg-[var(--bg-tertiary)]"
                       style={{ color: 'var(--text-secondary)' }}
                     >
                       <ChevronLeft size={14} />
@@ -563,7 +563,7 @@ export function SettingsPage() {
                     <button
                       onClick={() => setLogCurrentPage(p => Math.min(logTotalPages, p + 1))}
                       disabled={logCurrentPage === logTotalPages}
-                      className="p-1 rounded disabled:opacity-30"
+                      className="p-1 rounded disabled:opacity-30 transition-all duration-200 hover:scale-110 enabled:hover:bg-[var(--bg-tertiary)]"
                       style={{ color: 'var(--text-secondary)' }}
                     >
                       <ChevronRight size={14} />
@@ -727,7 +727,7 @@ export function SettingsPage() {
               </motion.div>
             )}
 
-            {activeTab !== 'wallpaper' && (
+            {activeTab !== 'wallpaper' && activeTab !== 'about' && (
               <div className="mx-auto max-w-2xl">
                 {activeTab === 'appearance' && (
                   <motion.div
@@ -755,7 +755,7 @@ export function SettingsPage() {
                         <button
                           key={t.id}
                           onClick={() => setTheme(t.id)}
-                          className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
+                          className="rounded-xl p-4 text-left transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                           style={{
                             border: `2px solid ${theme === t.id ? 'var(--primary-color)' : 'var(--border-color)'}`,
                             backgroundColor: 'var(--bg-secondary)',
@@ -816,7 +816,7 @@ export function SettingsPage() {
                             }
                           }
                         }}
-                        className="rounded-xl p-4 text-left transition-all active:scale-[0.98]"
+                        className="rounded-xl p-4 text-left transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
                         style={{
                           border: `2px solid ${isActive ? 'var(--primary-color)' : 'var(--border-color)'}`,
                           backgroundColor: 'var(--bg-secondary)',
@@ -887,7 +887,7 @@ export function SettingsPage() {
                     <button
                       key={option.value}
                       onClick={() => setAppNameDisplay(option.value as 'chinese' | 'english')}
-                      className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                      className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
                       style={{
                         backgroundColor: appNameDisplay === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
                         color: appNameDisplay === option.value ? 'white' : 'var(--text-secondary)',
@@ -928,7 +928,7 @@ export function SettingsPage() {
                     <button
                       key={option.value}
                       onClick={() => setDefaultPage(option.value as typeof defaultPage)}
-                      className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                      className="px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
                       style={{
                         backgroundColor: defaultPage === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
                         color: defaultPage === option.value ? 'white' : 'var(--text-secondary)',
@@ -954,7 +954,7 @@ export function SettingsPage() {
                   </div>
                   <button
                     onClick={() => setDailyQuoteEnabled(!dailyQuoteEnabled)}
-                    className="relative h-6 w-11 rounded-full transition-colors"
+                    className="relative h-6 w-11 rounded-full transition-all duration-200 hover:scale-105"
                     style={{ backgroundColor: dailyQuoteEnabled ? 'var(--primary-color)' : 'var(--bg-tertiary)' }}
                   >
                     <motion.div
@@ -974,7 +974,7 @@ export function SettingsPage() {
                         <button
                           key={option.value}
                           onClick={() => setDailyQuoteInterval(option.value)}
-                          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
                           style={{
                             backgroundColor: dailyQuoteInterval === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
                             color: dailyQuoteInterval === option.value ? 'white' : 'var(--text-secondary)',
@@ -1001,7 +1001,7 @@ export function SettingsPage() {
                   </div>
                   <button
                     onClick={() => setChatNotificationEnabled(!chatNotificationEnabled)}
-                    className="relative h-6 w-11 rounded-full transition-colors"
+                    className="relative h-6 w-11 rounded-full transition-all duration-200 hover:scale-105"
                     style={{ backgroundColor: chatNotificationEnabled ? 'var(--primary-color)' : 'var(--bg-tertiary)' }}
                   >
                     <motion.div
@@ -1027,7 +1027,7 @@ export function SettingsPage() {
                   </div>
                   <button
                     onClick={() => setCloseConfirm(!closeConfirm)}
-                    className="relative h-6 w-11 rounded-full transition-colors"
+                    className="relative h-6 w-11 rounded-full transition-all duration-200 hover:scale-105"
                     style={{ backgroundColor: closeConfirm ? 'var(--primary-color)' : 'var(--bg-tertiary)' }}
                   >
                     <motion.div
@@ -1062,7 +1062,7 @@ export function SettingsPage() {
                     <button
                       key={option.value}
                       onClick={() => setGalleryDefaultLayout(option.value as 'grid' | 'waterfall' | 'list')}
-                      className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                      className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
                       style={{
                         backgroundColor: galleryDefaultLayout === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
                         color: galleryDefaultLayout === option.value ? 'white' : 'var(--text-secondary)',
@@ -1087,7 +1087,7 @@ export function SettingsPage() {
                 </div>
                 <button
                   onClick={() => setSendOnEnter(!sendOnEnter)}
-                  className="relative h-6 w-11 rounded-full transition-colors"
+                  className="relative h-6 w-11 rounded-full transition-all duration-200 hover:scale-105"
                   style={{ backgroundColor: sendOnEnter ? 'var(--primary-color)' : 'var(--bg-tertiary)' }}
                 >
                   <motion.div
@@ -1109,7 +1109,7 @@ export function SettingsPage() {
                   </div>
                   <button
                     onClick={() => setSplashScreenEnabled(!splashScreenEnabled)}
-                    className="relative h-6 w-11 rounded-full transition-colors"
+                    className="relative h-6 w-11 rounded-full transition-all duration-200 hover:scale-105"
                     style={{ backgroundColor: splashScreenEnabled ? 'var(--primary-color)' : 'var(--bg-tertiary)' }}
                   >
                     <motion.div
@@ -1132,7 +1132,7 @@ export function SettingsPage() {
                         <button
                           key={option.value}
                           onClick={() => setSplashScreenType(option.value as SplashScreenType)}
-                          className="px-3 py-2 rounded-lg text-xs font-medium transition-all"
+                          className="px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
                           style={{
                             backgroundColor: splashScreenType === option.value ? 'var(--primary-color)' : 'var(--bg-tertiary)',
                             color: splashScreenType === option.value ? 'white' : 'var(--text-secondary)',
@@ -1152,12 +1152,12 @@ export function SettingsPage() {
               </div>
             </motion.div>
           )}
+              </div>
+            )}
 
           {activeTab === 'about' && (
             <AboutSection />
           )}
-              </div>
-            )}
           </>
         )}
       </div>
@@ -1169,7 +1169,7 @@ export function SettingsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className="flex items-center gap-2.5 rounded-lg px-6 py-2 text-sm transition-colors whitespace-nowrap"
+              className="flex items-center gap-2.5 rounded-lg px-6 py-2 text-sm transition-all duration-200 hover:scale-105 whitespace-nowrap"
               style={{
                 backgroundColor: activeTab === tab.id ? 'var(--primary-light)' : 'transparent',
                 color: activeTab === tab.id ? 'var(--primary-color)' : 'var(--text-secondary)',

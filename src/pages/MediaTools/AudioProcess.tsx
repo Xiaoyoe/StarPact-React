@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { 
   Music, Volume2, AudioLines, FileAudio, Disc3, 
   Upload, ChevronDown, ChevronRight, Sparkles, Info, 
-  Play, Pause, SkipBack, SkipForward, Waves, AlertCircle, Square, FileType, X, Maximize2, Image as ImageIcon
+  Play, AlertCircle, Square, FileType, X, Maximize2, Image as ImageIcon
 } from 'lucide-react';
 import { SectionCard, FileDropZone, FormRow, Toggle, Slider, Tabs, ProgressBar, Terminal, Badge } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -28,7 +28,7 @@ function CollapsibleSection({ title, icon, children, defaultOpen = true }: Colla
     >
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full flex items-center justify-between px-4 py-3 transition-colors"
+        className="w-full flex items-center justify-between px-4 py-3 transition-all duration-200 hover:brightness-[0.98]"
         style={{ backgroundColor: isOpen ? 'var(--bg-tertiary)' : 'transparent' }}
       >
         <div className="flex items-center gap-2">
@@ -52,74 +52,6 @@ function CollapsibleSection({ title, icon, children, defaultOpen = true }: Colla
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
-
-function WaveformPreview({ mediaInfo }: { mediaInfo?: MediaInfo }) {
-  const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  return (
-    <div 
-      className="rounded-xl p-4"
-      style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
-    >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <Waves className="w-4 h-4" style={{ color: 'var(--success-color)' }} />
-          <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>波形预览</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <button className="p-1.5 rounded-md transition-colors" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-            <SkipBack className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
-          </button>
-          <button className="p-1.5 rounded-md transition-colors" style={{ backgroundColor: 'var(--success-color)' }}>
-            <Play className="w-3.5 h-3.5" style={{ color: 'white' }} />
-          </button>
-          <button className="p-1.5 rounded-md transition-colors" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-            <SkipForward className="w-3.5 h-3.5" style={{ color: 'var(--text-secondary)' }} />
-          </button>
-        </div>
-      </div>
-      <div 
-        className="h-20 rounded-lg flex items-center justify-center overflow-hidden relative"
-        style={{ backgroundColor: 'var(--bg-primary)' }}
-      >
-        <div className="flex items-center gap-px h-full px-2">
-          {Array.from({ length: 100 }).map((_, i) => (
-            <div 
-              key={i} 
-              className="w-1 rounded-full transition-all" 
-              style={{ 
-                height: `${15 + Math.sin(i * 0.25) * 35 + Math.random() * 15}%`, 
-                backgroundColor: i === 45 ? 'var(--success-color)' : 'rgba(16, 185, 129, 0.3)' 
-              }} 
-            />
-          ))}
-        </div>
-        <div className="absolute left-1/2 top-0 bottom-0 w-0.5" style={{ backgroundColor: 'var(--success-color)' }} />
-        <div className="absolute bottom-2 left-3 text-[10px] font-mono" style={{ color: 'var(--text-tertiary)' }}>00:00:00</div>
-        <div className="absolute bottom-2 right-3 text-[10px] font-mono" style={{ color: 'var(--text-tertiary)' }}>
-          {mediaInfo ? formatDuration(mediaInfo.duration) : '00:00:00'}
-        </div>
-      </div>
-      <div className="flex items-center gap-2 mt-2">
-        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
-          采样率: {mediaInfo?.audio?.sampleRate ? `${(mediaInfo.audio.sampleRate / 1000).toFixed(1)}kHz` : '44.1kHz'}
-        </span>
-        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>|</span>
-        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
-          声道: {mediaInfo?.audio?.channels === 1 ? '单声道' : mediaInfo?.audio?.channels === 2 ? '立体声' : '立体声'}
-        </span>
-        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>|</span>
-        <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
-          时长: {mediaInfo ? formatDuration(mediaInfo.duration) : '--:--'}
-        </span>
-      </div>
     </div>
   );
 }
@@ -502,7 +434,7 @@ export function AudioProcess() {
                 </div>
                 <button
                   onClick={clearAllFiles}
-                  className="text-xs px-2 py-1 rounded-md transition-colors hover:opacity-80"
+                  className="text-xs px-2 py-1 rounded-md transition-all duration-200 hover:scale-105"
                   style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: 'var(--error-color)' }}
                 >
                   清空
@@ -589,8 +521,6 @@ export function AudioProcess() {
             </div>
           )}
 
-          <WaveformPreview mediaInfo={mainFile?.mediaInfo} />
-
           <div 
             className="rounded-xl p-4"
             style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
@@ -609,7 +539,7 @@ export function AudioProcess() {
                 <button
                   key={p.name}
                   onClick={() => { setBitrate(p.bitrate || 192); setAudioFormat(p.format); }}
-                  className="p-2 rounded-lg text-left transition-all"
+                  className="p-2 rounded-lg text-left transition-all duration-200 hover:scale-105"
                   style={{
                     backgroundColor: audioFormat === p.format && (p.bitrate === 0 || bitrate === p.bitrate) ? 'rgba(16, 185, 129, 0.15)' : 'var(--bg-tertiary)',
                     border: `1px solid ${audioFormat === p.format && (p.bitrate === 0 || bitrate === p.bitrate) ? 'var(--success-color)' : 'transparent'}`,
