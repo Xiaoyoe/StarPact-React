@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
-  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle, Image as ImageIcon, AlertTriangle, Maximize2, Monitor, Download
+  ChevronLeft, ChevronRight, Trash2, MoreHorizontal, FileText, Cpu, Settings2, Images, Play, ChevronUp, ChevronDown, BookOpen, Globe, Database, Sparkles, HardDrive, Check, X, Square, GripVertical, Clapperboard, Timer, Brain, MessageCircle, Image as ImageIcon, AlertTriangle, Maximize2, Monitor, Download, Sliders
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -44,9 +44,9 @@ export function Sidebar() {
     ollamaVerboseMode, setOllamaVerboseMode,
     ollamaThinkMode, setOllamaThinkMode,
     ollamaChatMode, setOllamaChatMode,
+    ollamaNumCtx, setOllamaNumCtx,
     includeImagesInContext, setIncludeImagesInContext,
     deleteConfirmEnabled, setDeleteConfirmEnabled,
-    showTokenEstimate, setShowTokenEstimate,
   } = useStore();
 
   const toast = useToast();
@@ -91,7 +91,6 @@ export function Sidebar() {
       const savedVerboseMode = configStorage.get('ollamaVerboseMode');
       const savedThinkMode = configStorage.get('ollamaThinkMode');
       const savedChatMode = configStorage.get('ollamaChatMode');
-      const savedShowTokenEstimate = configStorage.get('showTokenEstimate');
       const savedIncludeImagesInContext = configStorage.get('includeImagesInContext');
       const savedDeleteConfirmEnabled = configStorage.get('deleteConfirmEnabled');
       
@@ -103,9 +102,6 @@ export function Sidebar() {
       }
       if (savedChatMode !== undefined) {
         setOllamaChatMode(savedChatMode);
-      }
-      if (savedShowTokenEstimate !== undefined) {
-        setShowTokenEstimate(savedShowTokenEstimate);
       }
       if (savedIncludeImagesInContext !== undefined) {
         setIncludeImagesInContext(savedIncludeImagesInContext);
@@ -368,37 +364,50 @@ export function Sidebar() {
                 </div>
               </div>
 
-              {/* Token Estimate Toggle */}
+              {/* Context Length Setting */}
               <div 
-                className="flex items-center justify-between px-5 py-3 border-b"
+                className="px-5 py-3 border-b"
                 style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}
               >
-                <div className="flex items-center gap-2">
-                  <Database size={14} style={{ color: 'var(--primary-color)' }} />
-                  <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>Token 估算</span>
-                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>显示对话 token 数</span>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Sliders size={14} style={{ color: 'var(--primary-color)' }} />
+                      <span className="text-xs font-medium" style={{ color: 'var(--text-primary)' }}>上下文长度</span>
+                    </div>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}>
+                      {ollamaNumCtx >= 1024 ? `${(ollamaNumCtx / 1024).toFixed(0)}K` : ollamaNumCtx}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="range"
+                      min="1024"
+                      max="131072"
+                      step="1024"
+                      value={ollamaNumCtx}
+                      onChange={(e) => setOllamaNumCtx(parseInt(e.target.value))}
+                      className="flex-1 h-1 rounded-lg appearance-none cursor-pointer"
+                      style={{ backgroundColor: 'var(--border-color)' }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-center gap-1">
+                    {[4096, 8192, 16384, 32768, 65536, 131072].map((ctx) => (
+                      <button
+                        key={ctx}
+                        onClick={() => setOllamaNumCtx(ctx)}
+                        className="px-2 py-0.5 text-xs rounded transition-all"
+                        style={{
+                          backgroundColor: ollamaNumCtx === ctx ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                          color: ollamaNumCtx === ctx ? 'white' : 'var(--text-secondary)',
+                          fontWeight: ollamaNumCtx === ctx ? 600 : 400,
+                        }}
+                      >
+                        {ctx >= 1024 ? `${ctx / 1024}K` : ctx}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <button
-                  onClick={() => {
-                    const newValue = !showTokenEstimate;
-                    setShowTokenEstimate(newValue);
-                    configStorage.set('showTokenEstimate', newValue);
-                    toast.info(newValue ? '已开启 Token 估算显示' : '已关闭 Token 估算显示', { duration: 2000 });
-                  }}
-                  className="relative flex h-6 w-11 items-center rounded-full transition-colors"
-                  style={{ 
-                    backgroundColor: showTokenEstimate ? 'var(--success-color)' : 'var(--bg-tertiary)',
-                  }}
-                  title={showTokenEstimate ? '关闭 Token 估算' : '开启 Token 估算'}
-                >
-                  <span
-                    className="absolute h-5 w-5 rounded-full bg-white shadow transition-transform"
-                    style={{
-                      left: '2px',
-                      transform: showTokenEstimate ? 'translateX(20px)' : 'translateX(0)',
-                    }}
-                  />
-                </button>
               </div>
 
               {/* Verbose Mode Toggle */}
@@ -1050,7 +1059,10 @@ export function Sidebar() {
                           {conv.totalTokens && conv.totalTokens > 0 && (
                             <>
                               <span>·</span>
-                              <span style={{ color: 'var(--primary-color)' }}>{conv.totalTokens >= 1000 ? `${(conv.totalTokens / 1000).toFixed(1)}K` : conv.totalTokens} tokens</span>
+                              <span style={{ color: 'var(--primary-color)' }}>
+                                {conv.totalTokens >= 1000 ? `${(conv.totalTokens / 1000).toFixed(1)}K` : conv.totalTokens}
+                                /{ollamaNumCtx >= 1024 ? `${(ollamaNumCtx / 1024).toFixed(0)}K` : ollamaNumCtx}
+                              </span>
                             </>
                           )}
                         </div>

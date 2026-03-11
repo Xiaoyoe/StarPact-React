@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Send, Paperclip, Settings2, Square, Copy, Check, RotateCcw,
-  ChevronDown, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare, Trash2, Settings, Eye, EyeOff, Sliders, RefreshCw, Database
+  ChevronDown, ChevronUp, Sparkles, Bot, User, HardDrive, Globe, Brain, ChevronRight, Pencil, Timer, X, Image as ImageIcon, MessageSquare, Trash2, Settings, Eye, EyeOff, Sliders, RefreshCw, Database, Plus
 } from 'lucide-react';
 import { useStore, generateId } from '@/store';
 import { cn } from '@/utils/cn';
@@ -35,6 +35,7 @@ export function ChatPage() {
     ollamaVerboseMode, setPerformanceMetrics, performanceMetrics,
     ollamaThinkMode,
     ollamaChatMode,
+    ollamaNumCtx, setOllamaNumCtx,
     includeImagesInContext,
     deleteConfirmEnabled,
   } = useStore();
@@ -45,6 +46,8 @@ export function ChatPage() {
   const [inputValue, setInputValue] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [showModelSelect, setShowModelSelect] = useState(false);
+  const [ollamaModelsExpanded, setOllamaModelsExpanded] = useState(true);
+  const [remoteModelsExpanded, setRemoteModelsExpanded] = useState(false);
   const [hoveredMessage, setHoveredMessage] = useState<string | null>(null);
   const [showNav, setShowNav] = useState(true);
   const [switchingModel, setSwitchingModel] = useState(false);
@@ -158,14 +161,19 @@ export function ChatPage() {
         completion: 0,
         total: activeConversation.totalTokens,
       };
+      previousRoundTokensRef.current = {
+        prompt: 0,
+        completion: 0,
+        total: activeConversation.totalTokens,
+      };
     } else {
       totalConversationTokensRef.current = {
         prompt: 0,
         completion: 0,
         total: 0,
       };
+      previousRoundTokensRef.current = null;
     }
-    previousRoundTokensRef.current = null;
   }, [activeConversationId]);
 
   useEffect(() => {
@@ -405,6 +413,9 @@ export function ChatPage() {
               messages: messages,
               stream: true,
               think: ollamaThinkMode,
+              options: {
+                num_ctx: ollamaNumCtx,
+              },
             }),
             signal: abortControllerRef.current.signal,
           });
@@ -544,6 +555,10 @@ export function ChatPage() {
                 total: currentTotalTokens,
               };
               
+              const imageCount = activeConversation?.messages.reduce((count, msg) => {
+                return count + (msg.images?.length || 0);
+              }, 0) || 0;
+              
               setPerformanceMetrics({
                 requestId: `req-${Date.now().toString(36)}`,
                 modelName: activeOllamaModel || 'unknown',
@@ -561,17 +576,23 @@ export function ChatPage() {
                 temperature: 0.7,
                 topP: 0.9,
                 contextLength: activeConversation?.messages.length || 0,
-                numCtx: 4096,
+                numCtx: ollamaNumCtx,
+                imageCount: imageCount,
                 currentRoundTokens: currentRoundTokens,
                 previousRoundTokens: previousRoundTokensRef.current,
                 totalConversationTokens: totalConversationTokensRef.current,
               });
               
-              previousRoundTokensRef.current = currentRoundTokens;
+              previousRoundTokensRef.current = {
+                prompt: promptEvalCount,
+                completion: evalCount,
+                total: currentTotalTokens,
+              };
               
               if (activeConversationId) {
+                const previousStoredTokens = activeConversation?.totalTokens || 0;
                 updateConversation(activeConversationId, {
-                  totalTokens: currentTotalTokens
+                  totalTokens: previousStoredTokens + currentRoundTokens.total
                 });
               }
               
@@ -594,8 +615,10 @@ export function ChatPage() {
               module: 'Chat',
             });
           } else {
+            const currentTokens = activeConversation?.totalTokens || 0;
+            const tokenInfo = currentTokens > 0 ? `（当前对话Token: ${currentTokens >= 1000 ? `${(currentTokens / 1000).toFixed(1)}K` : currentTokens}，可能超出上下文限制）` : '';
             updateMessage(convId, aiMsgId, { 
-              content: '抱歉，Ollama 响应失败，请检查服务状态。',
+              content: `抱歉，Ollama 响应失败，请检查服务状态。${tokenInfo}`,
               isStreaming: false 
             });
             setIsStreaming(false);
@@ -624,6 +647,9 @@ export function ChatPage() {
               stream: true,
               think: ollamaThinkMode,
               images: imageBase64List.length > 0 ? imageBase64List : undefined,
+              options: {
+                num_ctx: ollamaNumCtx,
+              },
             }),
             signal: abortControllerRef.current.signal,
           });
@@ -763,6 +789,10 @@ export function ChatPage() {
               total: currentTotalTokens,
             };
             
+            const imageCount = activeConversation?.messages.reduce((count, msg) => {
+              return count + (msg.images?.length || 0);
+            }, 0) || 0;
+            
             setPerformanceMetrics({
               requestId: `req-${Date.now().toString(36)}`,
               modelName: activeOllamaModel || 'unknown',
@@ -780,19 +810,25 @@ export function ChatPage() {
               temperature: 0.7,
               topP: 0.9,
               contextLength: activeConversation?.messages.length || 0,
-              numCtx: 4096,
+              numCtx: ollamaNumCtx,
+              imageCount: imageCount,
               currentRoundTokens: currentRoundTokens,
               previousRoundTokens: previousRoundTokensRef.current,
               totalConversationTokens: totalConversationTokensRef.current,
             });
             
-            previousRoundTokensRef.current = currentRoundTokens;
-            
-            if (activeConversationId) {
-              updateConversation(activeConversationId, {
-                totalTokens: currentTotalTokens
-              });
-            }
+            previousRoundTokensRef.current = {
+                prompt: promptEvalCount,
+                completion: evalCount,
+                total: currentTotalTokens,
+              };
+              
+              if (activeConversationId) {
+                const previousStoredTokens = activeConversation?.totalTokens || 0;
+                updateConversation(activeConversationId, {
+                  totalTokens: previousStoredTokens + currentRoundTokens.total
+                });
+              }
             
             toast.success(`${activeOllamaModel} 回复完成 (${throughput.toFixed(1)} tokens/s)`, { duration: 2000 });
           } else {
@@ -813,8 +849,10 @@ export function ChatPage() {
             module: 'Chat',
           });
         } else {
+          const currentTokens = activeConversation?.totalTokens || 0;
+          const tokenInfo = currentTokens > 0 ? `（当前对话Token: ${currentTokens >= 1000 ? `${(currentTokens / 1000).toFixed(1)}K` : currentTokens}，可能超出上下文限制）` : '';
           updateMessage(convId, aiMsgId, { 
-            content: '抱歉，Ollama 响应失败，请检查服务状态。',
+            content: `抱歉，Ollama 响应失败，请检查服务状态。${tokenInfo}`,
             isStreaming: false 
           });
           setIsStreaming(false);
@@ -1154,6 +1192,12 @@ export function ChatPage() {
               {ollamaChatMode === 'multi' ? '多轮' : '单轮'}
             </span>
           )}
+          {activeConversation && activeConversation.messages.length > 0 && !isEditingTitle && (
+            <span className="text-xs ml-2 px-2 py-0.5 rounded flex items-center gap-1 transition-transform hover:scale-110 cursor-default" style={{ color: includeImagesInContext ? 'var(--success-color)' : 'var(--text-tertiary)', backgroundColor: includeImagesInContext ? 'rgba(34, 197, 94, 0.1)' : 'var(--bg-tertiary)' }}>
+              <ImageIcon size={10} />
+              {includeImagesInContext ? '带图' : '无图'}
+            </span>
+          )}
         </div>
         
         <div className="flex items-center">
@@ -1201,140 +1245,187 @@ export function ChatPage() {
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -8, scale: 0.96 }}
                   transition={{ duration: 0.15 }}
-                  className="absolute right-0 top-full z-50 mt-2 w-[480px] max-h-80 overflow-hidden rounded-xl"
+                  className="absolute right-0 top-full z-50 mt-2 w-[400px] overflow-hidden rounded-xl"
                   style={{
                     backgroundColor: 'var(--bg-primary)',
                     border: '1px solid var(--border-color)',
                     boxShadow: 'var(--shadow-lg)',
                   }}
                 >
-                  <div className="grid grid-cols-2 divide-x" style={{ borderColor: 'var(--border-color)' }}>
+                  <div className="flex flex-col">
+                    {/* Ollama 本地模型 */}
                     <div className="flex flex-col">
-                      <div className="px-3 py-2 text-xs font-medium shrink-0" style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-primary)' }}>
+                      <button
+                        onClick={() => setOllamaModelsExpanded(!ollamaModelsExpanded)}
+                        className="px-3 py-2 text-xs font-medium shrink-0 flex items-center justify-between transition-colors hover:bg-[var(--bg-secondary)]"
+                        style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-primary)' }}
+                      >
                         <div className="flex items-center gap-1.5">
                           <HardDrive size={12} />
-                          Ollama 本地模型
+                          Ollama 本地
                         </div>
-                      </div>
-                      <div className="overflow-y-auto max-h-64 flex-1">
-                        {ollamaStatus?.isRunning && ollamaModels.length > 0 ? (
-                          ollamaModels.map((model: any) => (
-                            <button
-                              key={`ollama-${model.name}`}
-                              onClick={() => handleSwitchOllamaModel(model.name)}
-                              disabled={switchingModel}
-                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors disabled:opacity-50"
-                              style={{
-                                backgroundColor: model.name === activeOllamaModel ? 'var(--primary-light)' : 'transparent',
-                              }}
-                            >
-                              <div
-                                className="flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold shrink-0"
+                        {ollamaModelsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                      </button>
+                      {ollamaModelsExpanded && (
+                        <div className="overflow-y-auto max-h-48 flex-1">
+                          {ollamaStatus?.isRunning && ollamaModels.length > 0 ? (
+                            ollamaModels.map((model: any) => (
+                              <button
+                                key={`ollama-${model.name}`}
+                                onClick={() => handleSwitchOllamaModel(model.name)}
+                                disabled={switchingModel}
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left transition-colors disabled:opacity-50"
                                 style={{
-                                  backgroundColor: 'rgba(0,180,42,0.1)',
-                                  color: 'var(--success-color)',
+                                  backgroundColor: model.name === activeOllamaModel ? 'var(--primary-light)' : 'transparent',
                                 }}
                               >
-                                {model.name.charAt(0)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-                                  {model.name}
+                                <div
+                                  className="flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold shrink-0"
+                                  style={{
+                                    backgroundColor: 'rgba(0,180,42,0.1)',
+                                    color: 'var(--success-color)',
+                                  }}
+                                >
+                                  {model.name.charAt(0)}
                                 </div>
-                                <div className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>
-                                  {model.details?.parameter_size || '未知大小'}
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                                    {model.name}
+                                  </div>
                                 </div>
+                                {model.name === activeOllamaModel && (
+                                  <Check size={12} className="shrink-0" style={{ color: 'var(--primary-color)' }} />
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="flex flex-col items-center justify-center py-4 px-3 text-center">
+                              <HardDrive size={20} className="mb-1 opacity-30" style={{ color: 'var(--text-tertiary)' }} />
+                              <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                                {ollamaStatus?.isRunning ? '暂无模型' : '未连接'}
                               </div>
-                              {model.name === activeOllamaModel && (
-                                <Check size={14} className="shrink-0" style={{ color: 'var(--primary-color)' }} />
-                              )}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="flex flex-col items-center justify-center py-6 px-4 text-center">
-                            <HardDrive size={24} className="mb-2 opacity-30" style={{ color: 'var(--text-tertiary)' }} />
-                            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                              {ollamaStatus?.isRunning ? '暂无本地模型' : 'Ollama 未连接'}
-                            </div>
-                            <div className="text-xs mt-1 mb-3" style={{ color: 'var(--text-tertiary)', opacity: 0.6 }}>
-                              请在模型管理中启动 Ollama
-                            </div>
-                            <button
-                              onClick={handleActivateOllama}
-                              disabled={isActivatingOllama}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all disabled:opacity-50"
-                              style={{
-                                backgroundColor: 'var(--primary-light)',
-                                color: 'var(--primary-color)',
-                                border: '1px solid var(--primary-color)',
-                              }}
-                            >
-                              <RefreshCw size={12} className={isActivatingOllama ? 'animate-spin' : ''} />
-                              {isActivatingOllama ? '激活中...' : '激活 Ollama'}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col">
-                      <div className="px-3 py-2 text-xs font-medium shrink-0" style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-primary)' }}>
-                        <div className="flex items-center gap-1.5">
-                          <Globe size={12} />
-                          远程模型
-                        </div>
-                      </div>
-                      <div className="overflow-y-auto max-h-64 flex-1">
-                        {models.filter(m => m.isActive).length > 0 ? (
-                          models.filter(m => m.isActive).map((model) => (
-                            <button
-                              key={model.id}
-                              onClick={() => {
-                                setActiveModel(model.id);
-                                setActiveOllamaModel(null);
-                                setShowModelSelect(false);
-                                toast.success(`已切换到 ${model.name}`, { duration: 2000 });
-                              }}
-                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition-colors"
-                              style={{
-                                backgroundColor: model.id === activeModelId && !activeOllamaModel ? 'var(--primary-light)' : 'transparent',
-                              }}
-                            >
-                              <div
-                                className="flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold shrink-0"
+                              <button
+                                onClick={handleActivateOllama}
+                                disabled={isActivatingOllama}
+                                className="flex items-center gap-1 px-2 py-1 mt-2 rounded text-xs font-medium transition-all disabled:opacity-50"
                                 style={{
                                   backgroundColor: 'var(--primary-light)',
                                   color: 'var(--primary-color)',
                                 }}
                               >
-                                {model.name.charAt(0)}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
-                                  {model.name}
-                                </div>
-                                <div className="text-xs truncate" style={{ color: 'var(--text-tertiary)' }}>
-                                  {model.provider}
-                                </div>
-                              </div>
-                              {model.id === activeModelId && !activeOllamaModel && (
-                                <Check size={14} className="shrink-0" style={{ color: 'var(--primary-color)' }} />
-                              )}
-                            </button>
-                          ))
-                        ) : (
-                          <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
-                            <Globe size={24} className="mb-2 opacity-30" style={{ color: 'var(--text-tertiary)' }} />
-                            <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                              暂无远程模型
+                                <RefreshCw size={10} className={isActivatingOllama ? 'animate-spin' : ''} />
+                                {isActivatingOllama ? '激活中...' : '激活'}
+                              </button>
                             </div>
-                            <div className="text-xs mt-1" style={{ color: 'var(--text-tertiary)', opacity: 0.6 }}>
-                              请在模型管理中添加
-                            </div>
-                          </div>
-                        )}
-                      </div>
+                          )}
+                        </div>
+                      )}
                     </div>
+
+                    {/* 远程模型 */}
+                    <div className="flex flex-col border-t" style={{ borderColor: 'var(--border-color)' }}>
+                      <button
+                        onClick={() => setRemoteModelsExpanded(!remoteModelsExpanded)}
+                        className="px-3 py-2 text-xs font-medium shrink-0 flex items-center justify-between transition-colors hover:bg-[var(--bg-secondary)]"
+                        style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-primary)' }}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Globe size={12} />
+                          远程模型
+                        </div>
+                        {remoteModelsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                      </button>
+                      {remoteModelsExpanded && (
+                        <div className="overflow-y-auto max-h-48 flex-1">
+                          {models.filter(m => m.isActive).length > 0 ? (
+                            models.filter(m => m.isActive).map((model) => (
+                              <button
+                                key={model.id}
+                                onClick={() => {
+                                  setActiveModel(model.id);
+                                  setActiveOllamaModel(null);
+                                  setShowModelSelect(false);
+                                  toast.success(`已切换到 ${model.name}`, { duration: 2000 });
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left transition-colors"
+                                style={{
+                                  backgroundColor: model.id === activeModelId && !activeOllamaModel ? 'var(--primary-light)' : 'transparent',
+                                }}
+                              >
+                                <div
+                                  className="flex h-6 w-6 items-center justify-center rounded-lg text-xs font-bold shrink-0"
+                                  style={{
+                                    backgroundColor: 'var(--primary-light)',
+                                    color: 'var(--primary-color)',
+                                  }}
+                                >
+                                  {model.name.charAt(0)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                                    {model.name}
+                                  </div>
+                                </div>
+                                {model.id === activeModelId && !activeOllamaModel && (
+                                  <Check size={12} className="shrink-0" style={{ color: 'var(--primary-color)' }} />
+                                )}
+                              </button>
+                            ))
+                          ) : (
+                            <div className="flex flex-col items-center justify-center py-6 px-3 text-center">
+                              <Globe size={20} className="mb-1 opacity-30" style={{ color: 'var(--text-tertiary)' }} />
+                              <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                                暂无远程模型
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {activeOllamaModel && (
+                      <div className="px-3 py-2 border-t" style={{ borderColor: 'var(--border-color)', backgroundColor: 'var(--bg-secondary)' }}>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Sliders size={11} style={{ color: 'var(--primary-color)' }} />
+                              <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>上下文</span>
+                            </div>
+                            <span className="text-xs font-semibold px-1.5 py-0.5 rounded" style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}>
+                              {ollamaNumCtx >= 1024 ? `${(ollamaNumCtx / 1024).toFixed(0)}K` : ollamaNumCtx}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="range"
+                              min="1024"
+                              max="131072"
+                              step="1024"
+                              value={ollamaNumCtx}
+                              onChange={(e) => setOllamaNumCtx(parseInt(e.target.value))}
+                              className="flex-1 h-1 rounded-lg appearance-none cursor-pointer"
+                              style={{ backgroundColor: 'var(--border-color)' }}
+                            />
+                          </div>
+                          <div className="flex items-center justify-center gap-0.5">
+                            {[4096, 8192, 16384, 32768, 65536, 131072].map((ctx) => (
+                              <button
+                                key={ctx}
+                                onClick={() => setOllamaNumCtx(ctx)}
+                                className="px-1.5 py-0.5 text-xs rounded transition-all"
+                                style={{
+                                  backgroundColor: ollamaNumCtx === ctx ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                                  color: ollamaNumCtx === ctx ? 'white' : 'var(--text-secondary)',
+                                  fontWeight: ollamaNumCtx === ctx ? 600 : 400,
+                                }}
+                              >
+                                {ctx >= 1024 ? `${ctx / 1024}K` : ctx}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </motion.div>
               )}
@@ -1548,6 +1639,18 @@ export function ChatPage() {
                   </button>
                 </div>
               ))}
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="h-16 px-3 flex items-center gap-1 rounded-lg text-xs transition-colors"
+                style={{ 
+                  color: 'var(--primary-color)', 
+                  backgroundColor: 'var(--primary-light)',
+                  border: '1px solid var(--primary-color)'
+                }}
+              >
+                <Plus size={14} />
+                添加
+              </button>
               <button
                 onClick={handleClearImages}
                 className="h-16 px-3 flex items-center gap-1 rounded-lg text-xs transition-colors"

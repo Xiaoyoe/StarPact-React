@@ -172,6 +172,8 @@ interface AppState {
   setOllamaThinkMode: (think: boolean) => void;
   ollamaChatMode: 'single' | 'multi';
   setOllamaChatMode: (mode: 'single' | 'multi') => void;
+  ollamaNumCtx: number;
+  setOllamaNumCtx: (numCtx: number) => void;
   includeImagesInContext: boolean;
   setIncludeImagesInContext: (include: boolean) => void;
   deleteConfirmEnabled: boolean;
@@ -200,6 +202,7 @@ interface AppState {
     topP: number;
     contextLength: number;
     numCtx: number;
+    imageCount: number;
     currentRoundTokens: {
       prompt: number;
       completion: number;
@@ -766,6 +769,8 @@ export const useStore = create<AppState>((set, get) => {
   setOllamaThinkMode: (think) => set({ ollamaThinkMode: think }),
   ollamaChatMode: 'multi' as 'single' | 'multi',
   setOllamaChatMode: (mode) => set({ ollamaChatMode: mode }),
+  ollamaNumCtx: 4096,
+  setOllamaNumCtx: (numCtx) => set({ ollamaNumCtx: numCtx }),
   includeImagesInContext: true,
   setIncludeImagesInContext: (include) => set({ includeImagesInContext: include }),
   deleteConfirmEnabled: true,

@@ -21,6 +21,7 @@ const defaultMetrics = {
   topP: 0,
   contextLength: 0,
   numCtx: 4096,
+  imageCount: 0,
   currentRoundTokens: {
     prompt: 0,
     completion: 0,
@@ -66,7 +67,7 @@ function formatNumber(num: number): string {
 }
 
 export function PerformancePanel({ isExpanded, onToggle }: PerformancePanelProps) {
-  const { performanceMetrics, setPerformanceMetrics } = useStore();
+  const { performanceMetrics, setPerformanceMetrics, activeOllamaModel } = useStore();
   const metrics = performanceMetrics || defaultMetrics;
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -171,19 +172,38 @@ export function PerformancePanel({ isExpanded, onToggle }: PerformancePanelProps
             >
               <div className="p-3 space-y-3 overflow-y-auto scrollbar-transparent" style={{ maxHeight: '70vh' }}>
                 {!performanceMetrics ? (
-                  <div className="text-center py-6">
+                  <div className="text-center py-4">
                     <div
-                      className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full"
-                      style={{ backgroundColor: 'var(--bg-secondary)' }}
+                      className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full"
+                      style={{ backgroundColor: 'var(--primary-light)' }}
                     >
-                      <Activity size={24} className="opacity-30" style={{ color: 'var(--text-tertiary)' }} />
+                      <Activity size={20} style={{ color: 'var(--primary-color)' }} />
                     </div>
-                    <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
-                      暂无性能数据
-                    </p>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
-                      发送消息后将显示
-                    </p>
+                    {activeOllamaModel ? (
+                      <>
+                        <div
+                          className="px-2 py-1 rounded text-xs font-medium inline-block mb-2"
+                          style={{ 
+                            backgroundColor: 'var(--primary-light)',
+                            color: 'var(--primary-color)'
+                          }}
+                        >
+                          {activeOllamaModel}
+                        </div>
+                        <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                          发送消息后将显示性能数据
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>
+                          暂无性能数据
+                        </p>
+                        <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>
+                          请先选择模型
+                        </p>
+                      </>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -316,9 +336,14 @@ export function PerformancePanel({ isExpanded, onToggle }: PerformancePanelProps
                       className="rounded-xl p-3 transition-all duration-200 hover:scale-[1.02] cursor-pointer"
                       style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
                     >
-                      <div className="flex items-center gap-2 mb-2">
-                        <Database size={14} style={{ color: 'var(--primary-color)' }} />
-                        <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>Token 统计</span>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Database size={14} style={{ color: 'var(--primary-color)' }} />
+                          <span className="text-xs font-semibold" style={{ color: 'var(--text-primary)' }}>Token 统计</span>
+                        </div>
+                        <span className="text-xs px-2 py-0.5 rounded" style={{ color: 'var(--primary-color)', backgroundColor: 'var(--primary-light)' }}>
+                          限制 {metrics.numCtx >= 1024 ? `${(metrics.numCtx / 1024).toFixed(0)}K` : metrics.numCtx}
+                        </span>
                       </div>
                       <div className="grid grid-cols-3 gap-2 mb-2">
                         <div className="text-center p-2 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
@@ -344,6 +369,12 @@ export function PerformancePanel({ isExpanded, onToggle }: PerformancePanelProps
                         <span style={{ color: 'var(--text-secondary)' }}>上下文长度</span>
                         <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
                           {metrics.contextLength} 条消息
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span style={{ color: 'var(--text-secondary)' }}>上下文图片</span>
+                        <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>
+                          {metrics.imageCount > 0 ? `${metrics.imageCount} 张` : '-'}
                         </span>
                       </div>
                     </div>
