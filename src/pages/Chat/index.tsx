@@ -20,6 +20,7 @@ import { ollamaModelService } from '@/services/OllamaModelService';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 
 import { useWallpaperStyle } from '@/hooks';
+import { useStreamingContent, useThrottledCallback } from '@/hooks/useStreamingContent';
 
 export function ChatPage() {
   const {
@@ -92,6 +93,13 @@ export function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const shouldScrollToBottomRef = useRef(true);
   const toolsMenuRef = useRef<HTMLDivElement>(null);
+  
+  const [streamingContent, setStreamingContent] = useState('');
+  const [streamingThinking, setStreamingThinking] = useState('');
+  const streamingContentRef = useRef('');
+  const streamingThinkingRef = useRef('');
+  const lastScrollTimeRef = useRef(0);
+  const scrollAnimationFrameRef = useRef<number | null>(null);
 
   const activeConversation = conversations.find(c => c.id === activeConversationId);
   const activeModel = models.find(m => m.id === activeModelId);
@@ -113,7 +121,22 @@ export function ChatPage() {
   }, [showToolsMenu]);
 
   const scrollToBottom = useCallback(() => {
+    const now = Date.now();
+    const timeSinceLastScroll = now - lastScrollTimeRef.current;
+    
+    if (timeSinceLastScroll < 16) {
+      if (!scrollAnimationFrameRef.current) {
+        scrollAnimationFrameRef.current = requestAnimationFrame(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          lastScrollTimeRef.current = Date.now();
+          scrollAnimationFrameRef.current = null;
+        });
+      }
+      return;
+    }
+    
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    lastScrollTimeRef.current = now;
   }, []);
 
   useEffect(() => {
@@ -121,6 +144,12 @@ export function ChatPage() {
       scrollToBottom();
     }
   }, [activeConversation?.messages, scrollToBottom]);
+  
+  useEffect(() => {
+    if (streamingContent && shouldScrollToBottomRef.current) {
+      scrollToBottom();
+    }
+  }, [streamingContent, scrollToBottom]);
 
   useEffect(() => {
     if (activeConversation?.totalTokens) {
@@ -240,12 +269,17 @@ export function ChatPage() {
     }
     setIsStreaming(false);
     
+    setStreamingContent('');
+    setStreamingThinking('');
+    
     if (activeConversationId) {
       const currentConv = conversations.find(c => c.id === activeConversationId);
       if (currentConv) {
         const streamingMsg = currentConv.messages.find(m => m.isStreaming);
         if (streamingMsg) {
           updateMessage(activeConversationId, streamingMsg.id, {
+            content: streamingContentRef.current || streamingMsg.content,
+            thinking: streamingThinkingRef.current || streamingMsg.thinking,
             isStreaming: false,
           });
         }
@@ -386,6 +420,13 @@ export function ChatPage() {
             let thinkingDuration = 0;
             let firstTokenTime = 0;
             let lastPerfData: any = null;
+            let lastUpdateTime = 0;
+            const UPDATE_INTERVAL = 50;
+
+            streamingContentRef.current = '';
+            streamingThinkingRef.current = '';
+            setStreamingContent('');
+            setStreamingThinking('');
 
             if (reader) {
               while (true) {
@@ -407,6 +448,7 @@ export function ChatPage() {
                       }
                       
                       fullResponse += token;
+                      streamingContentRef.current = fullResponse;
                     }
                     
                     const thinkingData = data.thinking || data.message?.thinking;
@@ -416,33 +458,31 @@ export function ChatPage() {
                       }
                       thinkingContent += thinkingData;
                       thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
+                      streamingThinkingRef.current = thinkingContent;
                     }
                     
                     if (data.message?.content || thinkingData) {
-                      let displayContent = fullResponse;
-                      let currentThinking = thinkingContent;
-                      
-                      if (!currentThinking) {
-                        const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)(<\/think&gt;|$)/);
-                        if (thinkMatch) {
-                          currentThinking = thinkMatch[1];
-                          if (fullResponse.includes('</think&gt;')) {
-                            displayContent = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
-                          } else {
-                            displayContent = '';
+                      const now = Date.now();
+                      if (now - lastUpdateTime >= UPDATE_INTERVAL) {
+                        let displayContent = fullResponse;
+                        let currentThinking = thinkingContent;
+                        
+                        if (!currentThinking) {
+                          const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)(<\/think&gt;|$)/);
+                          if (thinkMatch) {
+                            currentThinking = thinkMatch[1];
+                            if (fullResponse.includes('</think&gt;')) {
+                              displayContent = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
+                            } else {
+                              displayContent = '';
+                            }
                           }
                         }
-                      }
 
-                      if (thinkingStartTime > 0 && !thinkingData && data.message?.content) {
+                        setStreamingContent(displayContent);
+                        setStreamingThinking(currentThinking);
+                        lastUpdateTime = now;
                       }
-
-                      updateMessage(convId, aiMsgId, {
-                        content: displayContent,
-                        thinking: currentThinking,
-                        thinkingDuration: thinkingDuration > 0 ? thinkingDuration : undefined,
-                        isStreaming: true,
-                      });
                     }
                     
                     if (data.done && ollamaVerboseMode) {
@@ -467,6 +507,9 @@ export function ChatPage() {
               }
             }
 
+            setStreamingContent('');
+            setStreamingThinking('');
+
             updateMessage(convId, aiMsgId, {
               content: finalResponse,
               thinking: finalThinking,
@@ -485,16 +528,20 @@ export function ChatPage() {
               const promptEvalCount = lastPerfData.prompt_eval_count || 0;
               const throughput = evalDuration > 0 ? evalCount / evalDuration : 0;
               
+              const currentTotalTokens = promptEvalCount + evalCount;
+              const previousTotalTokens = previousRoundTokensRef.current?.total || 0;
+              const currentRoundTotal = currentTotalTokens - previousTotalTokens;
+              
               const currentRoundTokens = {
-                prompt: promptEvalCount,
+                prompt: currentRoundTotal > 0 ? currentRoundTotal - evalCount : promptEvalCount,
                 completion: evalCount,
-                total: evalCount + promptEvalCount,
+                total: currentRoundTotal > 0 ? currentRoundTotal : currentTotalTokens,
               };
               
               totalConversationTokensRef.current = {
-                prompt: totalConversationTokensRef.current.prompt + promptEvalCount,
-                completion: totalConversationTokensRef.current.completion + evalCount,
-                total: totalConversationTokensRef.current.total + evalCount + promptEvalCount,
+                prompt: promptEvalCount,
+                completion: evalCount,
+                total: currentTotalTokens,
               };
               
               setPerformanceMetrics({
@@ -524,7 +571,7 @@ export function ChatPage() {
               
               if (activeConversationId) {
                 updateConversation(activeConversationId, {
-                  totalTokens: totalConversationTokensRef.current.total
+                  totalTokens: currentTotalTokens
                 });
               }
               
@@ -592,6 +639,13 @@ export function ChatPage() {
           let thinkingDuration = 0;
           let firstTokenTime = 0;
           let lastPerfData: any = null;
+          let lastUpdateTime = 0;
+          const UPDATE_INTERVAL = 50;
+
+          streamingContentRef.current = '';
+          streamingThinkingRef.current = '';
+          setStreamingContent('');
+          setStreamingThinking('');
 
           if (reader) {
             while (true) {
@@ -613,6 +667,7 @@ export function ChatPage() {
                     }
                     
                     fullResponse += token;
+                    streamingContentRef.current = fullResponse;
                   }
                   
                   const thinkingData = data.thinking;
@@ -622,30 +677,31 @@ export function ChatPage() {
                     }
                     thinkingContent += thinkingData;
                     thinkingDuration = (Date.now() - thinkingStartTime) / 1000;
+                    streamingThinkingRef.current = thinkingContent;
                   }
                   
                   if (data.response || thinkingData) {
-                    let displayContent = fullResponse;
-                    let currentThinking = thinkingContent;
-                    
-                    if (!currentThinking) {
-                      const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)(<\/think&gt;|$)/);
-                      if (thinkMatch) {
-                        currentThinking = thinkMatch[1];
-                        if (fullResponse.includes('</think&gt;')) {
-                          displayContent = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
-                        } else {
-                          displayContent = '';
+                    const now = Date.now();
+                    if (now - lastUpdateTime >= UPDATE_INTERVAL) {
+                      let displayContent = fullResponse;
+                      let currentThinking = thinkingContent;
+                      
+                      if (!currentThinking) {
+                        const thinkMatch = fullResponse.match(/<think&gt;([\s\S]*?)(<\/think&gt;|$)/);
+                        if (thinkMatch) {
+                          currentThinking = thinkMatch[1];
+                          if (fullResponse.includes('</think&gt;')) {
+                            displayContent = fullResponse.replace(/<think&gt;[\s\S]*?<\/think&gt;/, '').trim();
+                          } else {
+                            displayContent = '';
+                          }
                         }
                       }
-                    }
 
-                    updateMessage(convId, aiMsgId, {
-                      content: displayContent,
-                      thinking: currentThinking,
-                      thinkingDuration: thinkingDuration > 0 ? thinkingDuration : undefined,
-                      isStreaming: true,
-                    });
+                      setStreamingContent(displayContent);
+                      setStreamingThinking(currentThinking);
+                      lastUpdateTime = now;
+                    }
                   }
                   
                   if (data.done && ollamaVerboseMode) {
@@ -670,6 +726,9 @@ export function ChatPage() {
             }
           }
 
+          setStreamingContent('');
+          setStreamingThinking('');
+
           updateMessage(convId, aiMsgId, {
             content: finalResponse,
             thinking: finalThinking,
@@ -688,16 +747,20 @@ export function ChatPage() {
             const promptEvalCount = lastPerfData.prompt_eval_count || 0;
             const throughput = evalDuration > 0 ? evalCount / evalDuration : 0;
             
+            const currentTotalTokens = promptEvalCount + evalCount;
+            const previousTotalTokens = previousRoundTokensRef.current?.total || 0;
+            const currentRoundTotal = currentTotalTokens - previousTotalTokens;
+            
             const currentRoundTokens = {
-              prompt: promptEvalCount,
+              prompt: currentRoundTotal > 0 ? currentRoundTotal - evalCount : promptEvalCount,
               completion: evalCount,
-              total: evalCount + promptEvalCount,
+              total: currentRoundTotal > 0 ? currentRoundTotal : currentTotalTokens,
             };
             
             totalConversationTokensRef.current = {
-              prompt: totalConversationTokensRef.current.prompt + promptEvalCount,
-              completion: totalConversationTokensRef.current.completion + evalCount,
-              total: totalConversationTokensRef.current.total + evalCount + promptEvalCount,
+              prompt: promptEvalCount,
+              completion: evalCount,
+              total: currentTotalTokens,
             };
             
             setPerformanceMetrics({
@@ -727,7 +790,7 @@ export function ChatPage() {
             
             if (activeConversationId) {
               updateConversation(activeConversationId, {
-                totalTokens: totalConversationTokensRef.current.total
+                totalTokens: currentTotalTokens
               });
             }
             
@@ -1430,6 +1493,8 @@ export function ChatPage() {
                 onImageClick={openImageViewer}
                 onRegenerate={handleRegenerate}
                 onDelete={handleDeleteMessage}
+                streamingContent={msg.isStreaming && idx === activeConversation.messages.length - 1 ? streamingContent : undefined}
+                streamingThinking={msg.isStreaming && idx === activeConversation.messages.length - 1 ? streamingThinking : undefined}
               />
             ))}
             <div ref={messagesEndRef} />

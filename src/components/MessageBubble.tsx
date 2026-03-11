@@ -1,4 +1,4 @@
-import { useState, memo, useCallback, useMemo } from 'react';
+import { useState, memo, useCallback, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -8,7 +8,26 @@ import { User, Bot, Brain, ChevronRight, Copy, Check, RotateCcw, Trash2 } from '
 import type { ChatMessage } from '@/store';
 import { cn } from '@/utils/cn';
 
+const markdownCache = new Map<string, React.ReactNode>();
+const MAX_CACHE_SIZE = 100;
+
+const getCachedMarkdown = (content: string): React.ReactNode | null => {
+  return markdownCache.get(content) || null;
+};
+
+const setCachedMarkdown = (content: string, node: React.ReactNode) => {
+  if (markdownCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = markdownCache.keys().next().value;
+    if (firstKey) {
+      markdownCache.delete(firstKey);
+    }
+  }
+  markdownCache.set(content, node);
+};
+
 const CodeBlock = memo(function CodeBlock({ language, children }: { language: string; children: string }) {
+  const lineCount = children.split('\n').length;
+  
   return (
     <div className="relative my-4 rounded-xl overflow-hidden" style={{ backgroundColor: '#1e1e2e' }}>
       <div className="flex items-center justify-between px-4 py-2 text-xs" style={{ backgroundColor: '#181825', color: '#6c7086' }}>
@@ -30,7 +49,12 @@ const CodeBlock = memo(function CodeBlock({ language, children }: { language: st
           fontSize: '0.875rem',
           background: '#1e1e2e',
         }}
-        showLineNumbers={children.split('\n').length > 5}
+        showLineNumbers={lineCount > 5}
+        codeTagProps={{
+          style: {
+            fontFamily: 'Consolas, Monaco, "Andale Mono", monospace',
+          }
+        }}
       >
         {children}
       </SyntaxHighlighter>
@@ -38,7 +62,33 @@ const CodeBlock = memo(function CodeBlock({ language, children }: { language: st
   );
 });
 
-const MarkdownContent = memo(function MarkdownContent({ content, isStreaming, isLast }: { content: string; isStreaming?: boolean; isLast: boolean }) {
+const StreamingText = memo(function StreamingText({ content, className }: { content: string; className?: string }) {
+  const contentRef = useRef(content);
+  const [, forceUpdate] = useState({});
+  
+  useEffect(() => {
+    if (contentRef.current !== content) {
+      contentRef.current = content;
+      forceUpdate({});
+    }
+  }, [content]);
+  
+  return (
+    <div className={cn("whitespace-pre-wrap text-sm leading-relaxed copy-allowed typing-cursor", className)} style={{ userSelect: 'text' }}>
+      {content}
+    </div>
+  );
+});
+
+const CachedMarkdown = memo(function CachedMarkdown({ 
+  content, 
+  isStreaming, 
+  isLast 
+}: { 
+  content: string; 
+  isStreaming?: boolean; 
+  isLast: boolean;
+}) {
   const components = useMemo(() => ({
     code({ className, children, ...props }: any) {
       const match = /language-(\w+)/.exec(className || '');
@@ -50,13 +100,29 @@ const MarkdownContent = memo(function MarkdownContent({ content, isStreaming, is
     },
   }), []);
 
-  return (
+  const cached = getCachedMarkdown(content);
+  
+  if (cached && !isStreaming) {
+    return (
+      <div className={cn("markdown-body copy-allowed")} style={{ userSelect: 'text' }}>
+        {cached}
+      </div>
+    );
+  }
+
+  const markdownNode = (
     <div className={cn("markdown-body copy-allowed", isStreaming && isLast && 'typing-cursor')} style={{ userSelect: 'text' }}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {content}
       </ReactMarkdown>
     </div>
   );
+
+  if (!isStreaming && content.length > 50) {
+    setCachedMarkdown(content, markdownNode);
+  }
+
+  return markdownNode;
 });
 
 interface MessageBubbleProps {
@@ -66,6 +132,8 @@ interface MessageBubbleProps {
   onImageClick: (images: string[], index: number) => void;
   onRegenerate?: (content: string, images?: string[]) => void;
   onDelete?: (messageId: string) => void;
+  streamingContent?: string;
+  streamingThinking?: string;
 }
 
 export const MessageBubble = memo(function MessageBubble({
@@ -75,11 +143,21 @@ export const MessageBubble = memo(function MessageBubble({
   onImageClick,
   onRegenerate,
   onDelete,
+  streamingContent,
+  streamingThinking,
 }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const [showActions, setShowActions] = useState(true);
   const [showThinking, setShowThinking] = useState(true);
   const [copied, setCopied] = useState(false);
+  
+  const isCurrentlyStreaming = message.isStreaming && isLast;
+  const displayContent = isCurrentlyStreaming && streamingContent !== undefined 
+    ? streamingContent 
+    : message.content;
+  const displayThinking = isCurrentlyStreaming && streamingThinking !== undefined
+    ? streamingThinking
+    : message.thinking;
 
   const formatTime = useCallback((ts: number) => {
     const d = new Date(ts);
@@ -109,6 +187,9 @@ export const MessageBubble = memo(function MessageBubble({
       onDelete(message.id);
     }
   }, [message.id, onDelete]);
+
+  const shouldUseSimpleRender = isCurrentlyStreaming && displayContent.length < 800;
+  const shouldUseSimpleThinking = isCurrentlyStreaming && (displayThinking?.length || 0) < 800;
 
   return (
     <motion.div
@@ -160,7 +241,7 @@ export const MessageBubble = memo(function MessageBubble({
             </div>
           ) : (
             <>
-              {message.thinking && (
+              {displayThinking && (
                 <div className="mb-4">
                   <button
                     onClick={() => setShowThinking(!showThinking)}
@@ -178,7 +259,7 @@ export const MessageBubble = memo(function MessageBubble({
                         {message.thinkingDuration.toFixed(1)}s
                       </span>
                     )}
-                    <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{message.thinking.length} 字符</span>
+                    <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{displayThinking.length} 字符</span>
                     <ChevronRight size={14} style={{ color: 'var(--text-tertiary)', transform: showThinking ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s' }} />
                   </button>
                   <AnimatePresence>
@@ -192,17 +273,27 @@ export const MessageBubble = memo(function MessageBubble({
                       >
                         <div className="rounded-xl p-4 text-sm leading-relaxed max-h-80 overflow-y-auto" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
                           <div className="flex items-center gap-2 mb-3 pb-2 border-b" style={{ borderColor: 'var(--border-color)' }}>
-                            <div className="w-2 h-2 rounded-full animate-pulse" style={{ backgroundColor: 'var(--primary-color)' }} />
-                            <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>AI 正在思考...</span>
+                            <div className={cn("w-2 h-2 rounded-full", isCurrentlyStreaming && "animate-pulse")} style={{ backgroundColor: 'var(--primary-color)' }} />
+                            <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>
+                              {isCurrentlyStreaming ? 'AI 正在思考...' : '思考完成'}
+                            </span>
                           </div>
-                          <MarkdownContent content={message.thinking} isLast={false} />
+                          {shouldUseSimpleThinking ? (
+                            <StreamingText content={displayThinking} />
+                          ) : (
+                            <CachedMarkdown content={displayThinking} isStreaming={isCurrentlyStreaming} isLast={false} />
+                          )}
                         </div>
                       </motion.div>
                     )}
                   </AnimatePresence>
                 </div>
               )}
-              <MarkdownContent content={message.content} isStreaming={message.isStreaming} isLast={isLast} />
+              {shouldUseSimpleRender ? (
+                <StreamingText content={displayContent} />
+              ) : (
+                <CachedMarkdown content={displayContent} isStreaming={isCurrentlyStreaming} isLast={isLast} />
+              )}
             </>
           )}
         </div>
@@ -250,3 +341,7 @@ export const MessageBubble = memo(function MessageBubble({
     </motion.div>
   );
 });
+
+export function clearMarkdownCache() {
+  markdownCache.clear();
+}
