@@ -48,7 +48,6 @@ export function ChatPage() {
   const [showModelSelect, setShowModelSelect] = useState(false);
   const [ollamaModelsExpanded, setOllamaModelsExpanded] = useState(true);
   const [remoteModelsExpanded, setRemoteModelsExpanded] = useState(false);
-  const [hoveredMessage, setHoveredMessage] = useState<string | null>(null);
   const [showNav, setShowNav] = useState(true);
   const [switchingModel, setSwitchingModel] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -1103,7 +1102,6 @@ export function ChatPage() {
       {showNav && activeConversation && activeConversation.messages.length > 0 && (
         <ChatQuickNav 
           messages={activeConversation.messages} 
-          onHoverMessage={setHoveredMessage}
         />
       )}
         
@@ -1201,27 +1199,6 @@ export function ChatPage() {
         </div>
         
         <div className="flex items-center">
-          {/* 悬停消息显示气泡 */}
-          {hoveredMessage && (
-            <div 
-              className="mr-4 px-4 py-2 rounded-lg text-sm flex items-center"
-              style={{
-                backgroundColor: compactMode ? 'transparent' : 'var(--bg-secondary)',
-                color: 'var(--text-primary)',
-                border: '1px solid var(--border-color)',
-                maxWidth: '350px',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                boxShadow: compactMode ? 'none' : 'var(--shadow-md)',
-                height: '36px',
-                fontSize: '13px'
-              }}
-            >
-              <span>{hoveredMessage}</span>
-            </div>
-          )}
-
           {/* Model Selector */}
           <div className="relative">
             <button
@@ -1267,14 +1244,17 @@ export function ChatPage() {
                         {ollamaModelsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                       </button>
                       {ollamaModelsExpanded && (
-                        <div className="overflow-y-auto max-h-48 flex-1">
+                        <div 
+                          className="overflow-y-auto max-h-48 flex-1"
+                          style={{ scrollbarGutter: 'stable' }}
+                        >
                           {ollamaStatus?.isRunning && ollamaModels.length > 0 ? (
                             ollamaModels.map((model: any) => (
                               <button
                                 key={`ollama-${model.name}`}
                                 onClick={() => handleSwitchOllamaModel(model.name)}
                                 disabled={switchingModel}
-                                className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left transition-colors disabled:opacity-50"
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left transition-all duration-150 hover:scale-[1.02] hover:bg-[var(--bg-secondary)] disabled:opacity-50"
                                 style={{
                                   backgroundColor: model.name === activeOllamaModel ? 'var(--primary-light)' : 'transparent',
                                 }}
@@ -1307,7 +1287,7 @@ export function ChatPage() {
                               <button
                                 onClick={handleActivateOllama}
                                 disabled={isActivatingOllama}
-                                className="flex items-center gap-1 px-2 py-1 mt-2 rounded text-xs font-medium transition-all disabled:opacity-50"
+                                className="flex items-center gap-1 px-2 py-1 mt-2 rounded text-xs font-medium transition-all duration-150 hover:scale-105 hover:shadow-md disabled:opacity-50"
                                 style={{
                                   backgroundColor: 'var(--primary-light)',
                                   color: 'var(--primary-color)',
@@ -1336,7 +1316,10 @@ export function ChatPage() {
                         {remoteModelsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                       </button>
                       {remoteModelsExpanded && (
-                        <div className="overflow-y-auto max-h-48 flex-1">
+                        <div 
+                          className="overflow-y-auto max-h-48 flex-1"
+                          style={{ scrollbarGutter: 'stable' }}
+                        >
                           {models.filter(m => m.isActive).length > 0 ? (
                             models.filter(m => m.isActive).map((model) => (
                               <button
@@ -1347,7 +1330,7 @@ export function ChatPage() {
                                   setShowModelSelect(false);
                                   toast.success(`已切换到 ${model.name}`, { duration: 2000 });
                                 }}
-                                className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left transition-colors"
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-left transition-all duration-150 hover:scale-[1.02] hover:bg-[var(--bg-secondary)]"
                                 style={{
                                   backgroundColor: model.id === activeModelId && !activeOllamaModel ? 'var(--primary-light)' : 'transparent',
                                 }}
@@ -1412,7 +1395,7 @@ export function ChatPage() {
                               <button
                                 key={ctx}
                                 onClick={() => setOllamaNumCtx(ctx)}
-                                className="px-1.5 py-0.5 text-xs rounded transition-all"
+                                className="px-1.5 py-0.5 text-xs rounded transition-all hover:scale-110 hover:shadow-md"
                                 style={{
                                   backgroundColor: ollamaNumCtx === ctx ? 'var(--primary-color)' : 'var(--bg-tertiary)',
                                   color: ollamaNumCtx === ctx ? 'white' : 'var(--text-secondary)',

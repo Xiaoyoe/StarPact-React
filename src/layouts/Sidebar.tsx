@@ -343,7 +343,7 @@ export function Sidebar() {
                   <button
                     onClick={handleStopCurrentModel}
                     disabled={!activeOllamaModel && !activeModelId}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 hover:scale-105 disabled:opacity-40 disabled:hover:scale-100"
                     style={{ 
                       color: activeOllamaModel ? 'var(--error-color)' : 'var(--text-secondary)', 
                       backgroundColor: activeOllamaModel ? 'rgba(239, 68, 68, 0.1)' : 'var(--bg-secondary)',
@@ -356,7 +356,7 @@ export function Sidebar() {
                   </button>
                   <button
                     onClick={() => setShowModelSelect(false)}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+                    className="flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 hover:scale-110 hover:bg-[var(--bg-tertiary)]"
                     style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)' }}
                   >
                     <X size={16} />
@@ -396,7 +396,7 @@ export function Sidebar() {
                       <button
                         key={ctx}
                         onClick={() => setOllamaNumCtx(ctx)}
-                        className="px-2 py-0.5 text-xs rounded transition-all"
+                        className="px-2 py-0.5 text-xs rounded transition-all hover:scale-110 hover:shadow-md"
                         style={{
                           backgroundColor: ollamaNumCtx === ctx ? 'var(--primary-color)' : 'var(--bg-tertiary)',
                           color: ollamaNumCtx === ctx ? 'white' : 'var(--text-secondary)',
@@ -597,10 +597,10 @@ export function Sidebar() {
                             key={`ollama-${model.name}`}
                             onClick={() => handleSwitchOllamaModel(model.name)}
                             disabled={switchingModel}
-                            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors disabled:opacity-50"
+                            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150 hover:scale-[1.01] disabled:opacity-50"
                             style={{
-                              backgroundColor: model.name === activeOllamaModel ? 'var(--primary-light)' : 'transparent',
-                              border: `1px solid ${model.name === activeOllamaModel ? 'var(--primary-color)' : 'var(--border-light)'}`,
+                              backgroundColor: model.name === activeOllamaModel ? 'var(--primary-light)' : 'var(--bg-tertiary)',
+                              border: `1px solid ${model.name === activeOllamaModel ? 'var(--primary-color)' : 'transparent'}`,
                             }}
                           >
                             <div
@@ -658,10 +658,10 @@ export function Sidebar() {
                               setShowModelSelect(false);
                               toast.success(`已切换到 ${model.name}`, { duration: 2000 });
                             }}
-                            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
+                            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-all duration-150 hover:scale-[1.01]"
                             style={{
-                              backgroundColor: model.id === activeModelId && !activeOllamaModel ? 'var(--primary-light)' : 'transparent',
-                              border: `1px solid ${model.id === activeModelId && !activeOllamaModel ? 'var(--primary-color)' : 'var(--border-light)'}`,
+                              backgroundColor: model.id === activeModelId && !activeOllamaModel ? 'var(--primary-light)' : 'var(--bg-tertiary)',
+                              border: `1px solid ${model.id === activeModelId && !activeOllamaModel ? 'var(--primary-color)' : 'transparent'}`,
                             }}
                           >
                             <div
