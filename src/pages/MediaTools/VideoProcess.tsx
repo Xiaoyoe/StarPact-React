@@ -537,8 +537,8 @@ export function VideoProcess() {
             <div 
               className="h-full flex flex-col items-center justify-center rounded-2xl transition-all duration-300"
               style={{ 
-                backgroundColor: isDragging ? 'rgba(139, 92, 246, 0.1)' : 'var(--bg-secondary)',
-                border: `2px dashed ${isDragging ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                backgroundColor: isDragging ? 'rgba(6, 182, 212, 0.1)' : 'var(--bg-secondary)',
+                border: `2px dashed ${isDragging ? '#06b6d4' : 'var(--border-color)'}`,
                 minHeight: '400px',
               }}
             >
@@ -550,16 +550,16 @@ export function VideoProcess() {
                 <div 
                   className="w-20 h-20 rounded-2xl flex items-center justify-center mb-4"
                   style={{ 
-                    backgroundColor: isDragging ? 'var(--primary-light)' : 'var(--bg-tertiary)',
+                    backgroundColor: isDragging ? 'rgba(6, 182, 212, 0.15)' : 'var(--bg-tertiary)',
                     transition: 'background-color 0.3s',
                   }}
                 >
                   <Video 
                     className="w-10 h-10 transition-colors duration-300" 
-                    style={{ color: isDragging ? 'var(--primary-color)' : 'var(--text-tertiary)' }} 
+                    style={{ color: isDragging ? '#06b6d4' : 'var(--text-tertiary)' }} 
                   />
                 </div>
-                <p className="text-lg font-medium mb-2" style={{ color: isDragging ? 'var(--primary-color)' : 'var(--text-primary)' }}>
+                <p className="text-lg font-medium mb-2" style={{ color: isDragging ? '#06b6d4' : 'var(--text-primary)' }}>
                   {isDragging ? '松开以添加视频' : '拖拽视频文件到此处'}
                 </p>
                 <p className="text-sm mb-4" style={{ color: 'var(--text-tertiary)' }}>
@@ -570,8 +570,8 @@ export function VideoProcess() {
                   disabled={!isElectronEnv || !isConfigured}
                   className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white transition-all duration-200 hover:scale-105 disabled:opacity-50"
                   style={{ 
-                    background: 'linear-gradient(135deg, var(--primary-color), #8b5cf6)',
-                    boxShadow: '0 4px 15px rgba(139, 92, 246, 0.4)'
+                    background: 'linear-gradient(135deg, #0891b2, #06b6d4)',
+                    boxShadow: '0 2px 8px rgba(6, 182, 212, 0.2)'
                   }}
                 >
                   <Plus className="w-4 h-4" />
@@ -587,9 +587,9 @@ export function VideoProcess() {
                   disabled={!isElectronEnv || !isConfigured || isLoading}
                   className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105 disabled:opacity-50"
                   style={{ 
-                    background: 'linear-gradient(135deg, var(--primary-color), #8b5cf6)',
+                    background: 'linear-gradient(135deg, #0891b2, #06b6d4)',
                     color: 'white',
-                    boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)'
+                    boxShadow: '0 2px 8px rgba(6, 182, 212, 0.15)'
                   }}
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -658,8 +658,8 @@ export function VideoProcess() {
                       className="rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:scale-[1.02] group relative"
                       style={{ 
                         backgroundColor: 'var(--bg-secondary)',
-                        border: `2px solid ${isViewing ? 'var(--primary-color)' : 'var(--border-color)'}`,
-                        boxShadow: isViewing ? '0 4px 15px rgba(139, 92, 246, 0.3)' : 'none',
+                        border: `2px solid ${isViewing ? '#06b6d4' : 'var(--border-color)'}`,
+                        boxShadow: isViewing ? '0 2px 8px rgba(6, 182, 212, 0.15)' : 'none',
                       }}
                       onClick={() => handleVideoClick(index)}
                       onContextMenu={(e) => handleContextMenu(e, index)}
@@ -717,7 +717,7 @@ export function VideoProcess() {
                         {isViewing && !isSelected && (
                           <div 
                             className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-white z-10"
-                            style={{ backgroundColor: 'var(--primary-color)' }}
+                            style={{ backgroundColor: '#0891b2' }}
                           >
                             查看中
                           </div>

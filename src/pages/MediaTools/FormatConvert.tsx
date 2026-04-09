@@ -503,8 +503,8 @@ export function FormatConvert() {
           <div 
             className="rounded-xl p-4"
             style={{ 
-              backgroundColor: isCurrentModuleProcessing ? 'rgba(139, 92, 246, 0.1)' : 'var(--bg-secondary)', 
-              border: `1px solid ${isCurrentModuleProcessing ? 'var(--primary-color)' : 'var(--border-color)'}`,
+              backgroundColor: isCurrentModuleProcessing ? 'rgba(6, 182, 212, 0.1)' : 'var(--bg-secondary)', 
+              border: `1px solid ${isCurrentModuleProcessing ? '#06b6d4' : 'var(--border-color)'}`,
               transition: 'all 0.3s ease'
             }}
           >
@@ -516,10 +516,10 @@ export function FormatConvert() {
                 style={{ 
                   background: isCurrentModuleProcessing 
                     ? 'linear-gradient(135deg, var(--error-color), #ef4444)' 
-                    : 'linear-gradient(135deg, var(--primary-color), #8b5cf6)',
+                    : 'linear-gradient(135deg, #0891b2, #06b6d4)',
                   boxShadow: isCurrentModuleProcessing 
                     ? '0 4px 15px rgba(239, 68, 68, 0.4)' 
-                    : '0 4px 15px rgba(139, 92, 246, 0.4)'
+                    : '0 2px 8px rgba(6, 182, 212, 0.2)'
                 }}
               >
                 {isCurrentModuleProcessing ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}

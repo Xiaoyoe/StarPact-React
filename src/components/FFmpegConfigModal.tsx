@@ -459,7 +459,7 @@ export function FFmpegConfigModal({ isOpen, onClose }: FFmpegConfigModalProps) {
                   onClick={handleDetect}
                   disabled={isDetecting || !config.binPath}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white disabled:opacity-50 transition-all"
-                  style={{ background: 'linear-gradient(135deg, var(--primary-color), #8b5cf6)' }}
+                  style={{ background: 'linear-gradient(135deg, #0891b2, #06b6d4)', boxShadow: '0 2px 8px rgba(6, 182, 212, 0.2)' }}
                 >
                   {isDetecting ? (
                     <>

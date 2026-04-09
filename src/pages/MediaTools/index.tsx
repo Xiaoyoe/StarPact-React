@@ -268,12 +268,15 @@ export function MediaToolsPage() {
   const tabs = [
     { key: 'format', label: '格式转换', icon: <FileType className="w-4 h-4" /> },
     { key: 'audio', label: '音频处理', icon: <Music className="w-4 h-4" /> },
-    { key: 'video', label: '视频处理', icon: <Film className="w-4 h-4" /> },
     { key: 'advanced', label: '高级工具', icon: <Settings className="w-4 h-4" /> },
     { key: 'ico', label: 'ICO转换', icon: <ImageIcon className="w-4 h-4" /> },
     { key: 'imageFormat', label: '图片转换', icon: <FileImage className="w-4 h-4" /> },
-    { key: 'folder', label: '文件夹处理', icon: <FolderSync className="w-4 h-4" /> },
     { key: 'command', label: '命令构建', icon: <TerminalIcon className="w-4 h-4" /> },
+  ];
+
+  const processTabs = [
+    { key: 'folder', label: '文件夹处理', icon: <FolderSync className="w-4 h-4" /> },
+    { key: 'video', label: '视频处理', icon: <Film className="w-4 h-4" /> },
   ];
 
   const handleOpenFolder = async (filePath: string) => {
@@ -341,8 +344,8 @@ export function MediaToolsPage() {
             onClick={() => setShowBottomNav(true)}
             className="absolute bottom-6 right-6 w-12 h-12 rounded-2xl flex items-center justify-center z-20 group"
             style={{
-              background: 'linear-gradient(135deg, var(--primary-color) 0%, #8b5cf6 100%)',
-              boxShadow: '0 10px 40px rgba(139, 92, 246, 0.3)',
+              background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
+              boxShadow: '0 10px 40px rgba(15, 23, 42, 0.3)',
             }}
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
@@ -385,8 +388,41 @@ export function MediaToolsPage() {
                           layoutId="activeTab"
                           className="absolute inset-0 rounded-xl"
                           style={{
-                            background: 'linear-gradient(135deg, var(--primary-color) 0%, #8b5cf6 100%)',
-                            boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)',
+                            background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
+                            boxShadow: '0 4px 15px rgba(15, 23, 42, 0.4)',
+                          }}
+                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        />
+                      )}
+                      <span className="relative z-10 flex items-center gap-1.5">
+                        <span className="transition-transform group-hover:scale-110">{tab.icon}</span>
+                        <span className="text-[11px] font-medium whitespace-nowrap">{tab.label}</span>
+                      </span>
+                    </motion.button>
+                  ))}
+                </div>
+                
+                <div className="h-5 w-px" style={{ backgroundColor: 'var(--border-color)' }} />
+                
+                <div className="flex items-center gap-1">
+                  {processTabs.map((tab) => (
+                    <motion.button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-300 group"
+                      style={{
+                        color: activeTab === tab.key ? 'white' : 'var(--text-tertiary)',
+                      }}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                    >
+                      {activeTab === tab.key && (
+                        <motion.div
+                          layoutId="activeProcessTab"
+                          className="absolute inset-0 rounded-xl"
+                          style={{
+                            background: 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)',
+                            boxShadow: '0 2px 8px rgba(6, 182, 212, 0.15)',
                           }}
                           transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                         />
