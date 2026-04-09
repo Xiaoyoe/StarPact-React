@@ -22,10 +22,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   file: {
     selectFolder: (options) => ipcRenderer.invoke('file:selectFolder', options),
     selectFile: (options) => ipcRenderer.invoke('file:selectFile', options),
+    selectFiles: (options) => ipcRenderer.invoke('file:selectFile', { ...options, multi: true }),
     readFile: (filePath, encoding) => ipcRenderer.invoke('file:readFile', filePath, encoding),
     writeFile: (filePath, content) => ipcRenderer.invoke('file:writeFile', filePath, content),
     showInFolder: (filePath) => ipcRenderer.invoke('file:showInFolder', filePath),
     deleteFile: (filePath) => ipcRenderer.invoke('file:deleteFile', filePath),
+    getFileStats: (filePath) => ipcRenderer.invoke('file:getFileStats', filePath),
   },
   
   // 窗口控制API
@@ -46,6 +48,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stop: () => ipcRenderer.invoke('ffmpeg:stop'),
     getMediaInfo: (ffprobePath, filePath) => ipcRenderer.invoke('ffmpeg:getMediaInfo', ffprobePath, filePath),
     getVideoFrame: (ffmpegPath, filePath, timeSeconds) => ipcRenderer.invoke('ffmpeg:getVideoFrame', ffmpegPath, filePath, timeSeconds),
+    scanFolderVideos: (ffprobePath, folderPath) => ipcRenderer.invoke('ffmpeg:scanFolderVideos', ffprobePath, folderPath),
+    mergeVideos: (options) => ipcRenderer.invoke('ffmpeg:mergeVideos', options),
+    classifyByFps: (ffprobePath, folderPath) => ipcRenderer.invoke('ffmpeg:classifyByFps', ffprobePath, folderPath),
+    collectSubfolderVideos: (folderPath) => ipcRenderer.invoke('ffmpeg:collectSubfolderVideos', folderPath),
     
     onProgress: (callback) => {
       const listener = (event, data) => callback(data);

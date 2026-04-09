@@ -1,12 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Clapperboard, FileType, Music, Terminal as TerminalIcon, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon, FileImage } from 'lucide-react';
-import { Tabs, ProgressBar } from '@/components/ffmpeg';
+import { FileType, Music, Terminal as TerminalIcon, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon, FileImage, FolderSync, Minimize2, Maximize2, Film } from 'lucide-react';
+import { ProgressBar } from '@/components/ffmpeg';
 import { FormatConvert } from './FormatConvert';
 import { AudioProcess } from './AudioProcess';
 import { AdvancedTools } from './AdvancedTools';
 import { CommandBuilder } from './CommandBuilder';
 import { IcoConverter } from './IcoConverter';
 import { ImageFormatConvert } from './ImageFormatConvert';
+import { FolderProcess } from './FolderProcess';
+import { VideoProcess } from './VideoProcess';
 import { FFmpegConfigModal } from '@/components/FFmpegConfigModal';
 import { useFFmpegStore, type ProcessingModule, type ProcessingTask } from '@/stores/ffmpegStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -247,6 +249,7 @@ export function MediaToolsPage() {
   const [showTaskList, setShowTaskList] = useState(false);
   const [showFFmpegConfig, setShowFFmpegConfig] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
+  const [showBottomNav, setShowBottomNav] = useState(true);
   
   const { chatWallpaper } = useStore();
   const wallpaperStyle = useWallpaperStyle(chatWallpaper);
@@ -265,30 +268,13 @@ export function MediaToolsPage() {
   const tabs = [
     { key: 'format', label: '格式转换', icon: <FileType className="w-4 h-4" /> },
     { key: 'audio', label: '音频处理', icon: <Music className="w-4 h-4" /> },
+    { key: 'video', label: '视频处理', icon: <Film className="w-4 h-4" /> },
     { key: 'advanced', label: '高级工具', icon: <Settings className="w-4 h-4" /> },
     { key: 'ico', label: 'ICO转换', icon: <ImageIcon className="w-4 h-4" /> },
     { key: 'imageFormat', label: '图片转换', icon: <FileImage className="w-4 h-4" /> },
+    { key: 'folder', label: '文件夹处理', icon: <FolderSync className="w-4 h-4" /> },
     { key: 'command', label: '命令构建', icon: <TerminalIcon className="w-4 h-4" /> },
   ];
-
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'format':
-        return <FormatConvert />;
-      case 'audio':
-        return <AudioProcess />;
-      case 'advanced':
-        return <AdvancedTools />;
-      case 'ico':
-        return <IcoConverter />;
-      case 'imageFormat':
-        return <ImageFormatConvert />;
-      case 'command':
-        return <CommandBuilder />;
-      default:
-        return <FormatConvert />;
-    }
-  };
 
   const handleOpenFolder = async (filePath: string) => {
     if (typeof window !== 'undefined' && window.electronAPI?.file?.showInFolder) {
@@ -315,58 +301,165 @@ export function MediaToolsPage() {
         ...wallpaperStyle
       }}
     >
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center w-10 h-10 rounded-xl" style={{ backgroundColor: 'var(--primary-light)' }}>
-            <Clapperboard className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
+      <div className="flex-1 overflow-hidden">
+        <div className="h-full">
+          <div style={{ display: activeTab === 'format' ? 'block' : 'none' }}>
+            <FormatConvert />
           </div>
-          <div>
-            <h1 className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>媒体工具</h1>
-            <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>FFmpeg 多媒体处理工具集</p>
+          <div style={{ display: activeTab === 'audio' ? 'block' : 'none' }}>
+            <AudioProcess />
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <Tabs tabs={tabs} active={activeTab} onChange={setActiveTab} />
-          <button
-            onClick={() => setShowFFmpegConfig(true)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 hover:scale-105"
-            style={{
-              backgroundColor: 'var(--bg-tertiary)',
-              color: 'var(--text-secondary)',
-              border: '1px solid var(--border-color)',
-            }}
-          >
-            <Cog className="w-4 h-4" />
-            <span className="text-xs font-medium">配置</span>
-          </button>
-          <button
-            onClick={() => setShowTaskList(!showTaskList)}
-            className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 hover:scale-105"
-            style={{
-              backgroundColor: showTaskList ? 'var(--primary-light)' : 'var(--bg-tertiary)',
-              color: showTaskList ? 'var(--primary-color)' : 'var(--text-secondary)',
-              border: `1px solid ${showTaskList ? 'var(--primary-color)' : 'var(--border-color)'}`,
-            }}
-          >
-            <ListTodo className="w-4 h-4" />
-            <span className="text-xs font-medium">任务列表</span>
-            {activeTaskIds.size > 0 && (
-              <span
-                className="flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-white animate-pulse"
-                style={{ backgroundColor: 'var(--primary-color)' }}
-              >
-                {activeTaskIds.size}
-              </span>
-            )}
-          </button>
+          <div style={{ display: activeTab === 'advanced' ? 'block' : 'none' }}>
+            <AdvancedTools />
+          </div>
+          <div style={{ display: activeTab === 'ico' ? 'block' : 'none' }}>
+            <IcoConverter />
+          </div>
+          <div style={{ display: activeTab === 'imageFormat' ? 'block' : 'none' }}>
+            <ImageFormatConvert />
+          </div>
+          <div style={{ display: activeTab === 'video' ? 'block' : 'none' }} className="h-full">
+            <VideoProcess />
+          </div>
+          <div style={{ display: activeTab === 'folder' ? 'block' : 'none' }} className="h-full">
+            <FolderProcess />
+          </div>
+          <div style={{ display: activeTab === 'command' ? 'block' : 'none' }}>
+            <CommandBuilder />
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto" style={{ scrollbarGutter: 'stable' }}>
-        <div style={{ paddingRight: '12px' }}>
-          {renderContent()}
-        </div>
-      </div>
+      <AnimatePresence mode="wait">
+        {!showBottomNav ? (
+          <motion.button
+            key="expand"
+            initial={{ opacity: 0, x: 50 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 50 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+            onClick={() => setShowBottomNav(true)}
+            className="absolute bottom-6 right-6 w-12 h-12 rounded-2xl flex items-center justify-center z-20 group"
+            style={{
+              background: 'linear-gradient(135deg, var(--primary-color) 0%, #8b5cf6 100%)',
+              boxShadow: '0 10px 40px rgba(139, 92, 246, 0.3)',
+            }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <Maximize2 className="w-5 h-5 text-white transition-transform group-hover:rotate-180 duration-300" />
+          </motion.button>
+        ) : (
+          <motion.div
+            key="toolbar"
+            initial={{ opacity: 0, x: '100%' }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: '100%' }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="absolute bottom-6 left-6 right-6 z-20"
+          >
+            <div 
+              className="rounded-2xl px-4 py-2"
+              style={{ 
+                backgroundColor: 'var(--bg-secondary)',
+                backdropFilter: 'blur(30px) saturate(180%)',
+                border: '1px solid var(--border-color)',
+                boxShadow: 'var(--shadow-lg)',
+              }}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1 flex-1">
+                  {tabs.map((tab) => (
+                    <motion.button
+                      key={tab.key}
+                      onClick={() => setActiveTab(tab.key)}
+                      className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-300 group"
+                      style={{
+                        color: activeTab === tab.key ? 'white' : 'var(--text-tertiary)',
+                      }}
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                    >
+                      {activeTab === tab.key && (
+                        <motion.div
+                          layoutId="activeTab"
+                          className="absolute inset-0 rounded-xl"
+                          style={{
+                            background: 'linear-gradient(135deg, var(--primary-color) 0%, #8b5cf6 100%)',
+                            boxShadow: '0 4px 15px rgba(139, 92, 246, 0.3)',
+                          }}
+                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        />
+                      )}
+                      <span className="relative z-10 flex items-center gap-1.5">
+                        <span className="transition-transform group-hover:scale-110">{tab.icon}</span>
+                        <span className="text-[11px] font-medium whitespace-nowrap">{tab.label}</span>
+                      </span>
+                    </motion.button>
+                  ))}
+                </div>
+                
+                <div className="h-5 w-px" style={{ backgroundColor: 'var(--border-color)' }} />
+                
+                <div className="flex items-center gap-1">
+                  <motion.button
+                    onClick={() => {
+                      setShowFFmpegConfig(true);
+                      setShowTaskList(false);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-300"
+                    style={{ color: 'var(--text-tertiary)' }}
+                    whileHover={{ scale: 1.03, color: 'var(--text-primary)' }}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    <Cog className="w-3.5 h-3.5" />
+                    <span className="text-[11px] font-medium">配置</span>
+                  </motion.button>
+                  
+                  <motion.button
+                    onClick={() => {
+                      setShowTaskList(!showTaskList);
+                      setShowFFmpegConfig(false);
+                    }}
+                    className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-300"
+                    style={{ color: showTaskList ? 'var(--primary-color)' : 'var(--text-tertiary)' }}
+                    whileHover={{ scale: 1.03, color: showTaskList ? 'var(--primary-color)' : 'var(--text-primary)' }}
+                    whileTap={{ scale: 0.97 }}
+                  >
+                    <ListTodo className="w-3.5 h-3.5" />
+                    <span className="text-[11px] font-medium">任务</span>
+                    {activeTaskIds.size > 0 && (
+                      <motion.span
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-[9px] font-bold text-white"
+                        style={{ 
+                          background: 'linear-gradient(135deg, var(--error-color) 0%, #ec4899 100%)',
+                          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)',
+                        }}
+                      >
+                        {activeTaskIds.size}
+                      </motion.span>
+                    )}
+                  </motion.button>
+                  
+                  <div className="h-5 w-px ml-1" style={{ backgroundColor: 'var(--border-color)' }} />
+                  
+                  <motion.button
+                    onClick={() => setShowBottomNav(false)}
+                    className="w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 ml-1"
+                    style={{ color: 'var(--text-tertiary)' }}
+                    whileHover={{ scale: 1.1, color: 'var(--text-primary)' }}
+                    whileTap={{ scale: 0.9 }}
+                  >
+                    <Minimize2 className="w-3.5 h-3.5" />
+                  </motion.button>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showTaskList && (
@@ -385,7 +478,7 @@ export function MediaToolsPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 300 }}
               transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-              className="absolute right-6 top-20 bottom-6 w-[300px] z-20"
+              className="absolute right-6 top-20 bottom-20 w-[300px] z-20"
             >
               <div
                 className="h-full rounded-xl p-4 flex flex-col shadow-2xl"

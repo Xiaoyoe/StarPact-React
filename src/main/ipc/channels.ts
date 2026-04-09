@@ -43,6 +43,10 @@ export const IPC_CHANNELS = {
     STOP: 'ffmpeg:stop',
     GET_MEDIA_INFO: 'ffmpeg:getMediaInfo',
     VALIDATE_PATH: 'ffmpeg:validatePath',
+    SCAN_FOLDER_VIDEOS: 'ffmpeg:scanFolderVideos',
+    MERGE_VIDEOS: 'ffmpeg:mergeVideos',
+    CLASSIFY_BY_FPS: 'ffmpeg:classifyByFps',
+    COLLECT_SUBFOLDER_VIDEOS: 'ffmpeg:collectSubfolderVideos',
   },
   SHELL: {
     OPEN_EXTERNAL: 'shell:openExternal',

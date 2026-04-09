@@ -143,66 +143,61 @@ export function FFmpegConfigModal({ isOpen, onClose }: FFmpegConfigModalProps) {
   return (
     <AnimatePresence>
       {isOpen && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ backgroundColor: 'rgba(0, 0, 0, 0.5)' }}
-          onClick={onClose}
-        >
+        <>
           <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.95, opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="w-[560px] rounded-2xl overflow-hidden shadow-2xl"
-            style={{ 
-              backgroundColor: 'var(--bg-primary)',
-              border: '1px solid var(--border-color)',
-            }}
+            className="fixed inset-0 z-40"
+            style={{ backgroundColor: 'transparent' }}
+            onClick={onClose}
+          />
+          <motion.div
+            initial={{ opacity: 0, x: 400 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 400 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="fixed right-0 top-0 bottom-0 w-[400px] z-50"
             onClick={(e) => e.stopPropagation()}
           >
-            <div 
-              className="flex items-center justify-between px-5 py-4 border-b"
-              style={{ borderColor: 'var(--border-color)' }}
+            <div
+              className="h-full flex flex-col shadow-2xl overflow-hidden"
+              style={{ 
+                backgroundColor: 'var(--bg-primary)',
+                borderLeft: '1px solid var(--border-color)',
+              }}
             >
-              <div className="flex items-center gap-3">
-                <div 
-                  className="flex items-center justify-center w-9 h-9 rounded-xl"
-                  style={{ backgroundColor: 'var(--primary-light)' }}
-                >
-                  <Terminal className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-                    FFmpeg 配置
-                  </h2>
-                  <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                    选择 bin 目录，自动识别三个 exe 文件
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={onClose}
-                className="p-2 rounded-lg transition-colors hover:opacity-70"
-                style={{ color: 'var(--text-tertiary)' }}
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-5 space-y-4">
               <div 
-                className="rounded-xl p-4"
-                style={{ backgroundColor: 'var(--bg-secondary)' }}
+                className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+                style={{ borderBottom: '1px solid var(--border-color)' }}
               >
-                <div className="flex items-center gap-2 mb-3">
-                  <FolderSync className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
-                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                    FFmpeg bin 目录
+                <div className="flex items-center gap-2">
+                  <FolderSync className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
+                  <span className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    FFmpeg 配置
                   </span>
                 </div>
+                <button
+                  onClick={onClose}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200 hover:scale-105"
+                  style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                >
+                  <X className="w-4 h-4" style={{ color: 'var(--text-tertiary)' }} />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto p-6 space-y-4" style={{ scrollbarGutter: 'stable' }}>
+                <div 
+                  className="rounded-xl p-4"
+                  style={{ backgroundColor: 'var(--bg-secondary)' }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <FolderSync className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                    <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      FFmpeg bin 目录
+                    </span>
+                  </div>
                 
                 {isEditingBinPath ? (
                   <div className="space-y-2">
@@ -509,9 +504,10 @@ export function FFmpegConfigModal({ isOpen, onClose }: FFmpegConfigModalProps) {
                   </a>
                 </p>
               </div>
+              </div>
             </div>
           </motion.div>
-        </motion.div>
+        </>
       )}
     </AnimatePresence>
   );

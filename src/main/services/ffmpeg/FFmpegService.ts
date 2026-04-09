@@ -22,6 +22,7 @@ export interface FFmpegProgress {
 export interface MediaInfo {
   duration: number;
   format: string;
+  size: number;
   video?: {
     width: number;
     height: number;
@@ -35,6 +36,43 @@ export interface MediaInfo {
     channels: number;
     bitrate: number;
   };
+}
+
+export interface VideoFileInfo {
+  path: string;
+  name: string;
+  size: number;
+  duration: number;
+  width: number;
+  height: number;
+  codec: string;
+  fps: number;
+  bitrate: number;
+}
+
+export interface ScanFolderResult {
+  videos: VideoFileInfo[];
+  totalCount: number;
+  totalSize: number;
+}
+
+export interface MergeResult {
+  success: boolean;
+  outputPath?: string;
+  error?: string;
+}
+
+export interface ClassifyResult {
+  success: boolean;
+  classifiedCount: number;
+  folders: string[];
+  error?: string;
+}
+
+export interface CollectResult {
+  success: boolean;
+  collectedCount: number;
+  error?: string;
 }
 
 export class FFmpegService {
@@ -202,7 +240,15 @@ export class FFmpegService {
             const mediaInfo: MediaInfo = {
               duration: parseFloat(info.format?.duration) || 0,
               format: info.format?.format_name || 'unknown',
+              size: 0,
             };
+
+            try {
+              if (fs.existsSync(filePath)) {
+                const stats = fs.statSync(filePath);
+                mediaInfo.size = stats.size;
+              }
+            } catch {}
 
             for (const stream of info.streams || []) {
               if (stream.codec_type === 'video' && !mediaInfo.video) {
@@ -211,14 +257,14 @@ export class FFmpegService {
                   height: stream.height || 0,
                   codec: stream.codec_name || 'unknown',
                   fps: this.parseFps(stream.r_frame_rate) || 0,
-                  bitrate: stream.bit_rate || 0,
+                  bitrate: parseInt(stream.bit_rate) || 0,
                 };
               } else if (stream.codec_type === 'audio' && !mediaInfo.audio) {
                 mediaInfo.audio = {
                   codec: stream.codec_name || 'unknown',
-                  sampleRate: stream.sample_rate || 0,
+                  sampleRate: parseInt(stream.sample_rate) || 0,
                   channels: stream.channels || 0,
-                  bitrate: stream.bit_rate || 0,
+                  bitrate: parseInt(stream.bit_rate) || 0,
                 };
               }
             }
@@ -322,6 +368,255 @@ export class FFmpegService {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send('ffmpeg:log', log);
     }
+  }
+
+  private videoExtensions = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mts', '.m2ts', '.ogv', '.3gp', '.f4v'];
+
+  async scanFolderVideos(ffprobePath: string, folderPath: string): Promise<ScanFolderResult> {
+    const videos: VideoFileInfo[] = [];
+    let totalSize = 0;
+
+    const scanDir = (dir: string) => {
+      const items = fs.readdirSync(dir, { withFileTypes: true });
+      for (const item of items) {
+        const fullPath = path.join(dir, item.name);
+        if (item.isDirectory()) {
+          scanDir(fullPath);
+        } else if (item.isFile()) {
+          const ext = path.extname(item.name).toLowerCase();
+          if (this.videoExtensions.includes(ext)) {
+            const stats = fs.statSync(fullPath);
+            videos.push({
+              path: fullPath,
+              name: item.name,
+              size: stats.size,
+              duration: 0,
+              width: 0,
+              height: 0,
+              codec: '',
+              fps: 0,
+              bitrate: 0,
+            });
+            totalSize += stats.size;
+          }
+        }
+      }
+    };
+
+    try {
+      scanDir(folderPath);
+    } catch (error) {
+      return { videos: [], totalCount: 0, totalSize: 0 };
+    }
+
+    for (let i = 0; i < videos.length; i++) {
+      const video = videos[i];
+      const mediaInfo = await this.getMediaInfo(ffprobePath, video.path);
+      if (mediaInfo) {
+        video.duration = mediaInfo.duration;
+        video.width = mediaInfo.video?.width || 0;
+        video.height = mediaInfo.video?.height || 0;
+        video.codec = mediaInfo.video?.codec || '';
+        video.fps = mediaInfo.video?.fps || 0;
+        video.bitrate = mediaInfo.video?.bitrate || 0;
+      }
+      this.sendProgress({ progress: Math.round(((i + 1) / videos.length) * 100) } as FFmpegProgress);
+    }
+
+    return { videos, totalCount: videos.length, totalSize };
+  }
+
+  async mergeVideos(ffmpegPath: string, folderPath: string, outputName: string, overwrite: boolean): Promise<MergeResult> {
+    const videoFiles: string[] = [];
+
+    const scanDir = (dir: string) => {
+      const items = fs.readdirSync(dir, { withFileTypes: true });
+      for (const item of items) {
+        const fullPath = path.join(dir, item.name);
+        if (item.isFile()) {
+          const ext = path.extname(item.name).toLowerCase();
+          if (this.videoExtensions.includes(ext)) {
+            videoFiles.push(fullPath);
+          }
+        }
+      }
+    };
+
+    try {
+      scanDir(folderPath);
+    } catch (error) {
+      return { success: false, error: '无法读取文件夹' };
+    }
+
+    if (videoFiles.length === 0) {
+      return { success: false, error: '文件夹中没有视频文件' };
+    }
+
+    videoFiles.sort();
+
+    const outputPath = path.join(folderPath, outputName);
+    
+    if (fs.existsSync(outputPath) && !overwrite) {
+      return { success: false, error: '输出文件已存在' };
+    }
+
+    const listFilePath = path.join(folderPath, 'filelist.txt');
+    const listContent = videoFiles.map(f => `file '${f.replace(/'/g, "'\\''")}'`).join('\n');
+    fs.writeFileSync(listFilePath, listContent, 'utf-8');
+
+    return new Promise((resolve) => {
+      const args = ['-f', 'concat', '-safe', '0', '-i', listFilePath, '-c', 'copy', '-y', outputPath];
+      
+      this.currentProcess = spawn(ffmpegPath, args, { windowsHide: true });
+
+      let stderr = '';
+
+      this.currentProcess.stderr?.on('data', (data) => {
+        stderr += data.toString();
+        this.sendLog(data.toString());
+      });
+
+      this.currentProcess.on('error', (err) => {
+        this.currentProcess = null;
+        try { fs.unlinkSync(listFilePath); } catch {}
+        resolve({ success: false, error: err.message });
+      });
+
+      this.currentProcess.on('close', (code) => {
+        this.currentProcess = null;
+        try { fs.unlinkSync(listFilePath); } catch {}
+        if (code === 0) {
+          resolve({ success: true, outputPath });
+        } else {
+          resolve({ success: false, error: stderr || `Process exited with code ${code}` });
+        }
+      });
+    });
+  }
+
+  async classifyByFps(ffprobePath: string, folderPath: string): Promise<ClassifyResult> {
+    const videoFiles: { path: string; name: string; fps: number }[] = [];
+
+    const scanDir = (dir: string) => {
+      const items = fs.readdirSync(dir, { withFileTypes: true });
+      for (const item of items) {
+        const fullPath = path.join(dir, item.name);
+        if (item.isFile()) {
+          const ext = path.extname(item.name).toLowerCase();
+          if (this.videoExtensions.includes(ext)) {
+            videoFiles.push({ path: fullPath, name: item.name, fps: 0 });
+          }
+        }
+      }
+    };
+
+    try {
+      scanDir(folderPath);
+    } catch (error) {
+      return { success: false, classifiedCount: 0, folders: [], error: '无法读取文件夹' };
+    }
+
+    if (videoFiles.length === 0) {
+      return { success: false, classifiedCount: 0, folders: [], error: '文件夹中没有视频文件' };
+    }
+
+    const fpsFolders = new Set<string>();
+
+    for (let i = 0; i < videoFiles.length; i++) {
+      const video = videoFiles[i];
+      const mediaInfo = await this.getMediaInfo(ffprobePath, video.path);
+      if (mediaInfo && mediaInfo.video) {
+        video.fps = Math.round(mediaInfo.video.fps);
+      }
+      this.sendProgress({ progress: Math.round(((i + 1) / videoFiles.length) * 100) } as FFmpegProgress);
+    }
+
+    for (const video of videoFiles) {
+      if (video.fps > 0) {
+        const fpsFolderName = `FPS_${video.fps}`;
+        const fpsFolderPath = path.join(folderPath, fpsFolderName);
+        
+        if (!fs.existsSync(fpsFolderPath)) {
+          fs.mkdirSync(fpsFolderPath, { recursive: true });
+        }
+        
+        fpsFolders.add(fpsFolderName);
+        
+        const destPath = path.join(fpsFolderPath, video.name);
+        if (!fs.existsSync(destPath)) {
+          fs.renameSync(video.path, destPath);
+        } else {
+          const baseName = path.basename(video.name, path.extname(video.name));
+          const ext = path.extname(video.name);
+          let counter = 1;
+          let newDestPath = path.join(fpsFolderPath, `${baseName}_${counter}${ext}`);
+          while (fs.existsSync(newDestPath)) {
+            counter++;
+            newDestPath = path.join(fpsFolderPath, `${baseName}_${counter}${ext}`);
+          }
+          fs.renameSync(video.path, newDestPath);
+        }
+      }
+    }
+
+    return { success: true, classifiedCount: videoFiles.length, folders: Array.from(fpsFolders) };
+  }
+
+  async collectSubfolderVideos(folderPath: string): Promise<CollectResult> {
+    const videoFiles: { path: string; name: string }[] = [];
+
+    const scanDir = (dir: string, rootDir: string) => {
+      const items = fs.readdirSync(dir, { withFileTypes: true });
+      for (const item of items) {
+        const fullPath = path.join(dir, item.name);
+        if (item.isDirectory()) {
+          if (fullPath !== rootDir) {
+            scanDir(fullPath, rootDir);
+          }
+        } else if (item.isFile()) {
+          const ext = path.extname(item.name).toLowerCase();
+          if (this.videoExtensions.includes(ext)) {
+            if (dir !== rootDir) {
+              videoFiles.push({ path: fullPath, name: item.name });
+            }
+          }
+        }
+      }
+    };
+
+    try {
+      scanDir(folderPath, folderPath);
+    } catch (error) {
+      return { success: false, collectedCount: 0, error: '无法读取文件夹' };
+    }
+
+    if (videoFiles.length === 0) {
+      return { success: true, collectedCount: 0 };
+    }
+
+    let collectedCount = 0;
+
+    for (const video of videoFiles) {
+      const destPath = path.join(folderPath, video.name);
+      
+      if (!fs.existsSync(destPath)) {
+        fs.renameSync(video.path, destPath);
+        collectedCount++;
+      } else {
+        const baseName = path.basename(video.name, path.extname(video.name));
+        const ext = path.extname(video.name);
+        let counter = 1;
+        let newDestPath = path.join(folderPath, `${baseName}_${counter}${ext}`);
+        while (fs.existsSync(newDestPath)) {
+          counter++;
+          newDestPath = path.join(folderPath, `${baseName}_${counter}${ext}`);
+        }
+        fs.renameSync(video.path, newDestPath);
+        collectedCount++;
+      }
+    }
+
+    return { success: true, collectedCount };
   }
 }
 

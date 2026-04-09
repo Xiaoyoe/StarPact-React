@@ -84,6 +84,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.GET_MEDIA_INFO, ffprobePath, filePath),
     getVideoFrame: (ffmpegPath: string, filePath: string, timeSeconds: number) => 
       ipcRenderer.invoke('ffmpeg:getVideoFrame', ffmpegPath, filePath, timeSeconds),
+    scanFolderVideos: (ffprobePath: string, folderPath: string) => 
+      ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.SCAN_FOLDER_VIDEOS, ffprobePath, folderPath),
+    mergeVideos: (options: { ffmpegPath: string; folderPath: string; outputName: string; overwrite: boolean }) => 
+      ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.MERGE_VIDEOS, options),
+    classifyByFps: (ffprobePath: string, folderPath: string) => 
+      ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.CLASSIFY_BY_FPS, ffprobePath, folderPath),
+    collectSubfolderVideos: (folderPath: string) => 
+      ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.COLLECT_SUBFOLDER_VIDEOS, folderPath),
     
     onProgress: (callback: (progress: any) => void) => {
       const listener = (_event: any, progress: any) => callback(progress);
@@ -218,6 +226,42 @@ declare global {
           };
         } | null>;
         getVideoFrame: (ffmpegPath: string, filePath: string, timeSeconds: number) => Promise<string | null>;
+        scanFolderVideos: (ffprobePath: string, folderPath: string) => Promise<{
+          videos: Array<{
+            path: string;
+            name: string;
+            size: number;
+            duration: number;
+            width: number;
+            height: number;
+            codec: string;
+            fps: number;
+            bitrate: number;
+          }>;
+          totalCount: number;
+          totalSize: number;
+        }>;
+        mergeVideos: (options: {
+          ffmpegPath: string;
+          folderPath: string;
+          outputName: string;
+          overwrite: boolean;
+        }) => Promise<{
+          success: boolean;
+          outputPath?: string;
+          error?: string;
+        }>;
+        classifyByFps: (ffprobePath: string, folderPath: string) => Promise<{
+          success: boolean;
+          classifiedCount: number;
+          folders: string[];
+          error?: string;
+        }>;
+        collectSubfolderVideos: (folderPath: string) => Promise<{
+          success: boolean;
+          collectedCount: number;
+          error?: string;
+        }>;
         onProgress: (callback: (progress: {
           frame: number;
           fps: number;
