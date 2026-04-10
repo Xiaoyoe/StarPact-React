@@ -9,6 +9,7 @@ import { IcoConverter } from './IcoConverter';
 import { ImageFormatConvert } from './ImageFormatConvert';
 import { FolderProcess } from './FolderProcess';
 import { VideoProcess } from './VideoProcess';
+import { VideoEdit } from './VideoEdit';
 import { FFmpegConfigModal } from '@/components/FFmpegConfigModal';
 import { useFFmpegStore, type ProcessingModule, type ProcessingTask } from '@/stores/ffmpegStore';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -276,7 +277,8 @@ export function MediaToolsPage() {
 
   const processTabs = [
     { key: 'folder', label: '文件夹处理', icon: <FolderSync className="w-4 h-4" /> },
-    { key: 'video', label: '视频处理', icon: <Film className="w-4 h-4" /> },
+    { key: 'videoEdit', label: '视频处理', icon: <Film className="w-4 h-4" /> },
+    { key: 'video', label: '视频整合', icon: <Film className="w-4 h-4" /> },
   ];
 
   const handleOpenFolder = async (filePath: string) => {
@@ -306,28 +308,31 @@ export function MediaToolsPage() {
     >
       <div className="flex-1 overflow-hidden">
         <div className="h-full">
-          <div style={{ display: activeTab === 'format' ? 'block' : 'none' }}>
+          <div style={{ display: activeTab === 'format' ? 'block' : 'none' }} className="h-full">
             <FormatConvert />
           </div>
-          <div style={{ display: activeTab === 'audio' ? 'block' : 'none' }}>
+          <div style={{ display: activeTab === 'audio' ? 'block' : 'none' }} className="h-full">
             <AudioProcess />
           </div>
-          <div style={{ display: activeTab === 'advanced' ? 'block' : 'none' }}>
+          <div style={{ display: activeTab === 'advanced' ? 'block' : 'none' }} className="h-full">
             <AdvancedTools />
           </div>
-          <div style={{ display: activeTab === 'ico' ? 'block' : 'none' }}>
+          <div style={{ display: activeTab === 'ico' ? 'block' : 'none' }} className="h-full">
             <IcoConverter />
           </div>
-          <div style={{ display: activeTab === 'imageFormat' ? 'block' : 'none' }}>
+          <div style={{ display: activeTab === 'imageFormat' ? 'block' : 'none' }} className="h-full">
             <ImageFormatConvert />
           </div>
           <div style={{ display: activeTab === 'video' ? 'block' : 'none' }} className="h-full">
             <VideoProcess />
           </div>
+          <div style={{ display: activeTab === 'videoEdit' ? 'block' : 'none' }} className="h-full">
+            <VideoEdit />
+          </div>
           <div style={{ display: activeTab === 'folder' ? 'block' : 'none' }} className="h-full">
             <FolderProcess />
           </div>
-          <div style={{ display: activeTab === 'command' ? 'block' : 'none' }}>
+          <div style={{ display: activeTab === 'command' ? 'block' : 'none' }} className="h-full">
             <CommandBuilder />
           </div>
         </div>

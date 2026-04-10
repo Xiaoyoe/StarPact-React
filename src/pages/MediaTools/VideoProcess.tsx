@@ -467,7 +467,7 @@ export function VideoProcess() {
       <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <Film className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
-          <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>视频处理</h2>
+          <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>视频整合</h2>
           <Badge color="blue">信息查看</Badge>
           {selectedCount > 0 && (
             <Badge color="cyan">已选择 {selectedCount} 个</Badge>
@@ -750,7 +750,7 @@ export function VideoProcess() {
                           )}
                           {video.fps > 0 && (
                             <span className="text-[9px] px-1 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
-                              {video.fps.toFixed(0)}fps
+                              {video.fps.toFixed(2)}fps
                             </span>
                           )}
                           {video.bitrate > 0 && (

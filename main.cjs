@@ -204,11 +204,19 @@ const ffmpegService = {
 
             for (const stream of info.streams || []) {
               if (stream.codec_type === 'video' && !mediaInfo.video) {
+                let fps = 0;
+                
+                if (stream.avg_frame_rate && stream.avg_frame_rate !== '0/0') {
+                  fps = ffmpegService.parseFps(stream.avg_frame_rate);
+                } else if (stream.r_frame_rate) {
+                  fps = ffmpegService.parseFps(stream.r_frame_rate);
+                }
+                
                 mediaInfo.video = {
                   width: stream.width || 0,
                   height: stream.height || 0,
                   codec: stream.codec_name || 'unknown',
-                  fps: ffmpegService.parseFps(stream.r_frame_rate) || 0,
+                  fps: fps,
                   bitrate: parseInt(stream.bit_rate) || 0,
                 };
               } else if (stream.codec_type === 'audio' && !mediaInfo.audio) {
@@ -616,6 +624,64 @@ function registerFFmpegHandlers() {
     } catch (error) {
       console.error('获取视频帧失败:', error);
       return null;
+    }
+  });
+
+  ipcMain.handle('ffmpeg:executeMerge', async (event, options) => {
+    const { ffmpegPath, fileListContent, outputFilePath, taskId } = options;
+    const os = require('os');
+    const path = require('path');
+    const fs = require('fs');
+    
+    const tempDir = os.tmpdir();
+    const listFileName = `concat_${Date.now()}.txt`;
+    const listFilePath = path.join(tempDir, listFileName);
+    
+    try {
+      fs.writeFileSync(listFilePath, fileListContent, 'utf8');
+      
+      const args = [
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', listFilePath,
+        '-c', 'copy',
+        '-y',
+        outputFilePath
+      ];
+      
+      const result = await new Promise((resolve) => {
+        const proc = spawn(ffmpegPath, args);
+        let stderr = '';
+        
+        proc.stderr.on('data', (data) => {
+          stderr += data.toString();
+          if (taskId) {
+            event.sender.send('ffmpeg:log', { log: data.toString(), taskId });
+          }
+        });
+        
+        proc.on('close', (code) => {
+          fs.unlinkSync(listFilePath);
+          if (code === 0) {
+            resolve({ success: true });
+          } else {
+            resolve({ success: false, error: stderr || `进程退出码: ${code}` });
+          }
+        });
+        
+        proc.on('error', (err) => {
+          fs.unlinkSync(listFilePath);
+          resolve({ success: false, error: err.message });
+        });
+      });
+      
+      return result;
+    } catch (error) {
+      console.error('视频合并失败:', error);
+      if (fs.existsSync(listFilePath)) {
+        fs.unlinkSync(listFilePath);
+      }
+      return { success: false, error: error.message };
     }
   });
 

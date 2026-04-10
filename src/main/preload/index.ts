@@ -84,6 +84,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.GET_MEDIA_INFO, ffprobePath, filePath),
     getVideoFrame: (ffmpegPath: string, filePath: string, timeSeconds: number) => 
       ipcRenderer.invoke('ffmpeg:getVideoFrame', ffmpegPath, filePath, timeSeconds),
+    executeMerge: (options: { ffmpegPath: string; outputPath?: string; fileListContent: string; outputFilePath: string; taskId?: string }) => 
+      ipcRenderer.invoke('ffmpeg:executeMerge', options),
     scanFolderVideos: (ffprobePath: string, folderPath: string) => 
       ipcRenderer.invoke(IPC_CHANNELS.FFMPEG.SCAN_FOLDER_VIDEOS, ffprobePath, folderPath),
     mergeVideos: (options: { ffmpegPath: string; folderPath: string; outputName: string; overwrite: boolean }) => 
@@ -226,6 +228,16 @@ declare global {
           };
         } | null>;
         getVideoFrame: (ffmpegPath: string, filePath: string, timeSeconds: number) => Promise<string | null>;
+        executeMerge: (options: {
+          ffmpegPath: string;
+          outputPath?: string;
+          fileListContent: string;
+          outputFilePath: string;
+          taskId?: string;
+        }) => Promise<{
+          success: boolean;
+          error?: string;
+        }>;
         scanFolderVideos: (ffprobePath: string, folderPath: string) => Promise<{
           videos: Array<{
             path: string;

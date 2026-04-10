@@ -370,8 +370,8 @@ export function AudioProcess() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="h-full flex flex-col space-y-4">
+      <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <Music className="w-5 h-5" style={{ color: 'var(--success-color)' }} />
           <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>音频处理</h2>
@@ -399,7 +399,7 @@ export function AudioProcess() {
 
       {!isElectronEnv && (
         <div 
-          className="flex items-center gap-2 px-4 py-3 rounded-xl"
+          className="flex items-center gap-2 px-4 py-3 rounded-xl flex-shrink-0"
           style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)' }}
         >
           <AlertCircle className="w-4 h-4 text-yellow-500" />
@@ -409,7 +409,7 @@ export function AudioProcess() {
 
       {isElectronEnv && !isConfigured && (
         <div 
-          className="flex items-center gap-2 px-4 py-3 rounded-xl"
+          className="flex items-center gap-2 px-4 py-3 rounded-xl flex-shrink-0"
           style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)' }}
         >
           <AlertCircle className="w-4 h-4 text-red-500" />
@@ -417,8 +417,8 @@ export function AudioProcess() {
         </div>
       )}
 
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-4 space-y-4">
+      <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
+        <div className="col-span-4 space-y-4 overflow-y-auto pr-2" style={{ scrollbarGutter: 'stable' }}>
           {inputFiles.length > 0 && (
             <div 
               className="rounded-xl p-4"
@@ -553,7 +553,7 @@ export function AudioProcess() {
           </div>
         </div>
 
-        <div className="col-span-8 space-y-3">
+        <div className="col-span-8 space-y-3 overflow-y-auto pr-2" style={{ scrollbarGutter: 'stable' }}>
           {mainFile && (
             <div 
               className="rounded-xl overflow-hidden"

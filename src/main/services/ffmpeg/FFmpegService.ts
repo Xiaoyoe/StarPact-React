@@ -252,11 +252,19 @@ export class FFmpegService {
 
             for (const stream of info.streams || []) {
               if (stream.codec_type === 'video' && !mediaInfo.video) {
+                let fps = 0;
+                
+                if (stream.avg_frame_rate && stream.avg_frame_rate !== '0/0') {
+                  fps = this.parseFps(stream.avg_frame_rate);
+                } else if (stream.r_frame_rate) {
+                  fps = this.parseFps(stream.r_frame_rate);
+                }
+                
                 mediaInfo.video = {
                   width: stream.width || 0,
                   height: stream.height || 0,
                   codec: stream.codec_name || 'unknown',
-                  fps: this.parseFps(stream.r_frame_rate) || 0,
+                  fps: fps,
                   bitrate: parseInt(stream.bit_rate) || 0,
                 };
               } else if (stream.codec_type === 'audio' && !mediaInfo.audio) {

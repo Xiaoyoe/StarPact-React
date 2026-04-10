@@ -369,8 +369,8 @@ export function AdvancedTools() {
   const isCurrentModuleProcessing = !!currentModuleTask;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="h-full flex flex-col space-y-4">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <div className="flex items-center gap-2">
           <Clapperboard className="w-5 h-5" style={{ color: 'var(--warning-color)' }} />
           <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>高级工具</h2>
@@ -388,7 +388,7 @@ export function AdvancedTools() {
 
       {!isElectronEnv && (
         <div 
-          className="flex items-center gap-2 px-4 py-3 rounded-xl"
+          className="flex items-center gap-2 px-4 py-3 rounded-xl flex-shrink-0"
           style={{ backgroundColor: 'rgba(234, 179, 8, 0.1)', border: '1px solid rgba(234, 179, 8, 0.3)' }}
         >
           <AlertCircle className="w-4 h-4 text-yellow-500" />
@@ -398,7 +398,7 @@ export function AdvancedTools() {
 
       {isElectronEnv && !isConfigured && (
         <div 
-          className="flex items-center gap-2 px-4 py-3 rounded-xl"
+          className="flex items-center gap-2 px-4 py-3 rounded-xl flex-shrink-0"
           style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)' }}
         >
           <AlertCircle className="w-4 h-4 text-red-500" />
@@ -406,32 +406,40 @@ export function AdvancedTools() {
         </div>
       )}
 
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {[
-          { key: 'compress', label: '视频压缩', icon: <Zap className="w-4 h-4" /> },
-          { key: 'watermark', label: '添加水印', icon: <Stamp className="w-4 h-4" /> },
-          { key: 'removeWatermark', label: '去除水印', icon: <Eraser className="w-4 h-4" /> },
-          { key: 'gif', label: 'GIF生成', icon: <ImageIcon className="w-4 h-4" /> },
-          { key: 'screenshot', label: '视频截图', icon: <Camera className="w-4 h-4" /> },
-        ].map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap`}
-            style={{
-              backgroundColor: tab === t.key ? 'var(--primary-light)' : 'var(--bg-tertiary)',
-              color: tab === t.key ? 'var(--primary-color)' : 'var(--text-secondary)',
-              border: `1px solid ${tab === t.key ? 'var(--primary-color)' : 'var(--border-color)'}`,
-            }}
+      <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
+        <div className="col-span-4 space-y-4 overflow-y-auto pr-2" style={{ scrollbarGutter: 'stable' }}>
+          <div 
+            className="rounded-xl p-4"
+            style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
           >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-4 space-y-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Clapperboard className="w-4 h-4" style={{ color: 'var(--warning-color)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>功能选择</span>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { key: 'compress', label: '压缩', icon: <Zap className="w-4 h-4" /> },
+                { key: 'watermark', label: '加水印', icon: <Stamp className="w-4 h-4" /> },
+                { key: 'removeWatermark', label: '去水印', icon: <Eraser className="w-4 h-4" /> },
+                { key: 'gif', label: 'GIF', icon: <ImageIcon className="w-4 h-4" /> },
+                { key: 'screenshot', label: '截图', icon: <Camera className="w-4 h-4" /> },
+              ].map((t) => (
+                <button
+                  key={t.key}
+                  onClick={() => setTab(t.key)}
+                  className="flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-lg text-xs font-medium transition-all"
+                  style={{
+                    backgroundColor: tab === t.key ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-tertiary)',
+                    color: tab === t.key ? 'var(--warning-color)' : 'var(--text-secondary)',
+                    border: `1px solid ${tab === t.key ? 'var(--warning-color)' : 'transparent'}`,
+                  }}
+                >
+                  {t.icon}
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
           {inputFiles.length > 0 && (
             <div 
               className="rounded-xl p-4"
@@ -522,7 +530,7 @@ export function AdvancedTools() {
           </div>
         </div>
 
-        <div className="col-span-8 space-y-4">
+        <div className="col-span-8 space-y-4 overflow-y-auto pr-2" style={{ scrollbarGutter: 'stable' }}>
           {mainFile && (
             <div 
               className="rounded-xl overflow-hidden"

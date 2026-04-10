@@ -2,7 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { 
   FolderOpen, Video, Merge, Layers, FolderSync, 
   Play, Square, Info, AlertCircle, FileVideo,
-  ChevronDown, ChevronRight, HardDrive, Clock, MonitorPlay, Gauge, ExternalLink, X
+  ChevronDown, ChevronRight, HardDrive, Clock, MonitorPlay, Gauge, ExternalLink, X, Copy, Check
 } from 'lucide-react';
 import { Badge, ProgressBar, Terminal } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -96,6 +96,7 @@ export function FolderProcess() {
   const [showFolderList, setShowFolderList] = useState(true);
   const [isDragging, setIsDragging] = useState(false);
   const [autoScan, setAutoScan] = useState(true);
+  const [copied, setCopied] = useState(false);
   
   const { isConfigured, isElectronEnv } = useFFmpegStore();
   const toast = useToast();
@@ -180,7 +181,7 @@ export function FolderProcess() {
     
     videos.forEach(video => {
       if (video.fps > 0) {
-        const fps = Math.round(video.fps);
+        const fps = Math.round(video.fps * 100) / 100;
         fpsMap.set(fps, (fpsMap.get(fps) || 0) + 1);
       }
       
@@ -318,6 +319,68 @@ export function FolderProcess() {
     setVideos([]);
     setLogs([]);
     setExpandedFolders(new Set());
+  };
+
+  const copyAllVideoInfo = async () => {
+    if (videos.length === 0) {
+      toast.info('没有视频信息可复制');
+      return;
+    }
+
+    const lines = [
+      `文件夹: ${folderPath}`,
+      `视频总数: ${videos.length} 个`,
+      `总大小: ${formatSize(videos.reduce((sum, v) => sum + v.size, 0))}`,
+      '',
+      '=== 视频列表 ===',
+    ];
+
+    videos.forEach((video, index) => {
+      lines.push('');
+      lines.push(`【视频 ${index + 1}】`);
+      lines.push(`  文件名: ${video.name}`);
+      lines.push(`  路径: ${video.path}`);
+      lines.push(`  大小: ${formatSize(video.size)}`);
+      lines.push(`  时长: ${formatDuration(video.duration)}`);
+      lines.push(`  分辨率: ${video.width}x${video.height}`);
+      lines.push(`  帧率: ${video.fps.toFixed(2)} fps`);
+      lines.push(`  编码: ${video.codec}`);
+      lines.push(`  码率: ${video.bitrate > 0 ? (video.bitrate / 1000).toFixed(0) + ' kbps' : 'N/A'}`);
+    });
+
+    if (videoStats) {
+      lines.push('');
+      lines.push('=== 统计信息 ===');
+      
+      if (videoStats.fpsMap.length > 0) {
+        lines.push('帧率分布:');
+        videoStats.fpsMap.forEach(([fps, count]) => {
+          lines.push(`  ${fps}fps: ${count} 个`);
+        });
+      }
+      
+      if (videoStats.resolutionMap.length > 0) {
+        lines.push('分辨率分布:');
+        videoStats.resolutionMap.forEach(([res, count]) => {
+          lines.push(`  ${res}: ${count} 个`);
+        });
+      }
+      
+      lines.push('时长分布:');
+      if (videoStats.durationRanges.short > 0) lines.push(`  <1分钟: ${videoStats.durationRanges.short} 个`);
+      if (videoStats.durationRanges.medium > 0) lines.push(`  1-5分钟: ${videoStats.durationRanges.medium} 个`);
+      if (videoStats.durationRanges.long > 0) lines.push(`  5-30分钟: ${videoStats.durationRanges.long} 个`);
+      if (videoStats.durationRanges.veryLong > 0) lines.push(`  >30分钟: ${videoStats.durationRanges.veryLong} 个`);
+    }
+
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopied(true);
+      toast.success(`已复制 ${videos.length} 个视频的信息`);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error('复制失败');
+    }
   };
 
   const scanVideos = async (clearLogs: boolean = true, targetPath?: string) => {
@@ -932,6 +995,17 @@ export function FolderProcess() {
                     {videos.length}
                   </span>
                 </div>
+                <button
+                  onClick={copyAllVideoInfo}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:scale-105"
+                  style={{ 
+                    background: copied ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #0891b2, #06b6d4)',
+                    boxShadow: '0 2px 8px rgba(6, 182, 212, 0.2)'
+                  }}
+                >
+                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copied ? '已复制' : '复制信息'}
+                </button>
               </div>
               <div className="max-h-80 overflow-y-auto">
                 <table className="w-full text-xs">
@@ -964,7 +1038,7 @@ export function FolderProcess() {
                           {video.codec}
                         </td>
                         <td className="px-4 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
-                          {video.fps.toFixed(1)} fps
+                          {video.fps.toFixed(2)} fps
                         </td>
                       </tr>
                     ))}
@@ -1063,7 +1137,7 @@ export function FolderProcess() {
                                       <span>{video.width}x{video.height}</span>
                                     )}
                                     {video.fps > 0 && (
-                                      <span>{video.fps.toFixed(0)}fps</span>
+                                      <span>{video.fps.toFixed(2)}fps</span>
                                     )}
                                   </div>
                                 </div>

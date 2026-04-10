@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     stop: () => ipcRenderer.invoke('ffmpeg:stop'),
     getMediaInfo: (ffprobePath, filePath) => ipcRenderer.invoke('ffmpeg:getMediaInfo', ffprobePath, filePath),
     getVideoFrame: (ffmpegPath, filePath, timeSeconds) => ipcRenderer.invoke('ffmpeg:getVideoFrame', ffmpegPath, filePath, timeSeconds),
+    executeMerge: (options) => ipcRenderer.invoke('ffmpeg:executeMerge', options),
     scanFolderVideos: (ffprobePath, folderPath) => ipcRenderer.invoke('ffmpeg:scanFolderVideos', ffprobePath, folderPath),
     mergeVideos: (options) => ipcRenderer.invoke('ffmpeg:mergeVideos', options),
     classifyByFps: (ffprobePath, folderPath) => ipcRenderer.invoke('ffmpeg:classifyByFps', ffprobePath, folderPath),

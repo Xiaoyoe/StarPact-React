@@ -698,6 +698,241 @@ class FFmpegRendererService {
     return args;
   }
 
+  buildVideoCutArgs(
+    inputPath: string,
+    outputPath: string,
+    options: {
+      startTime?: string;
+      endTime?: string;
+    } = {}
+  ): string[] {
+    const args: string[] = ['-i', inputPath];
+
+    if (options.startTime) {
+      args.push('-ss', options.startTime);
+    }
+
+    if (options.endTime) {
+      args.push('-to', options.endTime);
+    }
+
+    args.push('-c', 'copy');
+    args.push(outputPath);
+
+    return args;
+  }
+
+  buildVideoRotateArgs(
+    inputPath: string,
+    outputPath: string,
+    options: {
+      rotation?: number;
+      flipH?: boolean;
+      flipV?: boolean;
+    } = {}
+  ): string[] {
+    const args: string[] = ['-i', inputPath];
+
+    const filters: string[] = [];
+
+    if (options.rotation) {
+      const transposeMap: Record<number, string> = {
+        90: 'transpose=1',
+        180: 'transpose=1,transpose=1',
+        270: 'transpose=2',
+      };
+      if (transposeMap[options.rotation]) {
+        filters.push(transposeMap[options.rotation]);
+      }
+    }
+
+    if (options.flipH) {
+      filters.push('hflip');
+    }
+
+    if (options.flipV) {
+      filters.push('vflip');
+    }
+
+    if (filters.length > 0) {
+      args.push('-vf', filters.join(','));
+    }
+
+    args.push('-c:a', 'copy');
+    args.push(outputPath);
+
+    return args;
+  }
+
+  buildVideoEditArgs(
+    inputPath: string,
+    outputPath: string,
+    options: {
+      startTime?: string;
+      endTime?: string;
+      rotation?: number;
+      flipH?: boolean;
+      flipV?: boolean;
+    } = {}
+  ): string[] {
+    const args: string[] = [];
+    const filters: string[] = [];
+
+    if (options.rotation) {
+      const transposeMap: Record<number, string> = {
+        90: 'transpose=1',
+        180: 'transpose=1,transpose=1',
+        270: 'transpose=2',
+      };
+      if (transposeMap[options.rotation]) {
+        filters.push(transposeMap[options.rotation]);
+      }
+    }
+
+    if (options.flipH) {
+      filters.push('hflip');
+    }
+
+    if (options.flipV) {
+      filters.push('vflip');
+    }
+
+    if (options.startTime) {
+      args.push('-ss', options.startTime);
+    }
+
+    args.push('-i', inputPath);
+
+    if (options.endTime) {
+      args.push('-to', options.endTime);
+    }
+
+    if (filters.length > 0) {
+      args.push('-vf', filters.join(','));
+      args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23');
+      args.push('-c:a', 'copy');
+    } else {
+      args.push('-c', 'copy');
+    }
+    
+    args.push(outputPath);
+
+    return args;
+  }
+
+  buildVideoInverseCutArgs(
+    inputPath: string,
+    part1Path: string,
+    part2Path: string,
+    options: {
+      startTime?: string;
+      endTime?: string;
+      rotation?: number;
+      flipH?: boolean;
+      flipV?: boolean;
+    } = {}
+  ): { part1Args: string[]; part2Args: string[] } {
+    const filters: string[] = [];
+
+    if (options.rotation) {
+      const transposeMap: Record<number, string> = {
+        90: 'transpose=1',
+        180: 'transpose=1,transpose=1',
+        270: 'transpose=2',
+      };
+      if (transposeMap[options.rotation]) {
+        filters.push(transposeMap[options.rotation]);
+      }
+    }
+
+    if (options.flipH) {
+      filters.push('hflip');
+    }
+
+    if (options.flipV) {
+      filters.push('vflip');
+    }
+
+    const part1Args: string[] = ['-ss', '00:00:00', '-i', inputPath];
+    if (options.startTime) {
+      part1Args.push('-to', options.startTime);
+    }
+    if (filters.length > 0) {
+      part1Args.push('-vf', filters.join(','));
+      part1Args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'copy');
+    } else {
+      part1Args.push('-c', 'copy');
+    }
+    part1Args.push(part1Path);
+
+    const part2Args: string[] = [];
+    if (options.endTime) {
+      part2Args.push('-ss', options.endTime);
+    }
+    part2Args.push('-i', inputPath);
+    if (filters.length > 0) {
+      part2Args.push('-vf', filters.join(','));
+      part2Args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'copy');
+    } else {
+      part2Args.push('-c', 'copy');
+    }
+    part2Args.push(part2Path);
+
+    return { part1Args, part2Args };
+  }
+
+  buildVideoMergeArgs(
+    inputPaths: string[],
+    outputPath: string,
+    concatListPath: string
+  ): string[] {
+    const args: string[] = ['-f', 'concat', '-safe', '0'];
+    
+    args.push('-i', concatListPath);
+    args.push('-c', 'copy');
+    args.push(outputPath);
+
+    return args;
+  }
+
+  getVideoMergeFileList(inputPaths: string[]): string {
+    return inputPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
+  }
+
+  async executeVideoMerge(
+    inputPaths: string[],
+    outputPath: string,
+    taskId?: string
+  ): Promise<ExecuteResult> {
+    if (!this.isElectronEnv) {
+      return { success: false, error: '请在 Electron 应用中使用此功能（运行 npm run electron:dev）' };
+    }
+    
+    const config = ffmpegConfigStorage.getConfig();
+    
+    if (!config.ffmpegPath) {
+      return { success: false, error: 'FFmpeg 路径未配置，请在配置中设置 FFmpeg bin 目录' };
+    }
+
+    if (!config.isValid) {
+      return { success: false, error: 'FFmpeg 配置无效，请检测配置' };
+    }
+
+    if (window.electronAPI?.ffmpeg) {
+      const fileListContent = this.getVideoMergeFileList(inputPaths);
+      
+      return window.electronAPI.ffmpeg.executeMerge({
+        ffmpegPath: config.ffmpegPath,
+        outputPath: config.outputPath,
+        fileListContent,
+        outputFilePath: outputPath,
+        taskId,
+      });
+    }
+
+    return { success: false, error: 'Electron API 不可用' };
+  }
+
   destroy() {
     if (this.unsubscribeProgress) {
       this.unsubscribeProgress();

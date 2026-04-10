@@ -473,8 +473,8 @@ export function IcoConverter() {
   const scale = image ? displayWidth / image.width : 1;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
+    <div className="h-full flex flex-col space-y-4">
+      <div className="flex items-center gap-2 flex-shrink-0">
         <ImageIcon className="w-5 h-5" style={{ color: 'var(--success-color)' }} />
         <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>ICO 图标转换</h2>
         <span
@@ -490,8 +490,8 @@ export function IcoConverter() {
         )}
       </div>
 
-      <div className="grid grid-cols-12 gap-4">
-        <div className="col-span-4 space-y-4">
+      <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
+        <div className="col-span-4 space-y-4 overflow-y-auto pr-2" style={{ scrollbarGutter: 'stable' }}>
           <div
             className="rounded-xl p-4"
             style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
@@ -631,7 +631,7 @@ export function IcoConverter() {
           </div>
         </div>
 
-        <div className="col-span-8 space-y-4">
+        <div className="col-span-8 space-y-4 overflow-y-auto pr-2" style={{ scrollbarGutter: 'stable' }}>
           <div
             className="rounded-xl p-4"
             style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
