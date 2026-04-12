@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { FileType, Music, Terminal as TerminalIcon, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon, FileImage, FolderSync, Minimize2, Maximize2, Film } from 'lucide-react';
+import { useState } from 'react';
+import { FileType, Music, Terminal as TerminalIcon, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon, FileImage, FolderSync, Minimize2, Film, ChevronsUp } from 'lucide-react';
 import { ProgressBar } from '@/components/ffmpeg';
 import { FormatConvert } from './FormatConvert';
 import { AudioProcess } from './AudioProcess';
@@ -87,6 +87,11 @@ function TaskItem({
       audioProcess: '音频处理',
       advancedTools: '高级工具',
       commandBuilder: '命令构建',
+      icoConvert: 'ICO转换',
+      imageFormatConvert: '图片格式转换',
+      folderProcess: '文件夹处理',
+      videoProcess: '视频处理',
+      videoEdit: '视频编辑',
     };
     return labels[type] || type;
   };
@@ -338,41 +343,62 @@ export function MediaToolsPage() {
         </div>
       </div>
 
-      <AnimatePresence mode="wait">
+      <AnimatePresence>
         {!showBottomNav ? (
-          <motion.button
-            key="expand"
-            initial={{ opacity: 0, x: 50 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 50 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-            onClick={() => setShowBottomNav(true)}
-            className="absolute bottom-6 right-6 w-12 h-12 rounded-2xl flex items-center justify-center z-20 group"
-            style={{
-              background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
-              boxShadow: '0 10px 40px rgba(15, 23, 42, 0.3)',
-            }}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.95 }}
-          >
-            <Maximize2 className="w-5 h-5 text-white transition-transform group-hover:rotate-180 duration-300" />
-          </motion.button>
+          <>
+            <motion.div
+              key="collapsed-center"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="absolute bottom-0 left-0 right-0 z-20 flex justify-center pointer-events-none"
+            >
+              <button
+                onClick={() => setShowBottomNav(true)}
+                className="flex items-center justify-center gap-2 px-6 py-1 rounded-t-lg transition-all duration-200 group cursor-pointer pointer-events-auto"
+                style={{
+                  backgroundColor: 'var(--bg-secondary)',
+                  borderTop: '1px solid var(--border-color)',
+                  borderLeft: '1px solid var(--border-color)',
+                  borderRight: '1px solid var(--border-color)',
+                }}
+              >
+                <ChevronsUp className="w-3.5 h-3.5 transition-transform duration-200 group-hover:-translate-y-0.5" style={{ color: 'var(--text-tertiary)' }} />
+                <span className="text-[10px] font-medium" style={{ color: 'var(--text-tertiary)' }}>展开</span>
+              </button>
+            </motion.div>
+            <motion.button
+              key="collapsed-right"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setShowBottomNav(true)}
+              className="absolute bottom-2 right-6 z-20 p-2 rounded-lg transition-all duration-200 group cursor-pointer"
+              style={{
+                backgroundColor: 'var(--bg-secondary)',
+                border: '1px solid var(--border-color)',
+              }}
+              title="展开工具栏"
+            >
+              <ChevronsUp className="w-4 h-4 transition-transform duration-200 group-hover:-translate-y-0.5" style={{ color: 'var(--text-tertiary)' }} />
+            </motion.button>
+          </>
         ) : (
           <motion.div
-            key="toolbar"
-            initial={{ opacity: 0, x: '100%' }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: '100%' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="absolute bottom-6 left-6 right-6 z-20"
+            key="expanded"
+            initial={{ opacity: 0, transform: 'translateY(100%)' }}
+            animate={{ opacity: 1, transform: 'translateY(0)' }}
+            exit={{ opacity: 0, transform: 'translateY(100%)' }}
+            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            className="absolute bottom-0 left-0 right-0 z-20"
           >
             <div 
-              className="rounded-2xl px-4 py-2"
+              className="px-4 py-2"
               style={{ 
                 backgroundColor: 'var(--bg-secondary)',
-                backdropFilter: 'blur(30px) saturate(180%)',
-                border: '1px solid var(--border-color)',
-                boxShadow: 'var(--shadow-lg)',
+                borderTop: '1px solid var(--border-color)',
               }}
             >
               <div className="flex items-center justify-between gap-2">
@@ -381,12 +407,12 @@ export function MediaToolsPage() {
                     <motion.button
                       key={tab.key}
                       onClick={() => setActiveTab(tab.key)}
-                      className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-300 group"
+                      className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors duration-200"
                       style={{
                         color: activeTab === tab.key ? 'white' : 'var(--text-tertiary)',
                       }}
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
                     >
                       {activeTab === tab.key && (
                         <motion.div
@@ -394,13 +420,12 @@ export function MediaToolsPage() {
                           className="absolute inset-0 rounded-xl"
                           style={{
                             background: 'linear-gradient(135deg, #0f172a 0%, #334155 100%)',
-                            boxShadow: '0 4px 15px rgba(15, 23, 42, 0.4)',
                           }}
-                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                         />
                       )}
                       <span className="relative z-10 flex items-center gap-1.5">
-                        <span className="transition-transform group-hover:scale-110">{tab.icon}</span>
+                        <span>{tab.icon}</span>
                         <span className="text-[11px] font-medium whitespace-nowrap">{tab.label}</span>
                       </span>
                     </motion.button>
@@ -414,12 +439,12 @@ export function MediaToolsPage() {
                     <motion.button
                       key={tab.key}
                       onClick={() => setActiveTab(tab.key)}
-                      className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-300 group"
+                      className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors duration-200"
                       style={{
                         color: activeTab === tab.key ? 'white' : 'var(--text-tertiary)',
                       }}
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.97 }}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
                     >
                       {activeTab === tab.key && (
                         <motion.div
@@ -427,13 +452,12 @@ export function MediaToolsPage() {
                           className="absolute inset-0 rounded-xl"
                           style={{
                             background: 'linear-gradient(135deg, #0891b2 0%, #06b6d4 100%)',
-                            boxShadow: '0 2px 8px rgba(6, 182, 212, 0.15)',
                           }}
-                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
                         />
                       )}
                       <span className="relative z-10 flex items-center gap-1.5">
-                        <span className="transition-transform group-hover:scale-110">{tab.icon}</span>
+                        <span>{tab.icon}</span>
                         <span className="text-[11px] font-medium whitespace-nowrap">{tab.label}</span>
                       </span>
                     </motion.button>
@@ -448,10 +472,10 @@ export function MediaToolsPage() {
                       setShowFFmpegConfig(true);
                       setShowTaskList(false);
                     }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-300"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors duration-200"
                     style={{ color: 'var(--text-tertiary)' }}
-                    whileHover={{ scale: 1.03, color: 'var(--text-primary)' }}
-                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     <Cog className="w-3.5 h-3.5" />
                     <span className="text-[11px] font-medium">配置</span>
@@ -462,25 +486,22 @@ export function MediaToolsPage() {
                       setShowTaskList(!showTaskList);
                       setShowFFmpegConfig(false);
                     }}
-                    className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-all duration-300"
+                    className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors duration-200"
                     style={{ color: showTaskList ? 'var(--primary-color)' : 'var(--text-tertiary)' }}
-                    whileHover={{ scale: 1.03, color: showTaskList ? 'var(--primary-color)' : 'var(--text-primary)' }}
-                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     <ListTodo className="w-3.5 h-3.5" />
                     <span className="text-[11px] font-medium">任务</span>
                     {activeTaskIds.size > 0 && (
-                      <motion.span
-                        initial={{ scale: 0 }}
-                        animate={{ scale: 1 }}
+                      <span
                         className="absolute -top-0.5 -right-0.5 flex items-center justify-center min-w-[14px] h-[14px] px-0.5 rounded-full text-[9px] font-bold text-white"
                         style={{ 
                           background: 'linear-gradient(135deg, var(--error-color) 0%, #ec4899 100%)',
-                          boxShadow: '0 2px 8px rgba(239, 68, 68, 0.3)',
                         }}
                       >
                         {activeTaskIds.size}
-                      </motion.span>
+                      </span>
                     )}
                   </motion.button>
                   
@@ -488,12 +509,13 @@ export function MediaToolsPage() {
                   
                   <motion.button
                     onClick={() => setShowBottomNav(false)}
-                    className="w-8 h-8 rounded-xl flex items-center justify-center transition-all duration-300 ml-1"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors duration-200"
                     style={{ color: 'var(--text-tertiary)' }}
-                    whileHover={{ scale: 1.1, color: 'var(--text-primary)' }}
-                    whileTap={{ scale: 0.9 }}
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
                   >
                     <Minimize2 className="w-3.5 h-3.5" />
+                    <span className="text-[11px] font-medium">收起</span>
                   </motion.button>
                 </div>
               </div>
@@ -515,14 +537,14 @@ export function MediaToolsPage() {
               onClick={() => setShowTaskList(false)}
             />
             <motion.div
-              initial={{ opacity: 0, x: 300 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 300 }}
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
-              className="absolute right-6 top-20 bottom-20 w-[300px] z-20"
+              className="absolute top-4 left-1/2 -translate-x-1/2 w-[400px] z-20"
             >
               <div
-                className="h-full rounded-xl p-4 flex flex-col shadow-2xl"
+                className="rounded-xl p-4 flex flex-col max-h-[60vh]"
                 style={{
                   backgroundColor: 'var(--bg-secondary)',
                   border: '1px solid var(--border-color)',
@@ -534,19 +556,28 @@ export function MediaToolsPage() {
                   <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>
                     任务列表 ({tasks.length})
                   </h3>
-                  {completedTasks.length > 0 && (
+                  <div className="flex items-center gap-2">
+                    {completedTasks.length > 0 && (
+                      <button
+                        onClick={clearCompletedTasks}
+                        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-all duration-200 hover:scale-105"
+                        style={{ color: 'var(--text-tertiary)' }}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        清理已完成
+                      </button>
+                    )}
                     <button
-                      onClick={clearCompletedTasks}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-all duration-200 hover:scale-105"
+                      onClick={() => setShowTaskList(false)}
+                      className="p-1 rounded-md transition-all duration-200 hover:scale-105"
                       style={{ color: 'var(--text-tertiary)' }}
                     >
-                      <Trash2 className="w-3 h-3" />
-                      清理已完成
+                      <X className="w-4 h-4" />
                     </button>
-                  )}
+                  </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-2" style={{ scrollbarGutter: 'stable', paddingRight: '8px' }}>
+                <div className="flex-1 overflow-y-auto space-y-3 min-h-0" style={{ scrollbarGutter: 'stable', paddingRight: '8px' }}>
                   {tasks.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8">
                       <ListTodo className="w-10 h-10 mb-2" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }} />
@@ -555,8 +586,8 @@ export function MediaToolsPage() {
                   ) : (
                     <>
                       {activeTasks.length > 0 && (
-                        <div className="mb-2">
-                          <div className="text-[10px] font-medium mb-2" style={{ color: 'var(--primary-color)' }}>
+                        <div className="mb-3">
+                          <div className="text-[10px] font-medium mb-3" style={{ color: 'var(--primary-color)' }}>
                             进行中 ({activeTasks.length})
                           </div>
                           {activeTasks.map((task) => (
@@ -575,7 +606,7 @@ export function MediaToolsPage() {
                       
                       {completedTasks.length > 0 && (
                         <div>
-                          <div className="text-[10px] font-medium mb-2" style={{ color: 'var(--text-tertiary)' }}>
+                          <div className="text-[10px] font-medium mb-3" style={{ color: 'var(--text-tertiary)' }}>
                             已完成 ({completedTasks.length})
                           </div>
                           {completedTasks.map((task) => (

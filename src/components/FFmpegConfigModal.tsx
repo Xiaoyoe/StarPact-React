@@ -154,18 +154,18 @@ export function FFmpegConfigModal({ isOpen, onClose }: FFmpegConfigModalProps) {
             onClick={onClose}
           />
           <motion.div
-            initial={{ opacity: 0, x: 400 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 400 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="fixed right-0 top-0 bottom-0 w-[400px] z-50"
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.25, ease: [0.4, 0, 0.2, 1] }}
+            className="fixed top-4 left-1/2 -translate-x-1/2 w-[400px] z-50"
             onClick={(e) => e.stopPropagation()}
           >
             <div
-              className="h-full flex flex-col shadow-2xl overflow-hidden"
+              className="flex flex-col shadow-2xl overflow-hidden rounded-xl max-h-[80vh]"
               style={{ 
                 backgroundColor: 'var(--bg-primary)',
-                borderLeft: '1px solid var(--border-color)',
+                border: '1px solid var(--border-color)',
               }}
             >
               <div 

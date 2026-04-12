@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { 
-  Scissors, RotateCw, Combine, 
+  Scissors, RotateCw, RotateCcw, Combine, 
   Upload, Sparkles, Info, 
   Play, AlertCircle, Square, FileType, X, Maximize2, Film,
-  Video, MonitorPlay, Music, Loader2, PanelLeftClose, PanelLeft, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Copy, Check, Terminal as TerminalIcon, SkipBack, SkipForward, SwitchCamera
+  Video, MonitorPlay, Music, Loader2, PanelLeftClose, PanelLeft, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Copy, Check, Terminal as TerminalIcon, SkipBack, SkipForward, SwitchCamera, Rewind, FastForward
 } from 'lucide-react';
-import { FormRow, Toggle, ProgressBar, Terminal, Badge } from '@/components/ffmpeg';
+import { Toggle, Badge } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ffmpegRendererService } from '@/services/ffmpeg/FFmpegRendererService';
 import { useFFmpegStore } from '@/stores/ffmpegStore';
@@ -160,6 +160,48 @@ export function VideoEdit() {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const calculateClipDuration = (): string => {
+    const startSeconds = parseTimeToSeconds(startTime);
+    const endSeconds = endTime ? parseTimeToSeconds(endTime) : (currentVideo?.duration || 0);
+    const totalDuration = currentVideo?.duration || 0;
+    
+    if (endSeconds <= startSeconds) {
+      return '00:00:00';
+    }
+    
+    if (isInverseMode) {
+      const remainingDuration = startSeconds + (totalDuration - endSeconds);
+      return secondsToTime(Math.max(0, remainingDuration));
+    } else {
+      const duration = endSeconds - startSeconds;
+      return secondsToTime(duration);
+    }
+  };
+
+  const jumpToStartFrame = async () => {
+    if (!currentVideo) return;
+    const startSeconds = parseTimeToSeconds(startTime);
+    setCurrentTime(startSeconds);
+    currentTimeRef.current = startSeconds;
+    
+    setIsLoadingFrame(true);
+    const frame = await getVideoFrame(currentVideo.path, startSeconds);
+    if (frame) setCurrentFrame(frame);
+    setIsLoadingFrame(false);
+  };
+
+  const jumpToEndFrame = async () => {
+    if (!currentVideo) return;
+    const endSeconds = endTime ? parseTimeToSeconds(endTime) : currentVideo.duration;
+    setCurrentTime(endSeconds);
+    currentTimeRef.current = endSeconds;
+    
+    setIsLoadingFrame(true);
+    const frame = await getVideoFrame(currentVideo.path, endSeconds);
+    if (frame) setCurrentFrame(frame);
+    setIsLoadingFrame(false);
+  };
+
   const formatTimeInput = (input: string): string => {
     const cleaned = input.replace(/[^\d:]/g, '');
     const parts = cleaned.split(':');
@@ -201,58 +243,44 @@ export function VideoEdit() {
     }
   };
 
-  const generateFFmpegCommand = (): string => {
-    if (!currentVideo) return '';
-    
-    const inputPath = currentVideo.path;
-    const outputFileName = customFileName.trim() || `${currentVideo.name.split('.')[0]}_edited.mp4`;
-    
+  const buildFiltersStr = (): string => {
     const filters: string[] = [];
-    
     if (rotation) {
       const transposeMap: Record<number, string> = {
         90: 'transpose=1',
         180: 'transpose=1,transpose=1',
         270: 'transpose=2',
       };
-      if (transposeMap[rotation]) {
-        filters.push(transposeMap[rotation]);
-      }
+      if (transposeMap[rotation]) filters.push(transposeMap[rotation]);
     }
+    if (flipH) filters.push('hflip');
+    if (flipV) filters.push('vflip');
+    return filters.join(',');
+  };
+
+  const generateFFmpegCommand = (): string => {
+    if (!currentVideo) return '';
     
-    if (flipH) {
-      filters.push('hflip');
-    }
+    const inputPath = currentVideo.path;
+    const outputFileName = customFileName.trim() || `${currentVideo.name.split('.')[0]}_edited.mp4`;
+    const startSec = parseTimeToSeconds(startTime);
+    const endSec = endTime ? parseTimeToSeconds(endTime) : 0;
+    const filters = buildFiltersStr();
     
-    if (flipV) {
-      filters.push('vflip');
-    }
-    
-    const startSeconds = parseTimeToSeconds(startTime);
-    const endSeconds = parseTimeToSeconds(endTime);
-    
-    if (isInverseMode && startSeconds > 0 && endSeconds > 0) {
+    if (isInverseMode && startSec > 0 && endSec > 0 && startSec < endSec) {
       const part1Output = outputFileName.replace('.mp4', '_part1.mp4');
       const part2Output = outputFileName.replace('.mp4', '_part2.mp4');
       const listFile = outputFileName.replace('.mp4', '_list.txt');
       
       let cmd = '# 反选模式：删除选中区域\n';
       cmd += '# 第一步：提取开头部分\n';
-      cmd += `ffmpeg -ss 00:00:00 -i "${inputPath}" -to ${startTime}`;
-      if (filters.length > 0) {
-        cmd += ` -vf "${filters.join(',')}" -c:v libx264 -preset fast -crf 23 -c:a copy`;
-      } else {
-        cmd += ' -c copy';
-      }
+      cmd += `ffmpeg -i "${inputPath}" -t ${startSec}`;
+      cmd += filters ? ` -vf "${filters}" -c:v libx264 -preset fast -crf 23 -c:a copy` : ' -c copy';
       cmd += ` "${part1Output}"\n\n`;
       
       cmd += '# 第二步：提取结尾部分\n';
-      cmd += `ffmpeg -ss ${endTime} -i "${inputPath}"`;
-      if (filters.length > 0) {
-        cmd += ` -vf "${filters.join(',')}" -c:v libx264 -preset fast -crf 23 -c:a copy`;
-      } else {
-        cmd += ' -c copy';
-      }
+      cmd += `ffmpeg -ss ${endSec} -i "${inputPath}"`;
+      cmd += filters ? ` -vf "${filters}" -c:v libx264 -preset fast -crf 23 -c:a copy` : ' -c copy';
       cmd += ` "${part2Output}"\n\n`;
       
       cmd += '# 第三步：创建合并列表\n';
@@ -267,19 +295,20 @@ export function VideoEdit() {
     
     let cmd = 'ffmpeg';
     
-    if (startTime && startTime !== '00:00:00') {
-      cmd += ` -ss ${startTime}`;
+    if (startSec > 0) {
+      cmd += ` -ss ${startSec}`;
     }
     
     cmd += ` -i "${inputPath}"`;
     
-    if (endTime) {
-      cmd += ` -to ${endTime}`;
+    if (startSec > 0 && endSec > 0) {
+      cmd += ` -t ${endSec - startSec}`;
+    } else if (endSec > 0) {
+      cmd += ` -to ${endSec}`;
     }
     
-    if (filters.length > 0) {
-      cmd += ` -vf "${filters.join(',')}"`;
-      cmd += ' -c:v libx264 -preset fast -crf 23 -c:a copy';
+    if (filters) {
+      cmd += ` -vf "${filters}" -c:v libx264 -preset fast -crf 23 -c:a copy`;
     } else {
       cmd += ' -c copy';
     }
@@ -503,7 +532,7 @@ export function VideoEdit() {
     setCustomFileName('');
   };
 
-  const getOutputFilePath = (video: VideoFileInfo, extension: string, suffix?: string): string => {
+  const getOutputFilePath = (video: VideoFileInfo, extension: string, suffix?: string, customName?: string): string => {
     const inputPath = video.path;
     const lastSepIndex = Math.max(inputPath.lastIndexOf('/'), inputPath.lastIndexOf('\\'));
     const inputDir = lastSepIndex >= 0 ? inputPath.substring(0, lastSepIndex) : '';
@@ -516,11 +545,197 @@ export function VideoEdit() {
     const now = new Date();
     const dateTimeSuffix = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
     
-    const finalName = customFileName && customFileName.trim() 
-      ? customFileName.trim() 
+    const finalName = customName && customName.trim() 
+      ? customName.trim() 
       : `${inputName}${suffix ? `_${suffix}` : ''}_${dateTimeSuffix}`;
     
     return outputDir ? `${outputDir}${sep}${finalName}.${extension}` : `${finalName}.${extension}`;
+  };
+
+  const executeNormalEdit = async (startSec: number, endSec: number) => {
+    const outputFilePath = generateUniquePath(getOutputFilePath(currentVideo!, 'mp4', 'edited', customFileName));
+    
+    const args = ffmpegRendererService.buildVideoEditArgs(currentVideo!.path, outputFilePath, {
+      startTime: startSec > 0 ? startSec : undefined,
+      endTime: endSec > 0 ? endSec : undefined,
+      rotation,
+      flipH,
+      flipV,
+    });
+
+    const taskId = startTask('videoEdit', currentVideo!.name, currentVideo!.path, outputFilePath);
+    addTaskLog(taskId, `[info] FFmpeg Studio - 视频编辑`);
+    addTaskLog(taskId, `[info] 模式: 正选剪辑${rotation || flipH || flipV ? ' + 旋转/翻转' : ''}`);
+    if (startSec > 0) addTaskLog(taskId, `[info] 起始时间: ${secondsToTime(startSec)} (${startSec}秒)`);
+    if (endSec > 0) addTaskLog(taskId, `[info] 结束时间: ${secondsToTime(endSec)} (${endSec}秒)`);
+    addTaskLog(taskId, `[info] FFmpeg 命令: ffmpeg ${args.join(' ')}`);
+
+    try {
+      const duration = endSec > 0 && startSec > 0
+        ? endSec - startSec
+        : endSec > 0
+          ? endSec
+          : startSec > 0
+            ? currentVideo!.duration - startSec
+            : currentVideo!.duration;
+      const result = await ffmpegRendererService.executeWithProgress(args, duration, taskId);
+      completeTask(taskId, result.success, result.error);
+      if (result.success) {
+        toast.success('处理完成！');
+      } else {
+        toast.error('处理失败');
+      }
+    } catch (error) {
+      completeTask(taskId, false, error instanceof Error ? error.message : '未知错误');
+      toast.error('处理失败');
+    }
+  };
+
+  const executeInverseCut = async (startSec: number, endSec: number) => {
+    const outputFilePath = generateUniquePath(getOutputFilePath(currentVideo!, 'mp4', 'inversed', customFileName));
+    
+    const isWindows = outputFilePath.includes('\\');
+    const separator = isWindows ? '\\' : '/';
+    const lastSepIndex = Math.max(outputFilePath.lastIndexOf('/'), outputFilePath.lastIndexOf('\\'));
+    const outputDir = lastSepIndex > 0 ? outputFilePath.substring(0, lastSepIndex) : '';
+    const tempFolder = `${outputDir}${separator}.temp_parts`;
+    
+    const baseName = outputFilePath.substring(lastSepIndex + 1).replace('.mp4', '') || 'output';
+    const part1Path = `${tempFolder}${separator}${baseName}_part1.mp4`;
+    const part2Path = `${tempFolder}${separator}${baseName}_part2.mp4`;
+
+    const taskId = startTask('videoEdit', currentVideo!.name, currentVideo!.path, outputFilePath);
+    addTaskLog(taskId, `[info] FFmpeg Studio - 视频编辑`);
+    addTaskLog(taskId, `[info] 模式: 反选剪辑（删除选中区域）`);
+    addTaskLog(taskId, `[info] 起始时间: ${secondsToTime(startSec)} (${startSec}秒)`);
+    addTaskLog(taskId, `[info] 结束时间: ${secondsToTime(endSec)} (${endSec}秒)`);
+    addTaskLog(taskId, `[info] 临时文件目录: ${tempFolder}`);
+
+    if (window.electronAPI?.file?.createFolder) {
+      const folderResult = await window.electronAPI.file.createFolder(tempFolder);
+      if (!folderResult.success) {
+        addTaskLog(taskId, `[error] 创建临时文件夹失败: ${folderResult.error}`);
+        completeTask(taskId, false, '创建临时文件夹失败');
+        toast.error('创建临时文件夹失败');
+        return;
+      }
+      addTaskLog(taskId, `[info] 临时文件夹创建成功`);
+    } else {
+      addTaskLog(taskId, `[warn] 文件操作API不可用，尝试继续执行`);
+    }
+
+    const filesToMerge: string[] = [];
+
+    try {
+      const part1Args = ffmpegRendererService.buildInverseCutPart1Args(
+        currentVideo!.path, part1Path, startSec, rotation, flipH, flipV
+      );
+
+      if (part1Args) {
+        addTaskLog(taskId, `[info] 第一步：提取开头部分 (00:00:00 -> ${secondsToTime(startSec)})`);
+        addTaskLog(taskId, `[info] FFmpeg 命令: ffmpeg ${part1Args.join(' ')}`);
+        const result = await ffmpegRendererService.executeWithProgress(part1Args, startSec, taskId);
+
+        if (!result.success) {
+          addTaskLog(taskId, `[error] 提取开头部分失败: ${result.error || '未知错误'}`);
+          completeTask(taskId, false, '提取开头部分失败');
+          toast.error('处理失败');
+          return;
+        }
+        addTaskLog(taskId, `[info] 开头部分提取成功`);
+        filesToMerge.push(part1Path);
+      } else {
+        addTaskLog(taskId, `[info] 跳过开头部分（起始时间为0）`);
+      }
+
+      const part2Args = ffmpegRendererService.buildInverseCutPart2Args(
+        currentVideo!.path, part2Path, endSec, rotation, flipH, flipV
+      );
+
+      if (part2Args) {
+        addTaskLog(taskId, `[info] 第二步：提取结尾部分 (${secondsToTime(endSec)} -> 结尾)`);
+        addTaskLog(taskId, `[info] FFmpeg 命令: ffmpeg ${part2Args.join(' ')}`);
+        const result = await ffmpegRendererService.executeWithProgress(part2Args, currentVideo!.duration - endSec, taskId);
+
+        if (!result.success) {
+          addTaskLog(taskId, `[error] 提取结尾部分失败: ${result.error || '未知错误'}`);
+          completeTask(taskId, false, '提取结尾部分失败');
+          toast.error('处理失败');
+          return;
+        }
+        addTaskLog(taskId, `[info] 结尾部分提取成功`);
+        filesToMerge.push(part2Path);
+      } else {
+        addTaskLog(taskId, `[info] 跳过结尾部分`);
+      }
+
+      if (filesToMerge.length === 0) {
+        completeTask(taskId, false, '没有有效的视频片段');
+        toast.error('处理失败');
+        return;
+      }
+
+      if (filesToMerge.length === 1) {
+        addTaskLog(taskId, `[info] 只有一个片段，直接移动到输出位置`);
+        if (window.electronAPI?.file?.renameFile) {
+          const renameResult = await window.electronAPI.file.renameFile(filesToMerge[0], outputFilePath);
+          if (renameResult.success) {
+            completeTask(taskId, true);
+            toast.success('处理完成！');
+          } else {
+            completeTask(taskId, false, renameResult.error || '移动文件失败');
+            toast.error('处理失败');
+          }
+        } else {
+          completeTask(taskId, false, '文件操作API不可用');
+          toast.error('处理失败');
+        }
+        return;
+      }
+
+      addTaskLog(taskId, `[info] 第三步：合并 ${filesToMerge.length} 个部分`);
+      const mergeResult = await ffmpegRendererService.executeVideoMerge(filesToMerge, outputFilePath, taskId);
+      completeTask(taskId, mergeResult.success, mergeResult.error);
+      if (mergeResult.success) {
+        addTaskLog(taskId, `[info] 临时文件已保存到: ${tempFolder}`);
+        toast.success('处理完成！');
+      } else {
+        toast.error('处理失败');
+      }
+    } catch (error) {
+      completeTask(taskId, false, error instanceof Error ? error.message : '未知错误');
+      toast.error('处理失败');
+    }
+  };
+
+  const executeVideoMergeFlow = async () => {
+    if (videos.length < 2) {
+      toast.error('合并功能需要至少选择2个视频文件');
+      return;
+    }
+    
+    const outputFilePath = generateUniquePath(getOutputFilePath(currentVideo!, 'mp4', 'merged', customFileName));
+    
+    const taskId = startTask('videoEdit', currentVideo!.name, currentVideo!.path, outputFilePath);
+    addTaskLog(taskId, `[info] FFmpeg Studio - 视频合并`);
+    addTaskLog(taskId, `[info] 合并 ${videos.length} 个视频文件`);
+
+    try {
+      const result = await ffmpegRendererService.executeVideoMerge(
+        videos.map(v => v.path),
+        outputFilePath,
+        taskId
+      );
+      completeTask(taskId, result.success, result.error);
+      if (result.success) {
+        toast.success('处理完成！');
+      } else {
+        toast.error('处理失败');
+      }
+    } catch (error) {
+      completeTask(taskId, false, error instanceof Error ? error.message : '未知错误');
+      toast.error('处理失败');
+    }
   };
 
   const handleStart = async () => {
@@ -539,134 +754,19 @@ export function VideoEdit() {
       return;
     }
 
-    let outputFilePath: string;
-    let args: string[] = [];
-    let suffix = '';
+    const startSec = parseTimeToSeconds(startTime);
+    const endSec = endTime ? parseTimeToSeconds(endTime) : 0;
 
-    const startSeconds = parseTimeToSeconds(startTime);
-    const endSeconds = parseTimeToSeconds(endTime);
-
-    if (tab === 'edit' && isInverseMode && startSeconds > 0 && endSeconds > 0) {
-      suffix = 'inversed';
-      outputFilePath = generateUniquePath(getOutputFilePath(currentVideo, 'mp4', suffix, customFileName));
-      
-      const part1Path = outputFilePath.replace('.mp4', '_part1.mp4');
-      const part2Path = outputFilePath.replace('.mp4', '_part2.mp4');
-      
-      const { part1Args, part2Args } = ffmpegRendererService.buildVideoInverseCutArgs(
-        currentVideo.path,
-        part1Path,
-        part2Path,
-        {
-          startTime,
-          endTime,
-          rotation,
-          flipH,
-          flipV,
-        }
-      );
-
-      const taskId = startTask('videoEdit', currentVideo.name, currentVideo.path, outputFilePath);
-      addTaskLog(taskId, `[info] FFmpeg Studio - 视频处理模块`);
-      addTaskLog(taskId, `[info] 模式: 反选剪辑（删除选中区域）`);
-
-      try {
-        addTaskLog(taskId, `[info] 第一步：提取开头部分 (00:00:00 -> ${startTime})`);
-        addTaskLog(taskId, `[info] FFmpeg 命令: ffmpeg ${part1Args.join(' ')}`);
-        let result = await ffmpegRendererService.executeWithProgress(part1Args, startSeconds, taskId);
-        
-        if (!result.success) {
-          completeTask(taskId, false, '提取开头部分失败');
-          toast.error('处理失败');
-          return;
-        }
-
-        addTaskLog(taskId, `[info] 第二步：提取结尾部分 (${endTime} -> 结尾)`);
-        addTaskLog(taskId, `[info] FFmpeg 命令: ffmpeg ${part2Args.join(' ')}`);
-        result = await ffmpegRendererService.executeWithProgress(part2Args, currentVideo.duration - endSeconds, taskId);
-        
-        if (!result.success) {
-          completeTask(taskId, false, '提取结尾部分失败');
-          toast.error('处理失败');
-          return;
-        }
-
-        addTaskLog(taskId, `[info] 第三步：合并两部分`);
-        result = await ffmpegRendererService.executeVideoMerge(
-          [part1Path, part2Path],
-          outputFilePath,
-          taskId
-        );
-
-        completeTask(taskId, result.success, result.error);
-        if (result.success) {
-          toast.success('处理完成！');
-        } else {
-          toast.error('处理失败');
-        }
-      } catch (error) {
-        completeTask(taskId, false, error instanceof Error ? error.message : '未知错误');
-        toast.error('处理失败');
-      }
-      return;
-    }
-
-    switch (tab) {
-      case 'edit':
-        suffix = 'edited';
-        outputFilePath = generateUniquePath(getOutputFilePath(currentVideo, 'mp4', suffix, customFileName));
-        args = ffmpegRendererService.buildVideoEditArgs(currentVideo.path, outputFilePath, {
-          startTime,
-          endTime: endTime || undefined,
-          rotation,
-          flipH,
-          flipV,
-        });
-        break;
-
-      case 'merge':
-        if (videos.length < 2) {
-          toast.error('合并功能需要至少选择2个视频文件');
-          return;
-        }
-        suffix = 'merged';
-        outputFilePath = generateUniquePath(getOutputFilePath(currentVideo, 'mp4', suffix, customFileName));
-        break;
-
-      default:
-        toast.error('该功能暂未实现');
-        return;
-    }
-
-    const taskId = startTask('videoEdit', currentVideo.name, currentVideo.path, outputFilePath);
-    addTaskLog(taskId, `[info] FFmpeg Studio - 视频处理模块`);
-    addTaskLog(taskId, `[info] 模式: ${tab === 'edit' ? '视频编辑' : '视频合并'}`);
-
-    try {
-      let result;
-      
-      if (tab === 'merge') {
-        addTaskLog(taskId, `[info] 合并 ${videos.length} 个视频文件`);
-        result = await ffmpegRendererService.executeVideoMerge(
-          videos.map(v => v.path),
-          outputFilePath,
-          taskId
-        );
+    if (tab === 'edit') {
+      if (isInverseMode && endSec > 0 && startSec < endSec) {
+        await executeInverseCut(startSec, endSec);
       } else {
-        addTaskLog(taskId, `[info] FFmpeg 命令: ffmpeg ${args.join(' ')}`);
-        const duration = currentVideo.duration;
-        result = await ffmpegRendererService.executeWithProgress(args, duration, taskId);
+        await executeNormalEdit(startSec, endSec);
       }
-
-      completeTask(taskId, result.success, result.error);
-      if (result.success) {
-        toast.success('处理完成！');
-      } else {
-        toast.error('处理失败');
-      }
-    } catch (error) {
-      completeTask(taskId, false, error instanceof Error ? error.message : '未知错误');
-      toast.error('处理失败');
+    } else if (tab === 'merge') {
+      await executeVideoMergeFlow();
+    } else {
+      toast.error('该功能暂未实现');
     }
   };
 
@@ -688,39 +788,60 @@ export function VideoEdit() {
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-3">
               <Scissors className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
-              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>视频编辑</span>
-            </div>
-            
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Scissors className="w-3 h-3" style={{ color: 'var(--primary-color)' }} />
-                <label className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>时间剪辑</label>
-                <span 
-                  className="text-[10px] px-1.5 py-0.5 rounded"
-                  style={{ 
-                    backgroundColor: isInverseMode ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)', 
-                    color: isInverseMode ? 'var(--error-color)' : 'var(--primary-color)' 
-                  }}
-                >
-                  {isInverseMode ? '反选模式' : '正选模式'}
-                </span>
-              </div>
-              <div 
-                className="p-2 rounded-lg text-[10px] mb-2"
+              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>时间剪辑</span>
+              <span 
+                className="text-[10px] px-1.5 py-0.5 rounded"
                 style={{ 
-                  backgroundColor: isInverseMode ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)', 
-                  color: 'var(--text-secondary)' 
+                  backgroundColor: isInverseMode ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.15)', 
+                  color: isInverseMode ? 'var(--error-color)' : 'var(--primary-color)' 
                 }}
               >
-                {isInverseMode 
-                  ? '反选：删除红色选中区域，保留其他部分' 
-                  : '正选：保留蓝色选中区域，删除其他部分'}
-              </div>
+                {isInverseMode ? '反选' : '正选'}
+              </span>
+              <span 
+                className="text-[10px] px-1.5 py-0.5 rounded-full"
+                style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: 'var(--primary-color)' }}
+              >
+                {calculateClipDuration()}
+              </span>
+              <button
+                onClick={() => {
+                  setStartTime('00:00:00');
+                  setEndTime('');
+                  setRotation(0);
+                  setFlipH(false);
+                  setFlipV(false);
+                  setIsInverseMode(false);
+                }}
+                className="ml-auto flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-all duration-200 hover:scale-105 hover:bg-[var(--bg-secondary)]"
+                style={{ 
+                  backgroundColor: 'var(--bg-tertiary)', 
+                  color: 'var(--text-tertiary)',
+                  border: '1px solid var(--border-color)'
+                }}
+                title="重置所有设置"
+              >
+                <RotateCcw className="w-3 h-3" />
+                重置
+              </button>
+            </div>
+            
+            <div 
+              className="p-2 rounded-lg text-[10px] mb-2"
+              style={{ 
+                backgroundColor: isInverseMode ? 'rgba(239, 68, 68, 0.1)' : 'rgba(59, 130, 246, 0.1)', 
+                color: 'var(--text-secondary)' 
+              }}
+            >
+              {isInverseMode 
+                ? '反选：删除红色选中区域，保留其他部分' 
+                : '正选：保留蓝色选中区域，删除其他部分'}
+            </div>
               <div className="flex items-center gap-2">
                 <div className="flex-1">
                   <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-tertiary)' }}>开始时间</label>
                   <input 
-                    className="w-full rounded-lg px-2 py-1.5 text-xs font-mono outline-none" 
+                    className="w-full rounded-lg px-2 py-1.5 text-xs font-mono outline-none transition-all duration-200 hover:border-[var(--primary-color)] focus:border-[var(--primary-color)]" 
                     style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} 
                     value={startTime} 
                     onChange={e => setStartTime(e.target.value)} 
@@ -736,7 +857,7 @@ export function VideoEdit() {
                 <div className="flex-1">
                   <label className="text-[10px] mb-1 block" style={{ color: 'var(--text-tertiary)' }}>结束时间</label>
                   <input 
-                    className="w-full rounded-lg px-2 py-1.5 text-xs font-mono outline-none" 
+                    className="w-full rounded-lg px-2 py-1.5 text-xs font-mono outline-none transition-all duration-200 hover:border-[var(--primary-color)] focus:border-[var(--primary-color)]" 
                     style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} 
                     value={endTime} 
                     onChange={e => handleEndTimeChange(e.target.value)} 
@@ -745,7 +866,6 @@ export function VideoEdit() {
                   />
                 </div>
               </div>
-            </div>
 
             <div className="h-px" style={{ backgroundColor: 'var(--border-color)' }} />
 
@@ -764,7 +884,7 @@ export function VideoEdit() {
                   <button
                     key={r.value}
                     onClick={() => setRotation(r.value)}
-                    className="py-1.5 rounded-lg text-xs transition-all"
+                    className="py-1.5 rounded-lg text-xs transition-all duration-200 hover:scale-[1.02]"
                     style={{
                       backgroundColor: rotation === r.value ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)',
                       color: rotation === r.value ? 'var(--primary-color)' : 'var(--text-secondary)',
@@ -887,7 +1007,7 @@ export function VideoEdit() {
         </div>
         <div className="flex items-center gap-2">
           <div
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all min-w-[120px]`}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all min-w-[120px] hover:scale-[1.02]`}
             style={{
               border: `2px dashed ${isDragOver ? 'var(--primary-color)' : 'var(--border-color)'}`,
               backgroundColor: isDragOver ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-secondary)',
@@ -925,7 +1045,7 @@ export function VideoEdit() {
               <button
                 key={t.key}
                 onClick={() => setTab(t.key)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200 hover:scale-105"
                 style={{
                   backgroundColor: tab === t.key ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
                   color: tab === t.key ? 'var(--primary-color)' : 'var(--text-secondary)',
@@ -937,8 +1057,37 @@ export function VideoEdit() {
             ))}
           </div>
           <button
+            onClick={isCurrentModuleProcessing ? handleStop : handleStart}
+            disabled={!isConfigured || !isElectronEnv || videos.length === 0}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold text-white disabled:opacity-50 transition-all duration-200 hover:scale-105 hover:shadow-lg"
+            style={{ 
+              background: isCurrentModuleProcessing 
+                ? 'linear-gradient(135deg, var(--error-color), #ef4444)' 
+                : 'linear-gradient(135deg, var(--primary-color), #2563eb)',
+              boxShadow: isCurrentModuleProcessing 
+                ? '0 2px 8px rgba(239, 68, 68, 0.3)' 
+                : '0 2px 8px rgba(59, 130, 246, 0.3)'
+            }}
+            title={isCurrentModuleProcessing ? '停止处理' : '开始处理'}
+          >
+            {isCurrentModuleProcessing ? (
+              <>
+                <Square className="w-3.5 h-3.5" />
+                <span>停止</span>
+                {currentModuleTask && (
+                  <span className="text-[10px] opacity-80">{Math.floor(currentModuleTask.progress)}%</span>
+                )}
+              </>
+            ) : (
+              <>
+                <Play className="w-3.5 h-3.5" />
+                <span>开始</span>
+              </>
+            )}
+          </button>
+          <button
             onClick={() => setTimelineVisible(!timelineVisible)}
-            className="p-2 rounded-lg transition-all"
+            className="p-2 rounded-lg transition-all duration-200 hover:scale-105"
             style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
             title={timelineVisible ? '隐藏进度操作栏' : '显示进度操作栏'}
           >
@@ -1109,6 +1258,65 @@ export function VideoEdit() {
                   </div>
                 </div>
               )}
+
+              <div 
+                className="rounded-xl p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+              >
+                <div className="flex items-center gap-2 mb-3">
+                  <Upload className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                  <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>导入视频</span>
+                </div>
+                <div
+                  onClick={() => {
+                    if (isLoading) return;
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.multiple = true;
+                    input.accept = 'video/*';
+                    input.onchange = (e) => {
+                      const files = Array.from((e.target as HTMLInputElement).files || []);
+                      handleFilesSelected(files);
+                    };
+                    input.click();
+                  }}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDragOver(false);
+                    const files = Array.from(e.dataTransfer.files);
+                    handleFilesSelected(files);
+                  }}
+                  className="w-full flex flex-col items-center justify-center gap-2 py-4 rounded-lg text-xs font-medium transition-all cursor-pointer"
+                  style={{ 
+                    backgroundColor: isDragOver ? 'rgba(59, 130, 246, 0.2)' : 'var(--bg-tertiary)', 
+                    border: `2px dashed ${isDragOver ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                  }}
+                >
+                  {isLoading ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" style={{ color: 'var(--primary-color)' }} />
+                      <span style={{ color: 'var(--text-secondary)' }}>导入中 {loadProgress}%...</span>
+                      {loadingName && <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>({loadingName})</span>}
+                    </>
+                  ) : isDragOver ? (
+                    <>
+                      <Upload className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
+                      <span style={{ color: 'var(--primary-color)' }}>松开导入视频</span>
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="w-5 h-5" style={{ color: 'var(--text-tertiary)' }} />
+                      <span style={{ color: 'var(--text-secondary)' }}>点击或拖拽视频文件</span>
+                    </>
+                  )}
+                </div>
+                <p className="text-[10px] mt-2 text-center" style={{ color: 'var(--text-tertiary)' }}>
+                  支持 mp4, mkv, avi, mov, webm 等格式
+                </p>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
@@ -1176,11 +1384,44 @@ export function VideoEdit() {
                         <div className="flex items-center gap-2">
                           <Scissors className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
                           <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>时间轴</span>
+                          <span 
+                            className="text-[10px] px-2 py-0.5 rounded-full"
+                            style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: 'var(--primary-color)' }}
+                          >
+                            剪辑时长: {calculateClipDuration()}
+                          </span>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
+                            onClick={jumpToStartFrame}
+                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 hover:scale-105"
+                            style={{ 
+                              backgroundColor: 'var(--bg-tertiary)', 
+                              color: 'var(--text-secondary)',
+                              border: '1px solid var(--border-color)'
+                            }}
+                            title="跳转到起始帧"
+                          >
+                            <Rewind className="w-3 h-3" />
+                            起始帧
+                          </button>
+                          <button
+                            onClick={jumpToEndFrame}
+                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 hover:scale-105"
+                            style={{ 
+                              backgroundColor: 'var(--bg-tertiary)', 
+                              color: 'var(--text-secondary)',
+                              border: '1px solid var(--border-color)'
+                            }}
+                            title="跳转到末尾帧"
+                          >
+                            <FastForward className="w-3 h-3" />
+                            末尾帧
+                          </button>
+                          <div className="w-px h-4" style={{ backgroundColor: 'var(--border-color)' }} />
+                          <button
                             onClick={() => setSelectMode('start')}
-                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all"
+                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 hover:scale-105"
                             style={{ 
                               backgroundColor: selectMode === 'start' ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)', 
                               color: selectMode === 'start' ? 'var(--primary-color)' : 'var(--text-secondary)',
@@ -1193,7 +1434,7 @@ export function VideoEdit() {
                           </button>
                           <button
                             onClick={() => setSelectMode('end')}
-                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all"
+                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 hover:scale-105"
                             style={{ 
                               backgroundColor: selectMode === 'end' ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)', 
                               color: selectMode === 'end' ? 'var(--primary-color)' : 'var(--text-secondary)',
@@ -1206,7 +1447,7 @@ export function VideoEdit() {
                           </button>
                           <button
                             onClick={() => setIsInverseMode(!isInverseMode)}
-                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all"
+                            className="flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-medium transition-all duration-200 hover:scale-105"
                             style={{ 
                               backgroundColor: isInverseMode ? 'rgba(239, 68, 68, 0.15)' : 'var(--bg-tertiary)', 
                               color: isInverseMode ? 'var(--error-color)' : 'var(--text-secondary)',
@@ -1367,7 +1608,7 @@ export function VideoEdit() {
                     transition={{ duration: 0.2 }}
                     className="overflow-hidden"
                   >
-                    <div className="px-4 pb-4 space-y-3">
+                    <div className="px-4 pb-1 space-y-3">
                       <div className="pt-1">
                         <div className="grid grid-cols-2 gap-2">
                           <div className="p-2 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
@@ -1458,44 +1699,6 @@ export function VideoEdit() {
             style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
           >
             {renderSettings()}
-          </div>
-
-          <div 
-            className="rounded-xl p-4"
-            style={{ 
-              backgroundColor: isCurrentModuleProcessing ? 'rgba(59, 130, 246, 0.1)' : 'var(--bg-secondary)', 
-              border: `1px solid ${isCurrentModuleProcessing ? 'var(--primary-color)' : 'var(--border-color)'}`,
-              transition: 'all 0.3s ease'
-            }}
-          >
-            <div className="flex flex-col gap-3">
-              <button 
-                onClick={isCurrentModuleProcessing ? handleStop : handleStart} 
-                disabled={!isConfigured || !isElectronEnv || videos.length === 0}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all shadow-lg"
-                style={{ 
-                  background: isCurrentModuleProcessing 
-                    ? 'linear-gradient(135deg, var(--error-color), #ef4444)' 
-                    : 'linear-gradient(135deg, var(--primary-color), #2563eb)',
-                  boxShadow: isCurrentModuleProcessing 
-                    ? '0 4px 15px rgba(239, 68, 68, 0.4)' 
-                    : '0 4px 15px rgba(59, 130, 246, 0.4)'
-                }}
-              >
-                {isCurrentModuleProcessing ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                {isCurrentModuleProcessing ? '停止处理' : '开始处理'}
-              </button>
-              {isCurrentModuleProcessing && currentModuleTask && (
-                <div>
-                  <ProgressBar value={Math.floor(currentModuleTask.progress)} label="处理进度" />
-                </div>
-              )}
-            </div>
-            {isCurrentModuleProcessing && currentModuleTask && currentModuleTask.logs.length > 0 && (
-              <div className="mt-3">
-                <Terminal lines={currentModuleTask.logs} />
-              </div>
-            )}
           </div>
         </div>
       </div>

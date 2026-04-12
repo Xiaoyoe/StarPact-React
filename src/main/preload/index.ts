@@ -64,6 +64,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.invoke('file:showInFolder', filePath),
     deleteFile: (filePath: string) => 
       ipcRenderer.invoke('file:deleteFile', filePath),
+    createFolder: (folderPath: string) => 
+      ipcRenderer.invoke('file:createFolder', folderPath),
+    renameFile: (oldPath: string, newPath: string) => 
+      ipcRenderer.invoke('file:renameFile', oldPath, newPath),
   },
   window: {
     minimize: () => ipcRenderer.invoke(IPC_CHANNELS.WINDOW.MINIMIZE),
@@ -119,7 +123,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
 declare global {
   interface Window {
-    electronAPI: {
+    electronAPI?: {
       ollama: {
         checkStatus: () => Promise<any>;
         start: () => Promise<void>;
@@ -172,6 +176,14 @@ declare global {
           error?: string;
         }>;
         deleteFile: (filePath: string) => Promise<{
+          success: boolean;
+          error?: string;
+        }>;
+        createFolder: (folderPath: string) => Promise<{
+          success: boolean;
+          error?: string;
+        }>;
+        renameFile: (oldPath: string, newPath: string) => Promise<{
           success: boolean;
           error?: string;
         }>;

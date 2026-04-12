@@ -51,6 +51,63 @@ interface ElectronAPI {
       content: string | null;
       error?: string;
     }>;
+    showInFolder: (filePath: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    deleteFile: (filePath: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    createFolder: (folderPath: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    renameFile: (oldPath: string, newPath: string) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+  };
+  ffmpeg: {
+    validatePath: (binPath: string) => Promise<{
+      valid: boolean;
+      ffmpegPath: string;
+      ffprobePath: string;
+      error?: string;
+    }>;
+    execute: (options: {
+      ffmpegPath: string;
+      args: string[];
+      outputPath?: string;
+    }) => Promise<{
+      success: boolean;
+      error?: string;
+      output?: string;
+    }>;
+    executeWithProgress: (options: {
+      ffmpegPath: string;
+      args: string[];
+      outputPath?: string;
+      duration?: number;
+      taskId?: string;
+    }) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    stop: () => Promise<boolean>;
+    getMediaInfo: (ffprobePath: string, filePath: string) => Promise<any>;
+    getVideoFrame: (ffmpegPath: string, filePath: string, timeSeconds: number) => Promise<string>;
+    executeMerge: (options: {
+      ffmpegPath: string;
+      fileListContent: string;
+      outputFilePath: string;
+      taskId?: string;
+    }) => Promise<{
+      success: boolean;
+      error?: string;
+    }>;
+    onProgress: (callback: (progress: any) => void) => () => void;
+    onLog: (callback: (data: any) => void) => () => void;
   };
   window: {
     minimize: () => Promise<void>;

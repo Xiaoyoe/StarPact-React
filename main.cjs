@@ -956,6 +956,33 @@ function registerFileHandlers() {
     }
   });
 
+  // 处理创建文件夹的请求
+  ipcMain.handle('file:createFolder', async (event, folderPath) => {
+    try {
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+      }
+      return { success: true };
+    } catch (error) {
+      console.error('创建文件夹失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 处理重命名文件的请求
+  ipcMain.handle('file:renameFile', async (event, oldPath, newPath) => {
+    try {
+      if (!fs.existsSync(oldPath)) {
+        return { success: false, error: '源文件不存在' };
+      }
+      fs.renameSync(oldPath, newPath);
+      return { success: true };
+    } catch (error) {
+      console.error('重命名文件失败:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 处理获取文件状态的请求
   ipcMain.handle('file:getFileStats', async (event, filePath) => {
     try {

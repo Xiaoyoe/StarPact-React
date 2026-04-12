@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showInFolder: (filePath) => ipcRenderer.invoke('file:showInFolder', filePath),
     deleteFile: (filePath) => ipcRenderer.invoke('file:deleteFile', filePath),
     getFileStats: (filePath) => ipcRenderer.invoke('file:getFileStats', filePath),
+    createFolder: (folderPath) => ipcRenderer.invoke('file:createFolder', folderPath),
+    renameFile: (oldPath, newPath) => ipcRenderer.invoke('file:renameFile', oldPath, newPath),
   },
   
   // 窗口控制API

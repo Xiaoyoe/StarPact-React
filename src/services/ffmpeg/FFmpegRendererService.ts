@@ -764,47 +764,50 @@ class FFmpegRendererService {
     return args;
   }
 
+  private buildVideoFilters(rotation?: number, flipH?: boolean, flipV?: boolean): string[] {
+    const filters: string[] = [];
+    if (rotation) {
+      const transposeMap: Record<number, string> = {
+        90: 'transpose=1',
+        180: 'transpose=1,transpose=1',
+        270: 'transpose=2',
+      };
+      if (transposeMap[rotation]) filters.push(transposeMap[rotation]);
+    }
+    if (flipH) filters.push('hflip');
+    if (flipV) filters.push('vflip');
+    return filters;
+  }
+
   buildVideoEditArgs(
     inputPath: string,
     outputPath: string,
     options: {
-      startTime?: string;
-      endTime?: string;
+      startTime?: number;
+      endTime?: number;
       rotation?: number;
       flipH?: boolean;
       flipV?: boolean;
     } = {}
   ): string[] {
     const args: string[] = [];
-    const filters: string[] = [];
+    const filters = this.buildVideoFilters(options.rotation, options.flipH, options.flipV);
+    const startSec = options.startTime || 0;
+    const endSec = options.endTime || 0;
+    const hasCut = startSec > 0 || endSec > 0;
 
-    if (options.rotation) {
-      const transposeMap: Record<number, string> = {
-        90: 'transpose=1',
-        180: 'transpose=1,transpose=1',
-        270: 'transpose=2',
-      };
-      if (transposeMap[options.rotation]) {
-        filters.push(transposeMap[options.rotation]);
-      }
-    }
-
-    if (options.flipH) {
-      filters.push('hflip');
-    }
-
-    if (options.flipV) {
-      filters.push('vflip');
-    }
-
-    if (options.startTime) {
-      args.push('-ss', options.startTime);
+    if (hasCut && startSec > 0) {
+      args.push('-ss', String(startSec));
     }
 
     args.push('-i', inputPath);
 
-    if (options.endTime) {
-      args.push('-to', options.endTime);
+    if (hasCut) {
+      if (startSec > 0 && endSec > 0) {
+        args.push('-t', String(endSec - startSec));
+      } else if (endSec > 0) {
+        args.push('-to', String(endSec));
+      }
     }
 
     if (filters.length > 0) {
@@ -814,71 +817,64 @@ class FFmpegRendererService {
     } else {
       args.push('-c', 'copy');
     }
-    
+
+    args.push('-avoid_negative_ts', 'make_zero');
     args.push(outputPath);
 
     return args;
   }
 
-  buildVideoInverseCutArgs(
+  buildInverseCutPart1Args(
     inputPath: string,
-    part1Path: string,
-    part2Path: string,
-    options: {
-      startTime?: string;
-      endTime?: string;
-      rotation?: number;
-      flipH?: boolean;
-      flipV?: boolean;
-    } = {}
-  ): { part1Args: string[]; part2Args: string[] } {
-    const filters: string[] = [];
+    outputPath: string,
+    startSeconds: number,
+    rotation?: number,
+    flipH?: boolean,
+    flipV?: boolean
+  ): string[] | null {
+    if (startSeconds <= 0) return null;
 
-    if (options.rotation) {
-      const transposeMap: Record<number, string> = {
-        90: 'transpose=1',
-        180: 'transpose=1,transpose=1',
-        270: 'transpose=2',
-      };
-      if (transposeMap[options.rotation]) {
-        filters.push(transposeMap[options.rotation]);
-      }
-    }
+    const args: string[] = ['-i', inputPath];
+    const filters = this.buildVideoFilters(rotation, flipH, flipV);
 
-    if (options.flipH) {
-      filters.push('hflip');
-    }
+    args.push('-t', String(startSeconds));
 
-    if (options.flipV) {
-      filters.push('vflip');
-    }
-
-    const part1Args: string[] = ['-ss', '00:00:00', '-i', inputPath];
-    if (options.startTime) {
-      part1Args.push('-to', options.startTime);
-    }
     if (filters.length > 0) {
-      part1Args.push('-vf', filters.join(','));
-      part1Args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'copy');
+      args.push('-vf', filters.join(','));
+      args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23');
+      args.push('-c:a', 'copy');
     } else {
-      part1Args.push('-c', 'copy');
+      args.push('-c', 'copy');
     }
-    part1Args.push(part1Path);
 
-    const part2Args: string[] = [];
-    if (options.endTime) {
-      part2Args.push('-ss', options.endTime);
-    }
-    part2Args.push('-i', inputPath);
+    args.push(outputPath);
+    return args;
+  }
+
+  buildInverseCutPart2Args(
+    inputPath: string,
+    outputPath: string,
+    endSeconds: number,
+    rotation?: number,
+    flipH?: boolean,
+    flipV?: boolean
+  ): string[] | null {
+    if (endSeconds <= 0) return null;
+
+    const args: string[] = ['-ss', String(endSeconds), '-i', inputPath];
+    const filters = this.buildVideoFilters(rotation, flipH, flipV);
+
     if (filters.length > 0) {
-      part2Args.push('-vf', filters.join(','));
-      part2Args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23', '-c:a', 'copy');
+      args.push('-vf', filters.join(','));
+      args.push('-c:v', 'libx264', '-preset', 'fast', '-crf', '23');
+      args.push('-c:a', 'copy');
     } else {
-      part2Args.push('-c', 'copy');
+      args.push('-c', 'copy');
     }
-    part2Args.push(part2Path);
 
-    return { part1Args, part2Args };
+    args.push('-avoid_negative_ts', 'make_zero');
+    args.push(outputPath);
+    return args;
   }
 
   buildVideoMergeArgs(
