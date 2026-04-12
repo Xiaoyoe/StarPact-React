@@ -919,9 +919,69 @@ class FFmpegRendererService {
       
       return window.electronAPI.ffmpeg.executeMerge({
         ffmpegPath: config.ffmpegPath,
-        outputPath: config.outputPath,
         fileListContent,
         outputFilePath: outputPath,
+        taskId,
+      });
+    }
+
+    return { success: false, error: 'Electron API 不可用' };
+  }
+
+  async executeReencodeMerge(
+    inputPaths: string[],
+    outputFilePath: string,
+    targetWidth: number,
+    targetHeight: number,
+    taskId: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!this.isElectronEnv) {
+      return { success: false, error: '请在 Electron 应用中使用此功能' };
+    }
+
+    const config = ffmpegConfigStorage.getConfig();
+    if (!config.ffmpegPath || !config.isValid) {
+      return { success: false, error: 'FFmpeg 配置未就绪' };
+    }
+
+    const isWindows = outputFilePath.includes('\\');
+    const separator = isWindows ? '\\' : '/';
+    const lastSepIndex = Math.max(outputFilePath.lastIndexOf('/'), outputFilePath.lastIndexOf('\\'));
+    const outputDir = lastSepIndex > 0 ? outputFilePath.substring(0, lastSepIndex) : '';
+    const tempFolder = `${outputDir}${separator}.temp_parts`;
+
+    if (window.electronAPI?.file?.createFolder) {
+      await window.electronAPI.file.createFolder(tempFolder);
+    }
+
+    const reencodedFiles: string[] = [];
+    const baseName = outputFilePath.substring(lastSepIndex + 1).replace('.mp4', '') || 'output';
+
+    for (let i = 0; i < inputPaths.length; i++) {
+      const reencodedPath = `${tempFolder}${separator}${baseName}_reencode_${i}.mp4`;
+      const args = [
+        '-i', inputPaths[i],
+        '-vf', `scale=${targetWidth}:${targetHeight}:force_original_aspect_ratio=decrease,pad=${targetWidth}:${targetHeight}:(ow-iw)/2:(oh-ih)/2`,
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+        '-r', '30',
+        '-c:a', 'aac', '-b:a', '128k', '-ar', '44100',
+        '-y', reencodedPath,
+      ];
+
+      const result = await this.executeWithProgress(args, 0, taskId);
+      if (!result.success) {
+        return { success: false, error: `重编码第 ${i + 1} 个视频失败: ${result.error}` };
+      }
+      reencodedFiles.push(reencodedPath);
+    }
+
+    const fileListContent = reencodedFiles.map(p => `file '${p.replace(/\\/g, '/')}'`).join('\n');
+
+    if (window.electronAPI?.ffmpeg?.executeMerge) {
+      return window.electronAPI.ffmpeg.executeMerge({
+        ffmpegPath: config.ffmpegPath,
+        fileListContent,
+        outputFilePath,
         taskId,
       });
     }

@@ -1,12 +1,14 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { 
   Video, Info, AlertCircle, FileVideo,
   Copy, Check, Trash2, X, Plus, Film, MonitorPlay, 
-  Music, FileText, Loader2
+  Music, FileText, Loader2, BarChart3, GitCompare, 
+  ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, Minus,
+  FolderOpen, Send, Filter, PanelLeftClose, PanelLeft, Columns, Rows
 } from 'lucide-react';
 import { Badge, Terminal } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useFFmpegStore } from '@/stores/ffmpegStore';
+import { useFFmpegStore, type CompareVideoData, type PendingVideosForEdit } from '@/stores/ffmpegStore';
 import { useToast } from '@/components/Toast';
 import { ffmpegConfigStorage } from '@/services/storage/FFmpegConfigStorage';
 
@@ -26,7 +28,13 @@ interface VideoFileInfo {
   audioBitrate: number;
   format: string;
   thumbnail: string;
+  tag?: 'original' | 'edited' | 'before-merge' | 'after-merge';
 }
+
+type SortField = 'name' | 'size' | 'duration' | 'width' | 'fps' | 'bitrate';
+type SortOrder = 'asc' | 'desc';
+type RightPanelTab = 'detail' | 'compare' | 'stats';
+type FilterMode = 'all' | 'processed';
 
 function formatSize(bytes: number): string {
   if (!bytes || bytes <= 0) return 'N/A';
@@ -96,6 +104,55 @@ function videoMainInfoToText(video: VideoFileInfo): string {
   return lines.join('\n');
 }
 
+function CompareValue({ 
+  value, 
+  isMax, 
+  isMin, 
+  showDiff = false,
+  diffPercent = 0 
+}: { 
+  value: string; 
+  isMax?: boolean; 
+  isMin?: boolean; 
+  showDiff?: boolean;
+  diffPercent?: number;
+}) {
+  const [isHovered, setIsHovered] = useState(false);
+  let bgColor = 'transparent';
+  let textColor = 'var(--text-primary)';
+  
+  if (isMax && !isMin) {
+    bgColor = isHovered ? 'rgba(16, 185, 129, 0.3)' : 'rgba(16, 185, 129, 0.15)';
+    textColor = '#34d399';
+  } else if (isMin && !isMax) {
+    bgColor = isHovered ? 'rgba(239, 68, 68, 0.3)' : 'rgba(239, 68, 68, 0.15)';
+    textColor = '#f87171';
+  }
+  
+  return (
+    <div className="flex flex-col items-center">
+      <span 
+        className="px-2 py-1 rounded text-xs font-medium transition-all duration-200 cursor-default"
+        style={{ backgroundColor: bgColor, color: textColor }}
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        title={isMax && !isMin ? '最大值' : isMin && !isMax ? '最小值' : undefined}
+      >
+        {value}
+      </span>
+      {showDiff && diffPercent !== 0 && (
+        <span 
+          className="text-[10px] mt-0.5 flex items-center gap-0.5"
+          style={{ color: diffPercent > 0 ? '#34d399' : '#f87171' }}
+        >
+          {diffPercent > 0 ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />}
+          {Math.abs(diffPercent).toFixed(1)}%
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function VideoProcess() {
   const [videos, setVideos] = useState<VideoFileInfo[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -107,10 +164,160 @@ export function VideoProcess() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; index: number } | null>(null);
-  const lastRightClickRef = useRef<{ time: number; index: number } | null>(null);
+  const [sortField, setSortField] = useState<SortField>('name');
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+  const [rightPanelTab, setRightPanelTab] = useState<RightPanelTab>('detail');
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [panelView, setPanelView] = useState<'both' | 'left' | 'right'>('both');
+  const lastLeftClickRef = useRef<{ time: number; index: number } | null>(null);
   
-  const { isConfigured, isElectronEnv, checkConfig } = useFFmpegStore();
+  const { 
+    isConfigured, 
+    isElectronEnv, 
+    checkConfig,
+    pendingCompareVideos,
+    clearPendingCompareVideos,
+    setPendingVideosForEdit,
+    setActiveTab,
+  } = useFFmpegStore();
   const toast = useToast();
+
+  const filteredVideos = useMemo(() => {
+    if (filterMode === 'all') return videos;
+    return videos.filter(v => v.tag && ['edited', 'after-merge'].includes(v.tag));
+  }, [videos, filterMode]);
+
+  const sortedVideos = useMemo(() => {
+    const sorted = [...filteredVideos];
+    sorted.sort((a, b) => {
+      let aVal: string | number = '';
+      let bVal: string | number = '';
+      
+      switch (sortField) {
+        case 'name':
+          aVal = a.name.toLowerCase();
+          bVal = b.name.toLowerCase();
+          break;
+        case 'size':
+          aVal = a.size;
+          bVal = b.size;
+          break;
+        case 'duration':
+          aVal = a.duration;
+          bVal = b.duration;
+          break;
+        case 'width':
+          aVal = a.width * a.height;
+          bVal = b.width * b.height;
+          break;
+        case 'fps':
+          aVal = a.fps;
+          bVal = b.fps;
+          break;
+        case 'bitrate':
+          aVal = a.bitrate;
+          bVal = b.bitrate;
+          break;
+      }
+      
+      if (typeof aVal === 'string') {
+        return sortOrder === 'asc' 
+          ? aVal.localeCompare(bVal as string) 
+          : (bVal as string).localeCompare(aVal);
+      }
+      return sortOrder === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+    });
+    return sorted;
+  }, [filteredVideos, sortField, sortOrder]);
+
+  const stats = useMemo(() => {
+    if (videos.length === 0) return null;
+    
+    const totalSize = videos.reduce((sum, v) => sum + v.size, 0);
+    const totalDuration = videos.reduce((sum, v) => sum + v.duration, 0);
+    const avgBitrate = videos.reduce((sum, v) => sum + v.bitrate, 0) / videos.length;
+    const avgFps = videos.reduce((sum, v) => sum + v.fps, 0) / videos.length;
+    
+    const resolutions = videos.map(v => v.width * v.height);
+    const maxResolution = Math.max(...resolutions);
+    const minResolution = Math.min(...resolutions);
+    
+    const codecs = [...new Set(videos.map(v => v.codec).filter(Boolean))];
+    const audioCodecs = [...new Set(videos.map(v => v.audioCodec).filter(Boolean))];
+    const formats = [...new Set(videos.map(v => v.format).filter(Boolean))];
+    
+    const sizes = videos.map(v => v.size);
+    const maxSize = Math.max(...sizes);
+    const minSize = Math.min(...sizes);
+    
+    const durations = videos.map(v => v.duration);
+    const maxDuration = Math.max(...durations);
+    const minDuration = Math.min(...durations);
+    
+    return {
+      count: videos.length,
+      totalSize,
+      totalDuration,
+      avgBitrate,
+      avgFps,
+      maxResolution,
+      minResolution,
+      maxSize,
+      minSize,
+      maxDuration,
+      minDuration,
+      codecs,
+      audioCodecs,
+      formats,
+    };
+  }, [videos]);
+
+  const selectedVideos = useMemo(() => {
+    return Array.from(selectedIndices)
+      .sort((a, b) => a - b)
+      .map(i => videos[i])
+      .filter(Boolean);
+  }, [selectedIndices, videos]);
+
+  const compareData = useMemo(() => {
+    if (selectedVideos.length < 2) return null;
+    
+    const sizes = selectedVideos.map(v => v.size);
+    const durations = selectedVideos.map(v => v.duration);
+    const bitrates = selectedVideos.map(v => v.bitrate);
+    const fpsList = selectedVideos.map(v => v.fps);
+    const resolutions = selectedVideos.map(v => v.width * v.height);
+    
+    const maxSize = Math.max(...sizes);
+    const minSize = Math.min(...sizes);
+    const maxDuration = Math.max(...durations);
+    const minDuration = Math.min(...durations);
+    const maxBitrate = Math.max(...bitrates);
+    const minBitrate = Math.min(...bitrates);
+    const maxFps = Math.max(...fpsList);
+    const minFps = Math.min(...fpsList);
+    const maxRes = Math.max(...resolutions);
+    const minRes = Math.min(...resolutions);
+    
+    return {
+      sizes,
+      durations,
+      bitrates,
+      fpsList,
+      resolutions,
+      maxSize,
+      minSize,
+      maxDuration,
+      minDuration,
+      maxBitrate,
+      minBitrate,
+      maxFps,
+      minFps,
+      maxRes,
+      minRes,
+    };
+  }, [selectedVideos]);
 
   useEffect(() => {
     checkConfig();
@@ -128,9 +335,60 @@ export function VideoProcess() {
     return () => window.removeEventListener('click', handleClick);
   }, []);
 
+  useEffect(() => {
+    if (selectedIndices.size >= 2) {
+      setRightPanelTab('compare');
+    }
+  }, [selectedIndices.size]);
+
   const addLog = (log: string) => {
     setLogs(prev => [...prev.slice(-100), log]);
   };
+
+  useEffect(() => {
+    if (pendingCompareVideos && pendingCompareVideos.videos.length > 0) {
+      const newVideos: VideoFileInfo[] = pendingCompareVideos.videos.map((v: CompareVideoData) => ({
+        path: v.path,
+        name: v.name,
+        size: v.size,
+        duration: v.duration,
+        width: v.width,
+        height: v.height,
+        codec: v.codec,
+        fps: v.fps,
+        bitrate: v.bitrate,
+        audioCodec: v.audioCodec,
+        audioSampleRate: v.audioSampleRate,
+        audioChannels: v.audioChannels,
+        audioBitrate: v.audioBitrate,
+        format: v.format,
+        thumbnail: v.thumbnail,
+        tag: v.tag,
+      }));
+      
+      setVideos(prev => {
+        const existingPaths = new Set(prev.map(v => v.path));
+        const uniqueNewVideos = newVideos.filter(v => !existingPaths.has(v.path));
+        return [...prev, ...uniqueNewVideos];
+      });
+      
+      setTimeout(() => {
+        setVideos(prev => {
+          const newIndices = new Set<number>();
+          prev.forEach((v, i) => {
+            if (newVideos.some(nv => nv.path === v.path)) {
+              newIndices.add(i);
+            }
+          });
+          setSelectedIndices(newIndices);
+          return prev;
+        });
+      }, 100);
+      
+      addLog(`[info] 从视频处理导入 ${newVideos.length} 个视频`);
+      clearPendingCompareVideos();
+    }
+  }, [pendingCompareVideos, clearPendingCompareVideos]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -339,7 +597,29 @@ export function VideoProcess() {
   };
 
   const handleVideoClick = (index: number) => {
+    const now = Date.now();
+    const lastClick = lastLeftClickRef.current;
+    
+    if (lastClick && lastClick.index === index && now - lastClick.time < 400) {
+      setSelectedIndices(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(index)) {
+          newSet.delete(index);
+        } else {
+          newSet.add(index);
+        }
+        return newSet;
+      });
+      lastLeftClickRef.current = null;
+      return;
+    }
+    
+    lastLeftClickRef.current = { time: now, index };
     setViewingIndex(index);
+    setHighlightedIndex(null);
+    if (selectedIndices.size < 2) {
+      setRightPanelTab('detail');
+    }
   };
 
   const selectAll = () => {
@@ -350,31 +630,12 @@ export function VideoProcess() {
 
   const deselectAll = () => {
     setSelectedIndices(new Set());
+    setRightPanelTab('detail');
   };
 
   const handleContextMenu = (e: React.MouseEvent, index: number) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    const now = Date.now();
-    const lastClick = lastRightClickRef.current;
-    
-    if (lastClick && lastClick.index === index && now - lastClick.time < 500) {
-      setSelectedIndices(prev => {
-        const newSet = new Set(prev);
-        if (newSet.has(index)) {
-          newSet.delete(index);
-        } else {
-          newSet.add(index);
-        }
-        return newSet;
-      });
-      lastRightClickRef.current = null;
-      setContextMenu(null);
-      return;
-    }
-    
-    lastRightClickRef.current = { time: now, index };
     setContextMenu({ x: e.clientX, y: e.clientY, index });
   };
 
@@ -442,20 +703,82 @@ export function VideoProcess() {
   };
 
   const copySelectedMainInfo = async () => {
-    const selectedVideos = Array.from(selectedIndices).sort((a, b) => a - b).map(i => videos[i]).filter(Boolean);
-    if (selectedVideos.length === 0) {
+    const selectedVideosList = Array.from(selectedIndices).sort((a, b) => a - b).map(i => videos[i]).filter(Boolean);
+    if (selectedVideosList.length === 0) {
       toast.info('请先选择要复制的视频');
       return;
     }
     
-    const text = selectedVideos.map((v, i) => `=== 视频 ${i + 1} ===\n${videoMainInfoToText(v)}`).join('\n\n');
+    const text = selectedVideosList.map((v, i) => `=== 视频 ${i + 1} ===\n${videoMainInfoToText(v)}`).join('\n\n');
     try {
       await navigator.clipboard.writeText(text);
       setCopiedId('selected');
-      toast.success(`已复制 ${selectedVideos.length} 个视频的主要信息`);
+      toast.success(`已复制 ${selectedVideosList.length} 个视频的主要信息`);
       setTimeout(() => setCopiedId(null), 2000);
     } catch {
       toast.error('复制失败');
+    }
+  };
+
+  const copyCompareInfo = async () => {
+    if (!compareData || selectedVideos.length < 2) return;
+    
+    const lines = selectedVideos.map((v, i) => {
+      return `${v.name}: ${formatSize(v.size)} | ${formatDuration(v.duration)} | ${v.width}x${v.height} | ${v.fps.toFixed(2)}fps | ${formatBitrate(v.bitrate)}`;
+    });
+    
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopiedId('compare');
+      toast.success('已复制对比信息');
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      toast.error('复制失败');
+    }
+  };
+
+  const sendToVideoEdit = () => {
+    const selectedVideosList = Array.from(selectedIndices).sort((a, b) => a - b).map(i => videos[i]).filter(Boolean);
+    if (selectedVideosList.length === 0) {
+      toast.info('请先选择要发送的视频');
+      return;
+    }
+    
+    const paths = selectedVideosList.map(v => v.path);
+    const pendingData: PendingVideosForEdit = {
+      paths,
+      timestamp: Date.now(),
+    };
+    setPendingVideosForEdit(pendingData);
+    setActiveTab('videoEdit');
+    toast.success(`已发送 ${paths.length} 个视频到视频处理`);
+  };
+
+  const openFileLocation = async (index: number) => {
+    const video = videos[index];
+    if (!video) return;
+    
+    if (window.electronAPI?.file?.showInFolder) {
+      await window.electronAPI.file.showInFolder(video.path);
+    } else {
+      toast.error('此功能需要 Electron 环境');
+    }
+  };
+
+  const togglePanelView = () => {
+    setPanelView(prev => {
+      if (prev === 'both') return 'left';
+      if (prev === 'left') return 'right';
+      return 'both';
+    });
+  };
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) {
+      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
     }
   };
 
@@ -476,6 +799,52 @@ export function VideoProcess() {
         <div className="flex items-center gap-2">
           {videos.length > 0 && (
             <>
+              <div className="flex items-center gap-0.5 p-0.5 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)' }}>
+                <button
+                  onClick={() => setPanelView('both')}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                  style={{ 
+                    backgroundColor: panelView === 'both' ? 'var(--primary-color)' : 'transparent',
+                    color: panelView === 'both' ? 'white' : 'var(--text-tertiary)',
+                  }}
+                  title="显示左右双栏"
+                >
+                  <Columns className="w-3 h-3" />
+                  双栏
+                </button>
+                <button
+                  onClick={() => setPanelView('left')}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                  style={{ 
+                    backgroundColor: panelView === 'left' ? 'var(--primary-color)' : 'transparent',
+                    color: panelView === 'left' ? 'white' : 'var(--text-tertiary)',
+                  }}
+                  title="仅显示左侧"
+                >
+                  <PanelLeft className="w-3 h-3" />
+                  左侧
+                </button>
+                <button
+                  onClick={() => setPanelView('right')}
+                  className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                  style={{ 
+                    backgroundColor: panelView === 'right' ? 'var(--primary-color)' : 'transparent',
+                    color: panelView === 'right' ? 'white' : 'var(--text-tertiary)',
+                  }}
+                  title="仅显示右侧"
+                >
+                  <PanelLeftClose className="w-3 h-3" />
+                  右侧
+                </button>
+              </div>
+              <button
+                onClick={sendToVideoEdit}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
+                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+              >
+                <Send className="w-3 h-3" />
+                发送到视频处理{selectedCount > 0 ? ` (${selectedCount})` : ''}
+              </button>
               <button
                 onClick={copySelectedMainInfo}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
@@ -527,15 +896,14 @@ export function VideoProcess() {
 
       <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
         <div 
-          className="col-span-7 space-y-3 overflow-y-auto pr-2" 
-          style={{ scrollbarGutter: 'stable' }}
+          className={`flex flex-col ${panelView === 'right' ? 'hidden' : panelView === 'left' ? 'col-span-12' : 'col-span-7'}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
           {videos.length === 0 ? (
             <div 
-              className="h-full flex flex-col items-center justify-center rounded-2xl transition-all duration-300"
+              className="h-full flex flex-col items-center justify-center rounded-2xl transition-all duration-300 flex-1"
               style={{ 
                 backgroundColor: isDragging ? 'rgba(6, 182, 212, 0.1)' : 'var(--bg-secondary)',
                 border: `2px dashed ${isDragging ? '#06b6d4' : 'var(--border-color)'}`,
@@ -581,35 +949,106 @@ export function VideoProcess() {
             </div>
           ) : (
             <>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={selectFiles}
-                  disabled={!isElectronEnv || !isConfigured || isLoading}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105 disabled:opacity-50"
-                  style={{ 
-                    background: 'linear-gradient(135deg, #0891b2, #06b6d4)',
-                    color: 'white',
-                    boxShadow: '0 2px 8px rgba(6, 182, 212, 0.15)'
-                  }}
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  添加视频
-                </button>
-                <button
-                  onClick={selectAll}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
-                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
-                >
-                  全选
-                </button>
-                <button
-                  onClick={deselectAll}
-                  className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
-                  style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
-                >
-                  取消选择
-                </button>
+              <div 
+                className="sticky top-0 z-10 pb-3 mb-3"
+                style={{ 
+                  backgroundColor: 'var(--bg-primary)',
+                  borderBottom: '1px solid var(--border-color)',
+                  marginBottom: '12px',
+                  paddingBottom: '12px',
+                }}
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={selectFiles}
+                    disabled={!isElectronEnv || !isConfigured || isLoading}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105 disabled:opacity-50"
+                    style={{ 
+                      background: 'linear-gradient(135deg, #0891b2, #06b6d4)',
+                      color: 'white',
+                      boxShadow: '0 2px 8px rgba(6, 182, 212, 0.15)'
+                    }}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    添加视频
+                  </button>
+                  <button
+                    onClick={selectAll}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+                  >
+                    全选
+                  </button>
+                  <button
+                    onClick={deselectAll}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+                  >
+                    取消选择
+                  </button>
+                  
+                  <div className="h-5 w-px mx-1" style={{ backgroundColor: 'var(--border-color)' }} />
+                  
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>排序:</span>
+                    {[
+                      { field: 'name' as SortField, label: '名称' },
+                      { field: 'size' as SortField, label: '大小' },
+                      { field: 'duration' as SortField, label: '时长' },
+                      { field: 'width' as SortField, label: '分辨率' },
+                      { field: 'bitrate' as SortField, label: '码率' },
+                    ].map(item => (
+                      <button
+                        key={item.field}
+                        onClick={() => toggleSort(item.field)}
+                        className="flex items-center gap-0.5 px-2 py-1 rounded text-xs transition-all duration-200"
+                        style={{ 
+                          backgroundColor: sortField === item.field ? 'var(--primary-light)' : 'var(--bg-tertiary)',
+                          color: sortField === item.field ? 'var(--primary-color)' : 'var(--text-tertiary)',
+                        }}
+                      >
+                        {item.label}
+                        {sortField === item.field && (
+                          sortOrder === 'asc' ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <div className="h-5 w-px mx-1" style={{ backgroundColor: 'var(--border-color)' }} />
+                  
+                  <div className="flex items-center gap-0.5 rounded-lg p-0.5" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                    <button
+                      onClick={() => setFilterMode('all')}
+                      className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                      style={{ 
+                        backgroundColor: filterMode === 'all' ? 'var(--primary-color)' : 'transparent',
+                        color: filterMode === 'all' ? 'white' : 'var(--text-tertiary)',
+                      }}
+                      title="显示全部视频"
+                    >
+                      全部
+                    </button>
+                    <button
+                      onClick={() => setFilterMode('processed')}
+                      className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200"
+                      style={{ 
+                        backgroundColor: filterMode === 'processed' ? '#10b981' : 'transparent',
+                        color: filterMode === 'processed' ? 'white' : 'var(--text-tertiary)',
+                      }}
+                      title="只显示剪辑后或合并后的视频"
+                    >
+                      <Filter className="w-3 h-3" />
+                      处理后
+                    </button>
+                  </div>
+                </div>
               </div>
+              
+              <div 
+                className="flex-1 overflow-y-auto pr-2"
+                style={{ scrollbarGutter: 'stable' }}
+              >
 
               {isLoading && (
                 <motion.div 
@@ -645,31 +1084,34 @@ export function VideoProcess() {
               )}
 
               <div className="grid grid-cols-3 gap-3">
-                {videos.map((video, index) => {
-                  const isViewing = index === viewingIndex;
-                  const isSelected = selectedIndices.has(index);
+                {sortedVideos.map((video, sortedIndex) => {
+                  const originalIndex = videos.findIndex(v => v.path === video.path);
+                  const isViewing = originalIndex === viewingIndex;
+                  const isSelected = selectedIndices.has(originalIndex);
+                  const isHighlighted = highlightedIndex === originalIndex;
                   
                   return (
                     <motion.div
-                      key={`${video.path}-${index}`}
+                      key={`${video.path}-${originalIndex}`}
                       initial={{ opacity: 0, scale: 0.95 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.2, delay: index * 0.03 }}
+                      transition={{ duration: 0.2, delay: sortedIndex * 0.02 }}
                       className="rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:scale-[1.02] group relative"
                       style={{ 
                         backgroundColor: 'var(--bg-secondary)',
-                        border: `2px solid ${isViewing ? '#06b6d4' : 'var(--border-color)'}`,
-                        boxShadow: isViewing ? '0 2px 8px rgba(6, 182, 212, 0.15)' : 'none',
+                        border: `2px solid ${isHighlighted ? '#f59e0b' : isViewing ? '#06b6d4' : isSelected ? 'rgba(6, 182, 212, 0.5)' : 'var(--border-color)'}`,
+                        boxShadow: isHighlighted ? '0 2px 12px rgba(245, 158, 11, 0.3)' : isViewing ? '0 2px 8px rgba(6, 182, 212, 0.15)' : 'none',
                       }}
-                      onClick={() => handleVideoClick(index)}
-                      onContextMenu={(e) => handleContextMenu(e, index)}
+                      onClick={() => handleVideoClick(originalIndex)}
+                      onContextMenu={(e) => handleContextMenu(e, originalIndex)}
                     >
                       <div className="relative aspect-video overflow-hidden" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
                         {video.thumbnail ? (
                           <img 
                             src={video.thumbnail} 
                             alt={video.name}
-                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105 pointer-events-none"
+                            draggable={false}
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
@@ -677,10 +1119,10 @@ export function VideoProcess() {
                           </div>
                         )}
                         
-                        {isSelected && (
+                        {(isSelected || isHighlighted) && (
                           <div 
                             className="absolute inset-0 pointer-events-none"
-                            style={{ backgroundColor: 'rgba(6, 182, 212, 0.15)' }}
+                            style={{ backgroundColor: isHighlighted ? 'rgba(245, 158, 11, 0.15)' : 'rgba(6, 182, 212, 0.15)' }}
                           />
                         )}
                         
@@ -693,8 +1135,25 @@ export function VideoProcess() {
                           </span>
                         )}
                         
+                        {video.tag && (
+                          <span 
+                            className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-white z-10"
+                            style={{ 
+                              backgroundColor: video.tag === 'original' ? '#8b5cf6' 
+                                : video.tag === 'edited' ? '#10b981'
+                                : video.tag === 'before-merge' ? '#f59e0b'
+                                : '#06b6d4',
+                            }}
+                          >
+                            {video.tag === 'original' ? '原始' 
+                              : video.tag === 'edited' ? '剪辑后'
+                              : video.tag === 'before-merge' ? '合并前'
+                              : '合并后'}
+                          </span>
+                        )}
+                        
                         <button
-                          onClick={(e) => { e.stopPropagation(); removeVideo(index); }}
+                          onClick={(e) => { e.stopPropagation(); removeVideo(originalIndex); }}
                           className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10"
                           style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
                         >
@@ -703,7 +1162,7 @@ export function VideoProcess() {
                         
                         {isSelected && (
                           <button
-                            onClick={(e) => toggleMultiSelect(index, e)}
+                            onClick={(e) => toggleMultiSelect(originalIndex, e)}
                             className="absolute top-1 left-1 w-5 h-5 rounded flex items-center justify-center transition-all duration-200 z-10"
                             style={{ 
                               backgroundColor: 'rgba(6, 182, 212, 0.9)',
@@ -764,15 +1223,39 @@ export function VideoProcess() {
                   );
                 })}
               </div>
+              </div>
             </>
           )}
         </div>
 
-        <div className="col-span-5 space-y-3 overflow-y-auto pr-2" style={{ scrollbarGutter: 'stable' }}>
+        <div className={`space-y-3 overflow-y-auto pr-2 ${panelView === 'left' ? 'hidden' : panelView === 'right' ? 'col-span-12' : 'col-span-5'}`} style={{ scrollbarGutter: 'stable' }}>
+          {videos.length > 0 && (
+            <div className="flex items-center gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+              {[
+                { key: 'detail' as RightPanelTab, label: '详情', icon: <Video className="w-3.5 h-3.5" /> },
+                { key: 'compare' as RightPanelTab, label: `对比${selectedCount > 0 ? `(${selectedCount})` : ''}`, icon: <GitCompare className="w-3.5 h-3.5" /> },
+                { key: 'stats' as RightPanelTab, label: '统计', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setRightPanelTab(tab.key)}
+                  className="flex-1 flex items-center justify-center gap-1 px-2 py-2 rounded-md text-xs font-medium transition-all duration-200"
+                  style={{ 
+                    backgroundColor: rightPanelTab === tab.key ? 'var(--primary-light)' : 'transparent',
+                    color: rightPanelTab === tab.key ? 'var(--primary-color)' : 'var(--text-tertiary)',
+                  }}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+
           <AnimatePresence mode="wait">
-            {viewingVideo ? (
+            {rightPanelTab === 'detail' && viewingVideo && (
               <motion.div 
-                key={viewingIndex}
+                key="detail"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
@@ -904,12 +1387,360 @@ export function VideoProcess() {
                   </div>
                 </div>
               </motion.div>
-            ) : (
+            )}
+
+            {rightPanelTab === 'compare' && (
+              <motion.div 
+                key="compare"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-3"
+              >
+                {selectedVideos.length < 2 ? (
+                  <div 
+                    className="rounded-xl p-6 flex flex-col items-center justify-center"
+                    style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', minHeight: '300px' }}
+                  >
+                    <GitCompare className="w-12 h-12 mb-4" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }} />
+                    <p className="text-sm mb-2" style={{ color: 'var(--text-tertiary)' }}>请选择至少 2 个视频进行对比</p>
+                    <p className="text-xs" style={{ color: 'var(--text-tertiary)', opacity: 0.7 }}>
+                      右键点击视频卡片可快速选择
+                    </p>
+                  </div>
+                ) : compareData && (
+                  <div 
+                    className="rounded-xl overflow-hidden"
+                    style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+                  >
+                    <div className="px-4 py-3" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <GitCompare className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                          <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>视频对比</span>
+                          <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-tertiary)' }}>
+                            {selectedVideos.length} 个视频
+                          </span>
+                        </div>
+                        <button
+                          onClick={copyCompareInfo}
+                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all hover:scale-105"
+                          style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }}
+                        >
+                          {copiedId === 'compare' ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                          {copiedId === 'compare' ? '已复制' : '复制对比'}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="p-4 overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <th className="text-left py-2 px-2 font-medium" style={{ color: 'var(--text-tertiary)' }}>属性</th>
+                            {selectedVideos.map((v, i) => {
+                              const originalIndex = videos.findIndex(vid => vid.path === v.path);
+                              const isHighlighted = highlightedIndex === originalIndex;
+                              return (
+                                <th 
+                                  key={i} 
+                                  className="text-center py-2 px-2 font-medium min-w-[100px] cursor-pointer transition-all duration-200"
+                                  style={{ 
+                                    color: isHighlighted ? 'var(--primary-color)' : 'var(--text-primary)',
+                                    backgroundColor: isHighlighted ? 'rgba(6, 182, 212, 0.1)' : 'transparent',
+                                  }}
+                                  onClick={() => {
+                                    if (originalIndex !== -1) {
+                                      setHighlightedIndex(isHighlighted ? null : originalIndex);
+                                      setViewingIndex(originalIndex);
+                                    }
+                                  }}
+                                >
+                                  <div className="truncate max-w-[80px] mx-auto" title={v.name}>{v.name}</div>
+                                  {v.tag && (
+                                    <span 
+                                      className="inline-block mt-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-white"
+                                      style={{ 
+                                        backgroundColor: v.tag === 'original' ? '#8b5cf6' 
+                                          : v.tag === 'edited' ? '#10b981'
+                                          : v.tag === 'before-merge' ? '#f59e0b'
+                                          : '#06b6d4',
+                                      }}
+                                    >
+                                      {v.tag === 'original' ? '原始' 
+                                        : v.tag === 'edited' ? '剪辑后'
+                                        : v.tag === 'before-merge' ? '合并前'
+                                        : '合并后'}
+                                    </span>
+                                  )}
+                                </th>
+                              );
+                            })}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td className="py-2 px-2" style={{ color: 'var(--text-tertiary)' }}>文件大小</td>
+                            {selectedVideos.map((v, i) => (
+                              <td key={i} className="py-2 px-2 text-center">
+                                <CompareValue 
+                                  value={formatSize(v.size)}
+                                  isMax={compareData.maxSize === v.size && compareData.maxSize !== compareData.minSize}
+                                  isMin={compareData.minSize === v.size && compareData.maxSize !== compareData.minSize}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td className="py-2 px-2" style={{ color: 'var(--text-tertiary)' }}>时长</td>
+                            {selectedVideos.map((v, i) => (
+                              <td key={i} className="py-2 px-2 text-center">
+                                <CompareValue 
+                                  value={formatDuration(v.duration)}
+                                  isMax={compareData.maxDuration === v.duration && compareData.maxDuration !== compareData.minDuration}
+                                  isMin={compareData.minDuration === v.duration && compareData.maxDuration !== compareData.minDuration}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td className="py-2 px-2" style={{ color: 'var(--text-tertiary)' }}>分辨率</td>
+                            {selectedVideos.map((v, i) => (
+                              <td key={i} className="py-2 px-2 text-center">
+                                <CompareValue 
+                                  value={`${v.width}x${v.height}`}
+                                  isMax={compareData.maxRes === v.width * v.height && compareData.maxRes !== compareData.minRes}
+                                  isMin={compareData.minRes === v.width * v.height && compareData.maxRes !== compareData.minRes}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td className="py-2 px-2" style={{ color: 'var(--text-tertiary)' }}>帧率</td>
+                            {selectedVideos.map((v, i) => (
+                              <td key={i} className="py-2 px-2 text-center">
+                                <CompareValue 
+                                  value={`${v.fps.toFixed(2)} fps`}
+                                  isMax={compareData.maxFps === v.fps && compareData.maxFps !== compareData.minFps}
+                                  isMin={compareData.minFps === v.fps && compareData.maxFps !== compareData.minFps}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td className="py-2 px-2" style={{ color: 'var(--text-tertiary)' }}>码率</td>
+                            {selectedVideos.map((v, i) => (
+                              <td key={i} className="py-2 px-2 text-center">
+                                <CompareValue 
+                                  value={formatBitrate(v.bitrate)}
+                                  isMax={compareData.maxBitrate === v.bitrate && compareData.maxBitrate !== compareData.minBitrate}
+                                  isMin={compareData.minBitrate === v.bitrate && compareData.maxBitrate !== compareData.minBitrate}
+                                />
+                              </td>
+                            ))}
+                          </tr>
+                          <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td className="py-2 px-2" style={{ color: 'var(--text-tertiary)' }}>视频编码</td>
+                            {selectedVideos.map((v, i) => (
+                              <td key={i} className="py-2 px-2 text-center">
+                                <span className="px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
+                                  {v.codec || 'N/A'}
+                                </span>
+                              </td>
+                            ))}
+                          </tr>
+                          <tr>
+                            <td className="py-2 px-2" style={{ color: 'var(--text-tertiary)' }}>音频编码</td>
+                            {selectedVideos.map((v, i) => (
+                              <td key={i} className="py-2 px-2 text-center">
+                                <span className="px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
+                                  {v.audioCodec || 'N/A'}
+                                </span>
+                              </td>
+                            ))}
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    
+                    <div className="px-4 py-3" style={{ backgroundColor: 'var(--bg-tertiary)', borderTop: '1px solid var(--border-color)' }}>
+                      <div className="flex items-center gap-4 text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                        <div className="flex items-center gap-1">
+                          <span className="w-3 h-3 rounded" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)' }} />
+                          <span>最大值</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="w-3 h-3 rounded" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)' }} />
+                          <span>最小值</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {rightPanelTab === 'stats' && (
+              <motion.div 
+                key="stats"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-3"
+              >
+                {stats ? (
+                  <>
+                    <div 
+                      className="rounded-xl p-4"
+                      style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+                    >
+                      <div className="flex items-center gap-2 mb-4">
+                        <BarChart3 className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>总体统计</span>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                          <div className="text-[10px] mb-1" style={{ color: 'var(--text-tertiary)' }}>视频数量</div>
+                          <div className="text-lg font-bold" style={{ color: 'var(--primary-color)' }}>{stats.count}</div>
+                        </div>
+                        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                          <div className="text-[10px] mb-1" style={{ color: 'var(--text-tertiary)' }}>总大小</div>
+                          <div className="text-lg font-bold" style={{ color: '#a78bfa' }}>{formatSize(stats.totalSize)}</div>
+                        </div>
+                        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                          <div className="text-[10px] mb-1" style={{ color: 'var(--text-tertiary)' }}>总时长</div>
+                          <div className="text-lg font-bold" style={{ color: '#f472b6' }}>{formatDuration(stats.totalDuration)}</div>
+                        </div>
+                        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                          <div className="text-[10px] mb-1" style={{ color: 'var(--text-tertiary)' }}>平均码率</div>
+                          <div className="text-lg font-bold" style={{ color: '#fbbf24' }}>{formatBitrate(stats.avgBitrate)}</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div 
+                      className="rounded-xl p-4"
+                      style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+                    >
+                      <div className="flex items-center gap-2 mb-4">
+                        <TrendingUp className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>范围统计</span>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>文件大小范围</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }}>
+                              {formatSize(stats.minSize)}
+                            </span>
+                            <Minus className="w-3 h-3" style={{ color: 'var(--text-tertiary)' }} />
+                            <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+                              {formatSize(stats.maxSize)}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>时长范围</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }}>
+                              {formatDuration(stats.minDuration)}
+                            </span>
+                            <Minus className="w-3 h-3" style={{ color: 'var(--text-tertiary)' }} />
+                            <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+                              {formatDuration(stats.maxDuration)}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>分辨率范围</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#f87171' }}>
+                              {Math.round(Math.sqrt(stats.minResolution))}p
+                            </span>
+                            <Minus className="w-3 h-3" style={{ color: 'var(--text-tertiary)' }} />
+                            <span className="px-2 py-0.5 rounded text-xs font-medium" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+                              {Math.round(Math.sqrt(stats.maxResolution))}p
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div 
+                      className="rounded-xl p-4"
+                      style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+                    >
+                      <div className="flex items-center gap-2 mb-4">
+                        <MonitorPlay className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                        <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>编码统计</span>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div>
+                          <div className="text-[10px] mb-2" style={{ color: 'var(--text-tertiary)' }}>视频编码 ({stats.codecs.length} 种)</div>
+                          <div className="flex flex-wrap gap-1">
+                            {stats.codecs.map((codec, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded text-xs" style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
+                                {codec}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <div className="text-[10px] mb-2" style={{ color: 'var(--text-tertiary)' }}>音频编码 ({stats.audioCodecs.length} 种)</div>
+                          <div className="flex flex-wrap gap-1">
+                            {stats.audioCodecs.map((codec, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded text-xs" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+                                {codec}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <div className="text-[10px] mb-2" style={{ color: 'var(--text-tertiary)' }}>文件格式 ({stats.formats.length} 种)</div>
+                          <div className="flex flex-wrap gap-1">
+                            {stats.formats.map((format, i) => (
+                              <span key={i} className="px-2 py-0.5 rounded text-xs" style={{ backgroundColor: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa' }}>
+                                {format}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div 
+                    className="rounded-xl p-6 flex flex-col items-center justify-center"
+                    style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)', minHeight: '300px' }}
+                  >
+                    <BarChart3 className="w-12 h-12 mb-4" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }} />
+                    <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>添加视频后查看统计信息</p>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {rightPanelTab === 'detail' && !viewingVideo && (
               <motion.div
                 key="empty"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="h-full flex flex-col items-center justify-center rounded-2xl"
+                className="rounded-xl p-6 flex flex-col items-center justify-center"
                 style={{ 
                   backgroundColor: 'var(--bg-secondary)',
                   border: '1px solid var(--border-color)',
@@ -1014,6 +1845,57 @@ export function VideoProcess() {
           >
             <X className="w-3.5 h-3.5" style={{ color: 'var(--text-tertiary)' }} />
             取消全部选择
+          </button>
+          <div className="my-1" style={{ height: '1px', backgroundColor: 'var(--border-color)' }} />
+          <button
+            onClick={() => {
+              if (contextMenu) {
+                removeVideo(contextMenu.index);
+                setContextMenu(null);
+              }
+            }}
+            className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors"
+            style={{ color: 'var(--text-primary)' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <Trash2 className="w-3.5 h-3.5" style={{ color: 'var(--error-color)' }} />
+            移除此视频
+          </button>
+          <button
+            onClick={() => {
+              if (contextMenu) {
+                openFileLocation(contextMenu.index);
+                setContextMenu(null);
+              }
+            }}
+            className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors"
+            style={{ color: 'var(--text-primary)' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent' }
+          >
+            <FolderOpen className="w-3.5 h-3.5" style={{ color: 'var(--primary-color)' }} />
+            打开文件位置
+          </button>
+          <button
+            onClick={() => {
+              if (contextMenu) {
+                setSelectedIndices(prev => {
+                  const newSet = new Set(prev);
+                  newSet.add(contextMenu.index);
+                  return newSet;
+                });
+                sendToVideoEdit();
+                setContextMenu(null);
+              }
+            }}
+            className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors"
+            style={{ color: 'var(--text-primary)' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <Send className="w-3.5 h-3.5" style={{ color: '#06b6d4' }} />
+            发送到视频处理
           </button>
         </div>
       )}

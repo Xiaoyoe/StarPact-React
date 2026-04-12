@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { FileType, Music, Terminal as TerminalIcon, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon, FileImage, FolderSync, Minimize2, Film, ChevronsUp } from 'lucide-react';
 import { ProgressBar } from '@/components/ffmpeg';
 import { FormatConvert } from './FormatConvert';
@@ -106,7 +106,7 @@ function TaskItem({
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 20 }}
-      className="rounded-lg overflow-hidden"
+      className="overflow-hidden"
       style={{ backgroundColor: 'var(--bg-primary)' }}
     >
       <div className="p-3">
@@ -265,7 +265,23 @@ export function MediaToolsPage() {
     stopTask,
     removeTask,
     clearCompletedTasks,
+    setActiveTab: setStoreActiveTab,
+    setOnTabChange,
   } = useFFmpegStore();
+
+  useEffect(() => {
+    setOnTabChange((tab: string) => {
+      setActiveTab(tab);
+    });
+    return () => {
+      setOnTabChange(null);
+    };
+  }, [setOnTabChange]);
+
+  const handleTabChange = (tab: string) => {
+    setActiveTab(tab);
+    setStoreActiveTab(tab);
+  };
 
   const isProcessing = activeTaskIds.size > 0;
   const activeTasks = tasks.filter(t => activeTaskIds.has(t.id));
@@ -406,7 +422,7 @@ export function MediaToolsPage() {
                   {tabs.map((tab) => (
                     <motion.button
                       key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
+                      onClick={() => handleTabChange(tab.key)}
                       className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors duration-200"
                       style={{
                         color: activeTab === tab.key ? 'white' : 'var(--text-tertiary)',
@@ -438,7 +454,7 @@ export function MediaToolsPage() {
                   {processTabs.map((tab) => (
                     <motion.button
                       key={tab.key}
-                      onClick={() => setActiveTab(tab.key)}
+                      onClick={() => handleTabChange(tab.key)}
                       className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl transition-colors duration-200"
                       style={{
                         color: activeTab === tab.key ? 'white' : 'var(--text-tertiary)',

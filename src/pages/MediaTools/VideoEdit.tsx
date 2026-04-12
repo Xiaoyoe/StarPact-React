@@ -3,12 +3,12 @@ import {
   Scissors, RotateCw, RotateCcw, Combine, 
   Upload, Sparkles, Info, 
   Play, AlertCircle, Square, FileType, X, Maximize2, Film,
-  Video, MonitorPlay, Music, Loader2, PanelLeftClose, PanelLeft, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Copy, Check, Terminal as TerminalIcon, SkipBack, SkipForward, SwitchCamera, Rewind, FastForward
+  Video, MonitorPlay, Music, Loader2, PanelLeftClose, PanelLeft, ChevronDown, ChevronRight, ChevronsDown, ChevronsUp, Copy, Check, CheckCircle, Terminal as TerminalIcon, SkipBack, SkipForward, SwitchCamera, Rewind, FastForward, Plus, Download, Image, TrendingUp
 } from 'lucide-react';
 import { Toggle, Badge } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ffmpegRendererService } from '@/services/ffmpeg/FFmpegRendererService';
-import { useFFmpegStore } from '@/stores/ffmpegStore';
+import { useFFmpegStore, type CompareVideoData, type PendingCompareVideos, type PendingVideosForEdit } from '@/stores/ffmpegStore';
 import { useToast } from '@/components/Toast';
 import { ffmpegConfigStorage } from '@/services/storage/FFmpegConfigStorage';
 
@@ -60,6 +60,14 @@ function formatSampleRate(hz: number): string {
   return hz + ' Hz';
 }
 
+function formatFileSize(bytes: number): string {
+  if (!bytes || bytes <= 0) return 'N/A';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+}
+
 export function VideoEdit() {
   const [tab, setTab] = useState('edit');
   const [videos, setVideos] = useState<VideoFileInfo[]>([]);
@@ -68,6 +76,7 @@ export function VideoEdit() {
   const [loadProgress, setLoadProgress] = useState(0);
   const [loadingName, setLoadingName] = useState('');
   const [showFullscreen, setShowFullscreen] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [leftPanelVisible, setLeftPanelVisible] = useState(true);
   const [videoInfoExpanded, setVideoInfoExpanded] = useState(true);
@@ -89,6 +98,10 @@ export function VideoEdit() {
   const [isInverseMode, setIsInverseMode] = useState(false);
   const [selectMode, setSelectMode] = useState<'start' | 'end'>('start');
   
+  const [mergeOrder, setMergeOrder] = useState<number[]>([]);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  
   const { 
     isConfigured, 
     isElectronEnv, 
@@ -101,6 +114,10 @@ export function VideoEdit() {
     stopTask,
     addTaskLog,
     generateUniquePath,
+    setPendingCompareVideos,
+    pendingVideosForEdit,
+    clearPendingVideosForEdit,
+    setActiveTab,
   } = useFFmpegStore();
   
   const toast = useToast();
@@ -110,6 +127,96 @@ export function VideoEdit() {
   useEffect(() => {
     checkConfig();
   }, [checkConfig]);
+
+  useEffect(() => {
+    if (pendingVideosForEdit && pendingVideosForEdit.paths.length > 0) {
+      const loadPendingVideos = async () => {
+        const newVideos: VideoFileInfo[] = [];
+        for (const filePath of pendingVideosForEdit.paths) {
+          const info = await loadVideoInfo(filePath);
+          if (info) {
+            newVideos.push(info);
+          }
+        }
+        if (newVideos.length > 0) {
+          setVideos(prev => {
+            const existingPaths = new Set(prev.map(v => v.path));
+            const uniqueNewVideos = newVideos.filter(v => !existingPaths.has(v.path));
+            return [...prev, ...uniqueNewVideos];
+          });
+          setViewingIndex(0);
+          toast.success(`已从视频整合导入 ${newVideos.length} 个视频`);
+        }
+        clearPendingVideosForEdit();
+      };
+      loadPendingVideos();
+    }
+  }, [pendingVideosForEdit, clearPendingVideosForEdit, toast]);
+
+  useEffect(() => {
+    if (videos.length > 0) {
+      const newIndices = videos.map((_, i) => i);
+      const existingValid = mergeOrder.filter(i => i < videos.length);
+      const newItems = newIndices.filter(i => !mergeOrder.includes(i));
+      setMergeOrder([...existingValid, ...newItems]);
+    } else {
+      setMergeOrder([]);
+    }
+  }, [videos.length]);
+
+  const toggleMergeSelection = (index: number) => {
+    if (mergeOrder.includes(index)) {
+      setMergeOrder(mergeOrder.filter(i => i !== index));
+    } else {
+      setMergeOrder([...mergeOrder, index]);
+    }
+  };
+
+  const moveMergeItem = (fromIndex: number, toIndex: number) => {
+    const newOrder = [...mergeOrder];
+    const [removed] = newOrder.splice(fromIndex, 1);
+    newOrder.splice(toIndex, 0, removed);
+    setMergeOrder(newOrder);
+  };
+
+  const calculateMergeDuration = (): number => {
+    return mergeOrder.reduce((total, idx) => {
+      if (idx < videos.length) {
+        return total + videos[idx].duration;
+      }
+      return total;
+    }, 0);
+  };
+
+  const checkMergeCompatibility = (): { 
+    compatible: boolean; 
+    issues: string[];
+    details: { width: number; height: number; codec: string; fps: number; audioCodec: string } | null;
+  } => {
+    const selectedVideos = mergeOrder.map(idx => videos[idx]).filter(Boolean);
+    if (selectedVideos.length < 2) return { compatible: true, issues: [], details: null };
+
+    const first = selectedVideos[0];
+    const issues: string[] = [];
+
+    const sameResolution = selectedVideos.every(v => v.width === first.width && v.height === first.height);
+    const sameCodec = selectedVideos.every(v => v.codec === first.codec);
+    const sameFps = selectedVideos.every(v => Math.abs(v.fps - first.fps) < 0.5);
+    const sameAudioCodec = selectedVideos.every(v => v.audioCodec === first.audioCodec);
+
+    if (!sameResolution) issues.push('分辨率不一致');
+    if (!sameCodec) issues.push('视频编码不一致');
+    if (!sameFps) issues.push('帧率不一致');
+    if (!sameAudioCodec) issues.push('音频编码不一致');
+
+    return {
+      compatible: issues.length === 0,
+      issues,
+      details: { width: first.width, height: first.height, codec: first.codec, fps: first.fps, audioCodec: first.audioCodec },
+    };
+  };
+
+  const [mergeMode, setMergeMode] = useState<'auto' | 'reencode'>('auto');
 
   const getVideoFrame = useCallback(async (filePath: string, timeSeconds: number): Promise<string> => {
     try {
@@ -122,6 +229,102 @@ export function VideoEdit() {
     } catch {}
     return '';
   }, []);
+
+  const convertToCompareData = useCallback((video: VideoFileInfo, tag: CompareVideoData['tag']): CompareVideoData => {
+    return {
+      path: video.path,
+      name: video.name,
+      size: video.size,
+      duration: video.duration,
+      width: video.width,
+      height: video.height,
+      codec: video.codec,
+      fps: video.fps,
+      bitrate: video.bitrate,
+      audioCodec: video.audioCodec,
+      audioSampleRate: video.audioSampleRate,
+      audioChannels: video.audioChannels,
+      audioBitrate: video.audioBitrate,
+      format: video.format,
+      thumbnail: video.thumbnail,
+      tag,
+    };
+  }, []);
+
+  const loadVideoInfoForCompare = useCallback(async (filePath: string, tag: CompareVideoData['tag']): Promise<CompareVideoData | null> => {
+    try {
+      await ffmpegConfigStorage.ready();
+      const ffprobePath = ffmpegConfigStorage.getFFprobePath();
+      
+      if (!ffprobePath) return null;
+      
+      const mediaInfo = await window.electronAPI.ffmpeg.getMediaInfo(ffprobePath, filePath);
+      if (!mediaInfo) return null;
+      
+      const thumbnail = await getVideoFrame(filePath, 1);
+      const fileName = filePath.split(/[/\\]/).pop() || filePath;
+      
+      return {
+        path: filePath,
+        name: fileName,
+        size: mediaInfo.size || 0,
+        duration: mediaInfo.duration || 0,
+        width: mediaInfo.video?.width || 0,
+        height: mediaInfo.video?.height || 0,
+        codec: mediaInfo.video?.codec || '',
+        fps: mediaInfo.video?.fps || 0,
+        bitrate: mediaInfo.video?.bitrate || 0,
+        audioCodec: mediaInfo.audio?.codec || '',
+        audioSampleRate: mediaInfo.audio?.sampleRate || 0,
+        audioChannels: mediaInfo.audio?.channels || 0,
+        audioBitrate: mediaInfo.audio?.bitrate || 0,
+        format: mediaInfo.format || '',
+        thumbnail,
+        tag,
+      };
+    } catch {
+      return null;
+    }
+  }, [getVideoFrame]);
+
+  const importToCompare = useCallback(async (
+    type: 'edit' | 'merge',
+    originalVideos: VideoFileInfo[],
+    outputFilePath: string
+  ) => {
+    const compareVideos: CompareVideoData[] = [];
+    
+    if (type === 'edit') {
+      const originalData = convertToCompareData(originalVideos[0], 'original');
+      compareVideos.push(originalData);
+      
+      const editedData = await loadVideoInfoForCompare(outputFilePath, 'edited');
+      if (editedData) {
+        compareVideos.push(editedData);
+      }
+    } else {
+      for (const video of originalVideos) {
+        const data = convertToCompareData(video, 'before-merge');
+        compareVideos.push(data);
+      }
+      
+      const mergedData = await loadVideoInfoForCompare(outputFilePath, 'after-merge');
+      if (mergedData) {
+        compareVideos.push(mergedData);
+      }
+    }
+    
+    if (compareVideos.length > 0) {
+      const pendingData: PendingCompareVideos = {
+        id: `compare-${Date.now()}`,
+        type,
+        videos: compareVideos,
+        timestamp: Date.now(),
+      };
+      setPendingCompareVideos(pendingData);
+      toast.success(`已自动导入 ${compareVideos.length} 个视频到视频整合，可切换查看对比`);
+    }
+  }, [convertToCompareData, loadVideoInfoForCompare, setPendingCompareVideos, toast]);
 
   useEffect(() => {
     if (videos.length > 0 && viewingIndex < videos.length) {
@@ -532,6 +735,58 @@ export function VideoEdit() {
     setCustomFileName('');
   };
 
+  const sendAllToVideoProcess = async () => {
+    if (videos.length === 0) {
+      toast.info('没有视频可发送');
+      return;
+    }
+    
+    try {
+      await ffmpegConfigStorage.ready();
+      const ffprobePath = ffmpegConfigStorage.getFFprobePath();
+      
+      if (!ffprobePath) {
+        toast.error('请先配置 FFmpeg');
+        return;
+      }
+      
+      const compareVideos: CompareVideoData[] = [];
+      
+      for (const video of videos) {
+        const mediaInfo = await window.electronAPI.ffmpeg.getMediaInfo(ffprobePath, video.path);
+        
+        compareVideos.push({
+          path: video.path,
+          name: video.name,
+          size: video.size,
+          duration: video.duration,
+          width: video.width,
+          height: video.height,
+          codec: video.codec,
+          fps: video.fps,
+          bitrate: video.bitrate,
+          audioCodec: mediaInfo?.audio?.codec || '',
+          audioSampleRate: mediaInfo?.audio?.sampleRate || 0,
+          audioChannels: mediaInfo?.audio?.channels || 0,
+          audioBitrate: mediaInfo?.audio?.bitrate || 0,
+          format: video.name.split('.').pop() || '',
+          thumbnail: video.thumbnail || '',
+        });
+      }
+      
+      setPendingCompareVideos({
+        id: `videoEdit-${Date.now()}`,
+        type: 'edit',
+        videos: compareVideos,
+        timestamp: Date.now(),
+      });
+      setActiveTab('video');
+      toast.success(`已发送 ${videos.length} 个视频到视频整合`);
+    } catch (error) {
+      toast.error('发送失败');
+    }
+  };
+
   const getOutputFilePath = (video: VideoFileInfo, extension: string, suffix?: string, customName?: string): string => {
     const inputPath = video.path;
     const lastSepIndex = Math.max(inputPath.lastIndexOf('/'), inputPath.lastIndexOf('\\'));
@@ -582,6 +837,7 @@ export function VideoEdit() {
       completeTask(taskId, result.success, result.error);
       if (result.success) {
         toast.success('处理完成！');
+        await importToCompare('edit', [currentVideo!], outputFilePath);
       } else {
         toast.error('处理失败');
       }
@@ -682,6 +938,7 @@ export function VideoEdit() {
           if (renameResult.success) {
             completeTask(taskId, true);
             toast.success('处理完成！');
+            await importToCompare('edit', [currentVideo!], outputFilePath);
           } else {
             completeTask(taskId, false, renameResult.error || '移动文件失败');
             toast.error('处理失败');
@@ -699,6 +956,7 @@ export function VideoEdit() {
       if (mergeResult.success) {
         addTaskLog(taskId, `[info] 临时文件已保存到: ${tempFolder}`);
         toast.success('处理完成！');
+        await importToCompare('edit', [currentVideo!], outputFilePath);
       } else {
         toast.error('处理失败');
       }
@@ -709,26 +967,48 @@ export function VideoEdit() {
   };
 
   const executeVideoMergeFlow = async () => {
-    if (videos.length < 2) {
+    const selectedVideos = mergeOrder.map(idx => videos[idx]).filter(Boolean);
+    
+    if (selectedVideos.length < 2) {
       toast.error('合并功能需要至少选择2个视频文件');
       return;
     }
     
-    const outputFilePath = generateUniquePath(getOutputFilePath(currentVideo!, 'mp4', 'merged', customFileName));
+    const outputFilePath = generateUniquePath(getOutputFilePath(videos[0], 'mp4', 'merged', customFileName));
+    const compat = checkMergeCompatibility();
+    const needReencode = !compat.compatible && mergeMode === 'reencode';
     
-    const taskId = startTask('videoEdit', currentVideo!.name, currentVideo!.path, outputFilePath);
+    const taskId = startTask('videoEdit', videos[0].name, videos[0].path, outputFilePath);
     addTaskLog(taskId, `[info] FFmpeg Studio - 视频合并`);
-    addTaskLog(taskId, `[info] 合并 ${videos.length} 个视频文件`);
+    addTaskLog(taskId, `[info] 合并 ${selectedVideos.length} 个视频文件`);
+    addTaskLog(taskId, `[info] 合并顺序: ${selectedVideos.map(v => v.name).join(' -> ')}`);
+    addTaskLog(taskId, `[info] 合并模式: ${needReencode ? '重编码合并' : '快速合并'}`);
+    if (compat.issues.length > 0) {
+      addTaskLog(taskId, `[warn] 参数不一致: ${compat.issues.join(', ')}`);
+    }
 
     try {
-      const result = await ffmpegRendererService.executeVideoMerge(
-        videos.map(v => v.path),
-        outputFilePath,
-        taskId
-      );
+      let result;
+      if (needReencode && compat.details) {
+        addTaskLog(taskId, `[info] 目标编码: ${compat.details.width}x${compat.details.height} libx264 30fps aac`);
+        result = await ffmpegRendererService.executeReencodeMerge(
+          selectedVideos.map(v => v.path),
+          outputFilePath,
+          compat.details.width,
+          compat.details.height,
+          taskId
+        );
+      } else {
+        result = await ffmpegRendererService.executeVideoMerge(
+          selectedVideos.map(v => v.path),
+          outputFilePath,
+          taskId
+        );
+      }
       completeTask(taskId, result.success, result.error);
       if (result.success) {
         toast.success('处理完成！');
+        await importToCompare('merge', selectedVideos, outputFilePath);
       } else {
         toast.error('处理失败');
       }
@@ -775,6 +1055,62 @@ export function VideoEdit() {
     if (moduleTasks.length > 0) {
       await stopTask(moduleTasks[0].id);
       toast.info('已停止处理');
+    }
+  };
+
+  const saveCurrentFrame = async () => {
+    if (!currentVideo || !isElectronEnv) {
+      toast.error('请先选择视频');
+      return;
+    }
+    
+    try {
+      await ffmpegConfigStorage.ready();
+      const ffmpegPath = ffmpegConfigStorage.getFFmpegPath();
+      
+      if (!ffmpegPath) {
+        toast.error('请先配置 FFmpeg');
+        return;
+      }
+      
+      const timeSeconds = currentTime;
+      const baseName = currentVideo.name.replace(/\.[^.]+$/, '');
+      
+      let outputDir: string;
+      if (outputPath && outputPath.trim()) {
+        outputDir = outputPath.trim();
+      } else {
+        const videoPath = currentVideo.path;
+        const lastSepIndex = Math.max(
+          videoPath.lastIndexOf('/'),
+          videoPath.lastIndexOf('\\')
+        );
+        outputDir = lastSepIndex >= 0 ? videoPath.substring(0, lastSepIndex) : '.';
+      }
+      
+      const isWindows = outputDir.includes('\\') || (!outputDir.includes('/') && typeof process !== 'undefined' && process.platform === 'win32');
+      const separator = isWindows ? '\\' : '/';
+      
+      const cleanDir = outputDir.endsWith(separator) ? outputDir.slice(0, -1) : outputDir;
+      const outputPathFile = `${cleanDir}${separator}${baseName}_frame_${Math.floor(timeSeconds)}s.png`;
+      
+      const args = [
+        '-ss', timeSeconds.toString(),
+        '-i', currentVideo.path,
+        '-vframes', '1',
+        '-y',
+        outputPathFile
+      ];
+      
+      const result = await ffmpegRendererService.execute(args);
+      
+      if (result.success) {
+        toast.success(`已保存帧到: ${outputPathFile}`);
+      } else {
+        toast.error('保存帧失败');
+      }
+    } catch (error) {
+      toast.error('保存帧失败: ' + (error instanceof Error ? error.message : '未知错误'));
     }
   };
 
@@ -904,35 +1240,185 @@ export function VideoEdit() {
         );
       case 'merge':
         return (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Combine className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
-              <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>视频合并</span>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Combine className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>视频合并</span>
+              </div>
+              {videos.length > 1 && (
+                <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: 'var(--primary-color)' }}>
+                  {mergeOrder.length}/{videos.length}
+                </span>
+              )}
             </div>
-            <div 
-              className="p-2 rounded-lg text-[10px]"
-              style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: 'var(--text-secondary)' }}
-            >
-              <p>将按文件列表顺序合并所有视频。</p>
-              <p className="mt-1">注意: 所有视频需要具有相同的分辨率和编码格式。</p>
-            </div>
-            {videos.length > 1 && (
+            
+            {videos.length < 2 ? (
               <div 
-                className="rounded-lg p-2"
+                className="p-4 rounded-lg text-center"
                 style={{ backgroundColor: 'var(--bg-tertiary)' }}
               >
-                <div className="text-xs mb-2" style={{ color: 'var(--text-secondary)' }}>合并顺序:</div>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {videos.map((v, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <span className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: 'var(--primary-color)', color: 'white', fontSize: '10px' }}>
-                        {i + 1}
-                      </span>
-                      <span className="truncate" style={{ color: 'var(--text-primary)' }}>{v.name}</span>
-                    </div>
-                  ))}
-                </div>
+                <Combine className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }} />
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>需要至少 2 个视频</p>
               </div>
+            ) : (
+              <>
+                {mergeOrder.length >= 2 && (
+                  <>
+                    {(() => {
+                      const compat = checkMergeCompatibility();
+                      return compat.compatible ? (
+                        <div 
+                          className="flex items-center gap-2 p-2 rounded-lg transition-all hover:bg-green-500/20 cursor-default"
+                          style={{ backgroundColor: 'rgba(34, 197, 94, 0.1)' }}
+                        >
+                          <CheckCircle className="w-4 h-4" style={{ color: '#22c55e' }} />
+                          <span className="text-xs font-medium" style={{ color: '#22c55e' }}>参数兼容</span>
+                          <span className="text-xs font-mono ml-auto font-medium" style={{ color: '#22c55e' }}>
+                            {secondsToTime(calculateMergeDuration())}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div 
+                            className="p-2 rounded-lg transition-all"
+                            style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)' }}
+                          >
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <AlertCircle className="w-4 h-4" style={{ color: '#ef4444' }} />
+                              <span className="text-xs font-medium" style={{ color: '#ef4444' }}>参数不一致</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {compat.issues.map((issue, i) => (
+                                <span key={i} className="text-[10px] px-2 py-0.5 rounded" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)', color: '#dc2626' }}>
+                                  {issue}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => setMergeMode('reencode')}
+                              className="flex-1 text-xs py-1.5 rounded-lg transition-all duration-200 hover:scale-[1.02]"
+                              style={{
+                                backgroundColor: mergeMode === 'reencode' ? 'rgba(245, 158, 11, 0.2)' : 'var(--bg-tertiary)',
+                                color: mergeMode === 'reencode' ? '#d97706' : 'var(--text-secondary)',
+                                border: `1px solid ${mergeMode === 'reencode' ? '#f59e0b' : 'transparent'}`,
+                              }}
+                            >
+                              重编码合并
+                            </button>
+                            <button
+                              onClick={() => setMergeMode('auto')}
+                              className="flex-1 text-xs py-1.5 rounded-lg transition-all duration-200 hover:scale-[1.02]"
+                              style={{
+                                backgroundColor: mergeMode === 'auto' ? 'rgba(59, 130, 246, 0.2)' : 'var(--bg-tertiary)',
+                                color: mergeMode === 'auto' ? 'var(--primary-color)' : 'var(--text-secondary)',
+                                border: `1px solid ${mergeMode === 'auto' ? 'var(--primary-color)' : 'transparent'}`,
+                              }}
+                            >
+                              快速合并
+                            </button>
+                          </div>
+                          <div className="flex items-center justify-between text-xs p-2 rounded-lg" style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)' }}>
+                            <span style={{ color: 'var(--text-secondary)' }}>预计时长</span>
+                            <span className="font-mono font-medium" style={{ color: 'var(--primary-color)' }}>
+                              {secondsToTime(calculateMergeDuration())}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>拖拽调整顺序</span>
+                  <button
+                    onClick={() => {
+                      if (mergeOrder.length === videos.length) {
+                        setMergeOrder([]);
+                      } else {
+                        setMergeOrder(videos.map((_, i) => i));
+                      }
+                    }}
+                    className="text-xs px-2 py-1 rounded transition-all duration-200 hover:scale-105"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+                  >
+                    {mergeOrder.length === videos.length ? '取消全选' : '全选'}
+                  </button>
+                </div>
+                
+                <div 
+                  className="rounded-lg p-1.5 space-y-1 max-h-40 overflow-y-auto"
+                  style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                >
+                  {mergeOrder.map((videoIdx, orderIdx) => {
+                    const video = videos[videoIdx];
+                    if (!video) return null;
+                    
+                    return (
+                      <div
+                        key={videoIdx}
+                        draggable
+                        onDragStart={(e) => { setDraggedIndex(orderIdx); e.dataTransfer.effectAllowed = 'move'; }}
+                        onDragOver={(e) => { e.preventDefault(); setDragOverIndex(orderIdx); }}
+                        onDragLeave={() => setDragOverIndex(null)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          if (draggedIndex !== null && draggedIndex !== orderIdx) moveMergeItem(draggedIndex, orderIdx);
+                          setDraggedIndex(null);
+                          setDragOverIndex(null);
+                        }}
+                        onDragEnd={() => { setDraggedIndex(null); setDragOverIndex(null); }}
+                        className="flex items-center gap-2 p-2 rounded-lg cursor-grab active:cursor-grabbing transition-all duration-200 hover:bg-white/5 group"
+                        style={{ 
+                          backgroundColor: dragOverIndex === orderIdx ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+                          border: `1px solid ${dragOverIndex === orderIdx ? 'var(--primary-color)' : 'transparent'}`,
+                        }}
+                      >
+                        <span className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold flex-shrink-0" style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}>
+                          {orderIdx + 1}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-xs truncate block" style={{ color: 'var(--text-primary)' }}>{video.name}</span>
+                          <span className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>
+                            {secondsToTime(video.duration)} · {video.width}x{video.height}
+                          </span>
+                        </div>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); toggleMergeSelection(videoIdx); }} 
+                          className="p-1 rounded opacity-0 group-hover:opacity-100 transition-all duration-200 hover:bg-red-500/20"
+                          style={{ color: 'var(--text-tertiary)' }}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                
+                {videos.filter((_, i) => !mergeOrder.includes(i)).length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>未选中:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {videos.map((video, idx) => 
+                        !mergeOrder.includes(idx) && (
+                          <button
+                            key={idx}
+                            onClick={() => toggleMergeSelection(idx)}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] transition-all duration-200 hover:scale-105"
+                            style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span className="max-w-[80px] truncate">{video.name}</span>
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
         );
@@ -992,19 +1478,50 @@ export function VideoEdit() {
       </AnimatePresence>
       
       <div className="flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Film className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
-          <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>视频处理</h2>
-          <Badge color="blue">编辑</Badge>
-          {isCurrentModuleProcessing && (
-            <Badge color="success">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                处理中
-              </span>
-            </Badge>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Film className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
+            <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>视频处理</h2>
+            <Badge color="blue">编辑</Badge>
+            {isCurrentModuleProcessing && (
+              <Badge color="success">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  处理中
+                </span>
+              </Badge>
+            )}
+          </div>
+          
+          {videos.length > 0 && (
+            <div 
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg cursor-pointer transition-all duration-200 hover:scale-[1.02]"
+              style={{ 
+                backgroundColor: showAnalysis ? 'rgba(6, 182, 212, 0.15)' : 'var(--bg-secondary)', 
+                border: showAnalysis ? '1px solid var(--primary-color)' : '1px solid var(--border-color)',
+              }}
+              onClick={() => setShowAnalysis(!showAnalysis)}
+              title="点击查看视频分析"
+            >
+              <TrendingUp className="w-4 h-4 flex-shrink-0" style={{ color: showAnalysis ? 'var(--primary-color)' : 'var(--text-tertiary)' }} />
+              <div className="flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-1">
+                  <span style={{ color: 'var(--text-tertiary)' }}>文件:</span>
+                  <span className="font-medium" style={{ color: 'var(--text-primary)' }}>{videos.length}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span style={{ color: 'var(--text-tertiary)' }}>大小:</span>
+                  <span className="font-medium" style={{ color: '#8b5cf6' }}>{formatSize(videos.reduce((sum, v) => sum + v.size, 0))}</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span style={{ color: 'var(--text-tertiary)' }}>时长:</span>
+                  <span className="font-medium" style={{ color: '#10b981' }}>{formatDuration(videos.reduce((sum, v) => sum + v.duration, 0))}</span>
+                </div>
+              </div>
+            </div>
           )}
         </div>
+        
         <div className="flex items-center gap-2">
           <div
             className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all min-w-[120px] hover:scale-[1.02]`}
@@ -1074,8 +1591,12 @@ export function VideoEdit() {
               <>
                 <Square className="w-3.5 h-3.5" />
                 <span>停止</span>
-                {currentModuleTask && (
-                  <span className="text-[10px] opacity-80">{Math.floor(currentModuleTask.progress)}%</span>
+                {currentModuleTask && currentModuleTask.progress !== undefined && (
+                  <span className="text-[10px] opacity-80">
+                    {Number.isFinite(currentModuleTask.progress) 
+                      ? `${Math.floor(currentModuleTask.progress)}%` 
+                      : '0%'}
+                  </span>
                 )}
               </>
             ) : (
@@ -1145,12 +1666,37 @@ export function VideoEdit() {
             >
               {videos.length === 0 && (
                 <div 
-                  className="rounded-xl p-4 text-center"
-                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+                  className="rounded-xl p-4 text-center cursor-pointer transition-all"
+                  style={{ 
+                    backgroundColor: isDragOver ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-secondary)', 
+                    border: `2px dashed ${isDragOver ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                  }}
+                  onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.multiple = true;
+                    input.accept = 'video/*';
+                    input.onchange = (e) => {
+                      const files = Array.from((e.target as HTMLInputElement).files || []);
+                      handleFilesSelected(files);
+                    };
+                    input.click();
+                  }}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(true); }}
+                  onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragOver(false); }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIsDragOver(false);
+                    const files = Array.from(e.dataTransfer.files);
+                    handleFilesSelected(files);
+                  }}
                 >
-                  <Upload className="w-8 h-8 mx-auto mb-2" style={{ color: 'var(--text-tertiary)' }} />
-                  <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>暂无视频文件</p>
-                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-tertiary)' }}>点击上方按钮导入</p>
+                  <Upload className="w-8 h-8 mx-auto mb-2" style={{ color: isDragOver ? 'var(--primary-color)' : 'var(--text-tertiary)' }} />
+                  <p className="text-xs" style={{ color: isDragOver ? 'var(--primary-color)' : 'var(--text-secondary)' }}>
+                    {isDragOver ? '松开导入视频' : '点击或拖拽导入视频'}
+                  </p>
+                  <p className="text-[10px] mt-1" style={{ color: 'var(--text-tertiary)' }}>支持 mp4, mkv, avi, mov, webm 等格式</p>
                 </div>
               )}
               {videos.length > 0 && (
@@ -1166,13 +1712,23 @@ export function VideoEdit() {
                         {videos.length}
                       </span>
                     </div>
-                    <button
-                      onClick={clearAllVideos}
-                      className="text-[10px] px-2 py-1 rounded transition-colors"
-                      style={{ color: 'var(--error-color)' }}
-                    >
-                      清空
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={sendAllToVideoProcess}
+                        className="text-[10px] px-2 py-1 rounded transition-colors"
+                        style={{ color: 'var(--primary-color)' }}
+                        title="发送所有视频到视频整合"
+                      >
+                        发送
+                      </button>
+                      <button
+                        onClick={clearAllVideos}
+                        className="text-[10px] px-2 py-1 rounded transition-colors"
+                        style={{ color: 'var(--error-color)' }}
+                      >
+                        清空
+                      </button>
+                    </div>
                   </div>
                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
                     {videos.map((v, i) => (
@@ -1330,9 +1886,65 @@ export function VideoEdit() {
           {currentVideo ? (
             <div className="flex-1 flex flex-col gap-4 min-h-0">
               <div 
-                className="flex-1 rounded-xl overflow-hidden flex items-center justify-center min-h-0"
+                className="flex-1 rounded-xl overflow-hidden flex items-center justify-center min-h-0 relative"
                 style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
               >
+                {showAnalysis ? (
+                  <div className="w-full h-full flex flex-col p-4 overflow-auto">
+                    <div className="flex items-center gap-2 mb-4">
+                      <TrendingUp className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>视频分析</span>
+                      <Badge color="blue">{videos.length} 个文件</Badge>
+                    </div>
+                    
+                    <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                        <div className="text-[10px] mb-1" style={{ color: 'var(--text-tertiary)' }}>总大小</div>
+                        <div className="text-base font-bold" style={{ color: '#8b5cf6' }}>{formatSize(videos.reduce((sum, v) => sum + v.size, 0))}</div>
+                      </div>
+                      <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                        <div className="text-[10px] mb-1" style={{ color: 'var(--text-tertiary)' }}>总时长</div>
+                        <div className="text-base font-bold" style={{ color: '#10b981' }}>{formatDuration(videos.reduce((sum, v) => sum + v.duration, 0))}</div>
+                      </div>
+                      <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                        <div className="text-[10px] mb-1" style={{ color: 'var(--text-tertiary)' }}>平均帧率</div>
+                        <div className="text-base font-bold" style={{ color: '#f59e0b' }}>{(videos.reduce((sum, v) => sum + v.fps, 0) / videos.length).toFixed(2)} fps</div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex-1 overflow-auto space-y-2">
+                      {videos.map((video, index) => (
+                        <div 
+                          key={index}
+                          className="flex items-center gap-3 p-2 rounded-lg transition-all cursor-pointer"
+                          style={{ 
+                            backgroundColor: viewingIndex === index ? 'rgba(59, 130, 246, 0.15)' : 'var(--bg-tertiary)',
+                            border: viewingIndex === index ? '1px solid var(--primary-color)' : '1px solid transparent'
+                          }}
+                          onClick={() => selectMainFile(index)}
+                        >
+                          <div className="w-16 h-10 rounded overflow-hidden flex-shrink-0" style={{ backgroundColor: 'var(--bg-primary)' }}>
+                            {video.thumbnail ? (
+                              <img src={video.thumbnail} alt="" className="w-full h-full object-cover" draggable={false} />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Video className="w-4 h-4" style={{ color: 'var(--text-tertiary)', opacity: 0.5 }} />
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium truncate" style={{ color: 'var(--text-primary)' }}>{video.name}</div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px]" style={{ color: '#8b5cf6' }}>{formatSize(video.size)}</span>
+                              <span className="text-[10px]" style={{ color: '#10b981' }}>{formatDuration(video.duration)}</span>
+                              <span className="text-[10px]" style={{ color: '#f59e0b' }}>{video.width}x{video.height}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
                 <div 
                   className="relative cursor-pointer group w-full h-full flex items-center justify-center"
                   onClick={() => (currentFrame || currentVideo.thumbnail) && setShowFullscreen(true)}
@@ -1347,6 +1959,7 @@ export function VideoEdit() {
                           backgroundColor: 'var(--bg-tertiary)',
                           transform: `rotate(${rotation}deg) scaleX(${flipH ? -1 : 1}) scaleY(${flipV ? -1 : 1})`
                         }}
+                        draggable={false}
                       />
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center pointer-events-none">
                         <Maximize2 className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -1364,7 +1977,20 @@ export function VideoEdit() {
                     <span className="text-[10px] text-white">{currentVideo.width}x{currentVideo.height}</span>
                     <span className="text-[10px] text-white">{formatDuration(currentVideo.duration)}</span>
                   </div>
+                  
+                  {currentVideo && !showAnalysis && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); saveCurrentFrame(); }}
+                      className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1.5 rounded-lg text-[10px] font-medium text-white transition-all duration-200 z-10 hover:scale-105 hover:shadow-lg group"
+                      style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}
+                      title="保存当前帧为图片"
+                    >
+                      <Image className="w-3.5 h-3.5 transition-transform duration-200 group-hover:scale-110" style={{ color: '#10b981' }} />
+                      <span className="group-hover:text-green-400 transition-colors duration-200">保存帧</span>
+                    </button>
+                  )}
                 </div>
+                )}
               </div>
 
               <AnimatePresence>
@@ -1578,6 +2204,13 @@ export function VideoEdit() {
         </div>
 
         <div className="w-72 flex-shrink-0 space-y-4 overflow-y-auto pr-2" style={{ scrollbarGutter: 'stable' }}>
+          <div 
+            className="rounded-xl p-4"
+            style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+          >
+            {renderSettings()}
+          </div>
+          
           {currentVideo && (
             <div 
               className="rounded-xl overflow-hidden"
@@ -1693,13 +2326,6 @@ export function VideoEdit() {
               </AnimatePresence>
             </div>
           )}
-
-          <div 
-            className="rounded-xl p-4"
-            style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
-          >
-            {renderSettings()}
-          </div>
         </div>
       </div>
 

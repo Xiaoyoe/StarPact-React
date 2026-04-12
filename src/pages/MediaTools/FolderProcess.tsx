@@ -2,11 +2,12 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { 
   FolderOpen, Video, Merge, Layers, FolderSync, 
   Play, Square, Info, AlertCircle, FileVideo,
-  ChevronDown, ChevronRight, HardDrive, Clock, MonitorPlay, Gauge, ExternalLink, X, Copy, Check
+  ChevronDown, ChevronRight, HardDrive, Clock, MonitorPlay, Gauge, ExternalLink, X, Copy, Check,
+  Send, Film
 } from 'lucide-react';
 import { Badge, ProgressBar, Terminal } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useFFmpegStore } from '@/stores/ffmpegStore';
+import { useFFmpegStore, type PendingVideosForEdit, type CompareVideoData } from '@/stores/ffmpegStore';
 import { useToast } from '@/components/Toast';
 import { ffmpegConfigStorage } from '@/services/storage/FFmpegConfigStorage';
 
@@ -97,8 +98,10 @@ export function FolderProcess() {
   const [isDragging, setIsDragging] = useState(false);
   const [autoScan, setAutoScan] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; video: VideoInfo } | null>(null);
   
-  const { isConfigured, isElectronEnv } = useFFmpegStore();
+  const { isConfigured, isElectronEnv, setPendingVideosForEdit, setActiveTab, setPendingCompareVideos } = useFFmpegStore();
   const toast = useToast();
 
   useEffect(() => {
@@ -110,6 +113,86 @@ export function FolderProcess() {
   const addLog = (log: string) => {
     setLogs(prev => [...prev.slice(-100), log]);
   };
+
+  const openFileLocation = async (video: VideoInfo) => {
+    if (window.electronAPI?.file?.showInFolder) {
+      await window.electronAPI.file.showInFolder(video.path);
+    } else {
+      toast.error('此功能需要 Electron 环境');
+    }
+    setContextMenu(null);
+  };
+
+  const sendToVideoEdit = (video: VideoInfo) => {
+    const pendingData: PendingVideosForEdit = {
+      paths: [video.path],
+      timestamp: Date.now(),
+    };
+    setPendingVideosForEdit(pendingData);
+    setActiveTab('videoEdit');
+    toast.success(`已发送 "${video.name}" 到视频处理`);
+    setContextMenu(null);
+  };
+
+  const sendToVideoProcess = async (video: VideoInfo) => {
+    try {
+      await ffmpegConfigStorage.ready();
+      const ffprobePath = ffmpegConfigStorage.getFFprobePath();
+      
+      if (!ffprobePath) {
+        toast.error('请先配置 FFmpeg');
+        return;
+      }
+      
+      const mediaInfo = await window.electronAPI.ffmpeg.getMediaInfo(ffprobePath, video.path);
+      if (!mediaInfo) {
+        toast.error('无法获取视频信息');
+        return;
+      }
+      
+      const compareData: CompareVideoData = {
+        path: video.path,
+        name: video.name,
+        size: video.size,
+        duration: video.duration,
+        width: video.width,
+        height: video.height,
+        codec: video.codec,
+        fps: video.fps,
+        bitrate: video.bitrate,
+        audioCodec: mediaInfo.audio?.codec || '',
+        audioSampleRate: mediaInfo.audio?.sampleRate || 0,
+        audioChannels: mediaInfo.audio?.channels || 0,
+        audioBitrate: mediaInfo.audio?.bitrate || 0,
+        format: video.name.split('.').pop() || '',
+        thumbnail: '',
+      };
+      
+      setPendingCompareVideos({
+        id: `folder-${Date.now()}`,
+        type: 'edit',
+        videos: [compareData],
+        timestamp: Date.now(),
+      });
+      setActiveTab('video');
+      toast.success(`已发送 "${video.name}" 到视频整合`);
+    } catch {
+      toast.error('发送失败');
+    }
+    setContextMenu(null);
+  };
+
+  const handleContextMenu = (e: React.MouseEvent, video: VideoInfo) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setContextMenu({ x: e.clientX, y: e.clientY, video });
+  };
+
+  useEffect(() => {
+    const handleClick = () => setContextMenu(null);
+    window.addEventListener('click', handleClick);
+    return () => window.removeEventListener('click', handleClick);
+  }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -1021,8 +1104,27 @@ export function FolderProcess() {
                   </thead>
                   <tbody>
                     {videos.map((video, index) => (
-                      <tr key={index} style={{ borderTop: '1px solid var(--border-color)' }}>
-                        <td className="px-4 py-2 truncate max-w-[200px]" style={{ color: 'var(--text-primary)' }} title={video.name}>
+                      <tr 
+                        key={index} 
+                        className="transition-all duration-200 cursor-pointer"
+                        style={{ 
+                          borderTop: '1px solid var(--border-color)',
+                          backgroundColor: highlightedIndex === index ? 'rgba(6, 182, 212, 0.1)' : 'transparent',
+                        }}
+                        onMouseEnter={(e) => {
+                          if (highlightedIndex !== index) {
+                            e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)';
+                          }
+                        }}
+                        onMouseLeave={(e) => {
+                          if (highlightedIndex !== index) {
+                            e.currentTarget.style.backgroundColor = 'transparent';
+                          }
+                        }}
+                        onClick={() => setHighlightedIndex(highlightedIndex === index ? null : index)}
+                        onContextMenu={(e) => handleContextMenu(e, video)}
+                      >
+                        <td className="px-4 py-2 truncate max-w-[200px]" style={{ color: highlightedIndex === index ? 'var(--primary-color)' : 'var(--text-primary)' }} title={video.name}>
                           {video.name}
                         </td>
                         <td className="px-4 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
@@ -1208,6 +1310,52 @@ export function FolderProcess() {
           )}
         </div>
       </div>
+
+      {contextMenu && (
+        <div
+          className="fixed rounded-lg shadow-xl py-1 z-50"
+          style={{
+            left: contextMenu.x,
+            top: contextMenu.y,
+            backgroundColor: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            minWidth: '160px',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => openFileLocation(contextMenu.video)}
+            className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors"
+            style={{ color: 'var(--text-primary)' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <FolderOpen className="w-3.5 h-3.5" style={{ color: 'var(--primary-color)' }} />
+            打开文件位置
+          </button>
+          <div className="my-1" style={{ height: '1px', backgroundColor: 'var(--border-color)' }} />
+          <button
+            onClick={() => sendToVideoEdit(contextMenu.video)}
+            className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors"
+            style={{ color: 'var(--text-primary)' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <Send className="w-3.5 h-3.5" style={{ color: '#06b6d4' }} />
+            发送到视频处理
+          </button>
+          <button
+            onClick={() => sendToVideoProcess(contextMenu.video)}
+            className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 transition-colors"
+            style={{ color: 'var(--text-primary)' }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--bg-tertiary)'}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+          >
+            <Film className="w-3.5 h-3.5" style={{ color: '#8b5cf6' }} />
+            发送到视频整合
+          </button>
+        </div>
+      )}
     </div>
   );
 }

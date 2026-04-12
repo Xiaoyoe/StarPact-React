@@ -17,6 +17,37 @@ export interface ProcessingTask {
   logs: string[];
 }
 
+export interface CompareVideoData {
+  path: string;
+  name: string;
+  size: number;
+  duration: number;
+  width: number;
+  height: number;
+  codec: string;
+  fps: number;
+  bitrate: number;
+  audioCodec: string;
+  audioSampleRate: number;
+  audioChannels: number;
+  audioBitrate: number;
+  format: string;
+  thumbnail: string;
+  tag?: 'original' | 'edited' | 'before-merge' | 'after-merge';
+}
+
+export interface PendingCompareVideos {
+  id: string;
+  type: 'edit' | 'merge';
+  videos: CompareVideoData[];
+  timestamp: number;
+}
+
+export interface PendingVideosForEdit {
+  paths: string[];
+  timestamp: number;
+}
+
 interface FFmpegStore {
   isConfigured: boolean;
   isElectronEnv: boolean;
@@ -24,6 +55,10 @@ interface FFmpegStore {
   
   tasks: ProcessingTask[];
   activeTaskIds: Set<string>;
+  pendingCompareVideos: PendingCompareVideos | null;
+  pendingVideosForEdit: PendingVideosForEdit | null;
+  activeTab: string;
+  onTabChange: ((tab: string) => void) | null;
   
   checkConfig: () => Promise<void>;
   generateUniquePath: (basePath: string) => string;
@@ -35,6 +70,15 @@ interface FFmpegStore {
   removeTask: (taskId: string) => void;
   clearCompletedTasks: () => void;
   clearAllLogs: () => void;
+  
+  setPendingCompareVideos: (data: PendingCompareVideos | null) => void;
+  clearPendingCompareVideos: () => void;
+  
+  setPendingVideosForEdit: (data: PendingVideosForEdit | null) => void;
+  clearPendingVideosForEdit: () => void;
+  
+  setActiveTab: (tab: string) => void;
+  setOnTabChange: (callback: ((tab: string) => void) | null) => void;
   
   getTaskById: (taskId: string) => ProcessingTask | undefined;
   getActiveTasks: () => ProcessingTask[];
@@ -57,6 +101,10 @@ export const useFFmpegStore = create<FFmpegStore>((set, get) => ({
   outputPath: '',
   tasks: [],
   activeTaskIds: new Set(),
+  pendingCompareVideos: null,
+  pendingVideosForEdit: null,
+  activeTab: 'format',
+  onTabChange: null,
 
   checkConfig: async () => {
     await ffmpegConfigStorage.ready();
@@ -200,6 +248,34 @@ export const useFFmpegStore = create<FFmpegStore>((set, get) => ({
     set((state) => ({
       tasks: state.tasks.map((t) => ({ ...t, logs: [] })),
     }));
+  },
+
+  setPendingCompareVideos: (data) => {
+    set({ pendingCompareVideos: data });
+  },
+
+  clearPendingCompareVideos: () => {
+    set({ pendingCompareVideos: null });
+  },
+
+  setPendingVideosForEdit: (data) => {
+    set({ pendingVideosForEdit: data });
+  },
+
+  clearPendingVideosForEdit: () => {
+    set({ pendingVideosForEdit: null });
+  },
+
+  setActiveTab: (tab) => {
+    set({ activeTab: tab });
+    const { onTabChange } = get();
+    if (onTabChange) {
+      onTabChange(tab);
+    }
+  },
+
+  setOnTabChange: (callback) => {
+    set({ onTabChange: callback });
   },
 
   getTaskById: (taskId) => {
