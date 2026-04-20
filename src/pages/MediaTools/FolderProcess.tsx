@@ -3,7 +3,7 @@ import {
   FolderOpen, Video, Merge, Layers, FolderSync, 
   Play, Square, Info, AlertCircle, FileVideo,
   ChevronDown, ChevronRight, HardDrive, Clock, MonitorPlay, Gauge, ExternalLink, X, Copy, Check,
-  Send, Film
+  Send, Film, ArrowUp, ArrowDown, ArrowUpDown
 } from 'lucide-react';
 import { Badge, ProgressBar, Terminal } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -22,6 +22,9 @@ interface VideoInfo {
   fps: number;
   bitrate: number;
 }
+
+type FolderSortField = 'name' | 'size' | 'duration' | 'width' | 'fps' | 'bitrate';
+type FolderSortOrder = 'asc' | 'desc' | 'default';
 
 interface CollapsibleSectionProps {
   title: string;
@@ -83,6 +86,13 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function formatBitrate(bps: number): string {
+  if (!bps || bps <= 0) return 'N/A';
+  if (bps < 1000) return bps + ' bps';
+  if (bps < 1000000) return (bps / 1000).toFixed(0) + ' kbps';
+  return (bps / 1000000).toFixed(2) + ' Mbps';
+}
+
 export function FolderProcess() {
   const [folderPath, setFolderPath] = useState('');
   const [videos, setVideos] = useState<VideoInfo[]>([]);
@@ -100,6 +110,8 @@ export function FolderProcess() {
   const [copied, setCopied] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; video: VideoInfo } | null>(null);
+  const [sortField, setSortField] = useState<FolderSortField>('name');
+  const [sortOrder, setSortOrder] = useState<FolderSortOrder>('default');
   
   const { isConfigured, isElectronEnv, setPendingVideosForEdit, setActiveTab, setPendingCompareVideos } = useFFmpegStore();
   const toast = useToast();
@@ -301,6 +313,46 @@ export function FolderProcess() {
     };
   }, [videos]);
 
+  const folderTotalInfo = useMemo(() => {
+    if (videos.length === 0) return null;
+    const totalSize = videos.reduce((sum, v) => sum + v.size, 0);
+    const totalDuration = videos.reduce((sum, v) => sum + v.duration, 0);
+    return { totalSize, totalDuration };
+  }, [videos]);
+
+  const toggleSort = (field: FolderSortField) => {
+    if (sortField === field) {
+      if (sortOrder === 'default') setSortOrder('asc');
+      else if (sortOrder === 'asc') setSortOrder('desc');
+      else setSortOrder('default');
+    } else {
+      setSortField(field);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedVideos = useMemo(() => {
+    if (sortOrder === 'default') return videos;
+    const sorted = [...videos];
+    sorted.sort((a, b) => {
+      let aVal: string | number = '';
+      let bVal: string | number = '';
+      switch (sortField) {
+        case 'name': aVal = a.name.toLowerCase(); bVal = b.name.toLowerCase(); break;
+        case 'size': aVal = a.size; bVal = b.size; break;
+        case 'duration': aVal = a.duration; bVal = b.duration; break;
+        case 'width': aVal = a.width * a.height; bVal = b.width * b.height; break;
+        case 'fps': aVal = a.fps; bVal = b.fps; break;
+        case 'bitrate': aVal = a.bitrate; bVal = b.bitrate; break;
+      }
+      if (typeof aVal === 'string') {
+        return sortOrder === 'asc' ? aVal.localeCompare(bVal as string) : (bVal as string).localeCompare(aVal);
+      }
+      return sortOrder === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+    });
+    return sorted;
+  }, [videos, sortField, sortOrder]);
+
   const toggleFolder = (path: string) => {
     setExpandedFolders(prev => {
       const newSet = new Set(prev);
@@ -428,7 +480,7 @@ export function FolderProcess() {
       lines.push(`  分辨率: ${video.width}x${video.height}`);
       lines.push(`  帧率: ${video.fps.toFixed(2)} fps`);
       lines.push(`  编码: ${video.codec}`);
-      lines.push(`  码率: ${video.bitrate > 0 ? (video.bitrate / 1000).toFixed(0) + ' kbps' : 'N/A'}`);
+      lines.push(`  码率: ${formatBitrate(video.bitrate)}`);
     });
 
     if (videoStats) {
@@ -824,6 +876,10 @@ export function FolderProcess() {
                     <span style={{ color: 'var(--text-tertiary)' }}>总大小</span>
                     <span style={{ color: 'var(--primary-color)' }}>{formatSize(videos.reduce((sum, v) => sum + v.size, 0))}</span>
                   </div>
+                  <div className="flex items-center justify-between mt-1">
+                    <span style={{ color: 'var(--text-tertiary)' }}>总时长</span>
+                    <span style={{ color: 'var(--primary-color)' }}>{formatDuration(videos.reduce((sum, v) => sum + v.duration, 0))}</span>
+                  </div>
                 </div>
                 
                 {videoStats && (
@@ -1077,6 +1133,11 @@ export function FolderProcess() {
                   <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}>
                     {videos.length}
                   </span>
+                  {folderTotalInfo && (
+                    <span className="text-xs px-2 py-0.5 rounded" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-tertiary)' }}>
+                      总大小: {formatSize(folderTotalInfo.totalSize)} · 总时长: {formatDuration(folderTotalInfo.totalDuration)}
+                    </span>
+                  )}
                 </div>
                 <button
                   onClick={copyAllVideoInfo}
@@ -1094,18 +1155,31 @@ export function FolderProcess() {
                 <table className="w-full text-xs">
                   <thead style={{ backgroundColor: 'var(--bg-tertiary)' }}>
                     <tr>
-                      <th className="px-4 py-2 text-left" style={{ color: 'var(--text-tertiary)' }}>文件名</th>
-                      <th className="px-4 py-2 text-center" style={{ color: 'var(--text-tertiary)' }}>大小</th>
-                      <th className="px-4 py-2 text-center" style={{ color: 'var(--text-tertiary)' }}>时长</th>
-                      <th className="px-4 py-2 text-center" style={{ color: 'var(--text-tertiary)' }}>分辨率</th>
-                      <th className="px-4 py-2 text-center" style={{ color: 'var(--text-tertiary)' }}>编码</th>
-                      <th className="px-4 py-2 text-center" style={{ color: 'var(--text-tertiary)' }}>帧率</th>
+                      <th className="px-3 py-2 text-left cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }} onClick={() => toggleSort('name')}>
+                        <span className="flex items-center gap-0.5">文件名 {sortField === 'name' ? (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : sortOrder === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUpDown className="w-3 h-3 opacity-30" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}</span>
+                      </th>
+                      <th className="px-3 py-2 text-center cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }} onClick={() => toggleSort('size')}>
+                        <span className="flex items-center justify-center gap-0.5">大小 {sortField === 'size' ? (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : sortOrder === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUpDown className="w-3 h-3 opacity-30" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}</span>
+                      </th>
+                      <th className="px-3 py-2 text-center cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }} onClick={() => toggleSort('duration')}>
+                        <span className="flex items-center justify-center gap-0.5">时长 {sortField === 'duration' ? (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : sortOrder === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUpDown className="w-3 h-3 opacity-30" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}</span>
+                      </th>
+                      <th className="px-3 py-2 text-center cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }} onClick={() => toggleSort('width')}>
+                        <span className="flex items-center justify-center gap-0.5">分辨率 {sortField === 'width' ? (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : sortOrder === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUpDown className="w-3 h-3 opacity-30" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}</span>
+                      </th>
+                      <th className="px-3 py-2 text-center" style={{ color: 'var(--text-tertiary)' }}>编码</th>
+                      <th className="px-3 py-2 text-center cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }} onClick={() => toggleSort('fps')}>
+                        <span className="flex items-center justify-center gap-0.5">帧率 {sortField === 'fps' ? (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : sortOrder === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUpDown className="w-3 h-3 opacity-30" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}</span>
+                      </th>
+                      <th className="px-3 py-2 text-center cursor-pointer select-none" style={{ color: 'var(--text-tertiary)' }} onClick={() => toggleSort('bitrate')}>
+                        <span className="flex items-center justify-center gap-0.5">码率 {sortField === 'bitrate' ? (sortOrder === 'asc' ? <ArrowUp className="w-3 h-3" /> : sortOrder === 'desc' ? <ArrowDown className="w-3 h-3" /> : <ArrowUpDown className="w-3 h-3 opacity-30" />) : <ArrowUpDown className="w-3 h-3 opacity-30" />}</span>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {videos.map((video, index) => (
+                    {sortedVideos.map((video, index) => (
                       <tr 
-                        key={index} 
+                        key={video.path} 
                         className="transition-all duration-200 cursor-pointer"
                         style={{ 
                           borderTop: '1px solid var(--border-color)',
@@ -1124,23 +1198,26 @@ export function FolderProcess() {
                         onClick={() => setHighlightedIndex(highlightedIndex === index ? null : index)}
                         onContextMenu={(e) => handleContextMenu(e, video)}
                       >
-                        <td className="px-4 py-2 truncate max-w-[200px]" style={{ color: highlightedIndex === index ? 'var(--primary-color)' : 'var(--text-primary)' }} title={video.name}>
+                        <td className="px-3 py-2 truncate max-w-[200px]" style={{ color: highlightedIndex === index ? 'var(--primary-color)' : 'var(--text-primary)' }} title={video.name}>
                           {video.name}
                         </td>
-                        <td className="px-4 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
+                        <td className="px-3 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
                           {formatSize(video.size)}
                         </td>
-                        <td className="px-4 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
+                        <td className="px-3 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
                           {formatDuration(video.duration)}
                         </td>
-                        <td className="px-4 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
+                        <td className="px-3 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
                           {video.width}x{video.height}
                         </td>
-                        <td className="px-4 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
+                        <td className="px-3 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
                           {video.codec}
                         </td>
-                        <td className="px-4 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
+                        <td className="px-3 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
                           {video.fps.toFixed(2)} fps
+                        </td>
+                        <td className="px-3 py-2 text-center" style={{ color: 'var(--text-secondary)' }}>
+                          {formatBitrate(video.bitrate)}
                         </td>
                       </tr>
                     ))}

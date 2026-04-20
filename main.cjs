@@ -1195,6 +1195,18 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  mainWindow.on('close', (e) => {
+    if (currentProcess) {
+      e.preventDefault();
+      ffmpegService.stop();
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.close();
+        }
+      }, 500);
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -1210,6 +1222,28 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
+  }
+});
+
+app.on('before-quit', () => {
+  if (currentProcess) {
+    ffmpegService.stop();
+  }
+});
+
+app.on('will-quit', () => {
+  if (currentProcess) {
+    try {
+      const pid = currentProcess.pid;
+      currentProcess.kill('SIGKILL');
+      if (process.platform === 'win32' && pid) {
+        require('child_process').execSync(`taskkill /pid ${pid} /T /F`, { timeout: 2000 });
+      }
+    } catch (e) {
+      console.log('Force kill error on will-quit:', e.message);
+    }
+    currentProcess = null;
+    currentTaskId = null;
   }
 });
 

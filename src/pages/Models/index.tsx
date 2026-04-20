@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Plus, Search, Star, Trash2, TestTube, Download, Upload,
+  Plus, Search, Star, Trash2, TestTube,
   Settings2, Check, X, AlertCircle, Zap, Globe, HardDrive,
   ChevronRight, BarChart3, Clock, Activity, Eye, EyeOff,
   Play, Square, RefreshCw, StopCircle, ChevronUp, ChevronDown,
@@ -14,6 +14,7 @@ import { ollamaModelStorage, type OllamaModelFile } from '@/services/storage/Oll
 import { ollamaModelService } from '@/services/OllamaModelService';
 import { PullModelPanel } from '@/components/PullModelPanel';
 import { useWallpaperStyle } from '@/hooks';
+import { configStorage } from '@/services/storage/ConfigStorage';
 
 function ModelForm({
   model,
@@ -24,6 +25,7 @@ function ModelForm({
   onSave: (model: ModelConfig) => void;
   onCancel: () => void;
 }) {
+  const toast = useToast();
   const [form, setForm] = useState<ModelConfig>(
     model || {
       id: generateId(),
@@ -44,14 +46,93 @@ function ModelForm({
       stats: { totalCalls: 0, successCalls: 0, avgResponseTime: 0, lastUsed: null },
     }
   );
-  const [activeTab, setActiveTab] = useState<'basic' | 'params' | 'advanced'>('basic');
   const [showKey, setShowKey] = useState(false);
+  const [localModelType, setLocalModelType] = useState<'lmstudio' | 'ollama'>('lmstudio');
+  const [useCustomParams, setUseCustomParams] = useState(false);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [availableModels, setAvailableModels] = useState<{id: string; name: string}[]>([]);
 
-  const tabs = [
-    { id: 'basic' as const, label: '基础配置' },
-    { id: 'params' as const, label: '参数配置' },
-    { id: 'advanced' as const, label: '高级配置' },
-  ];
+  const handleFetchLocalModels = async () => {
+    setFetchingModels(true);
+    setAvailableModels([]);
+    
+    try {
+      let url = '';
+      const isDev = window.location.hostname === 'localhost' && window.location.port === '5173';
+      
+      if (localModelType === 'lmstudio') {
+        url = isDev ? '/api/lmstudio/v1/models' : 'http://localhost:1234/v1/models';
+      } else {
+        url = isDev ? '/api/ollama/api/tags' : 'http://localhost:11434/api/tags';
+      }
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error('无法连接到服务');
+      }
+
+      const data = await response.json();
+      let models: {id: string; name: string}[] = [];
+
+      if (localModelType === 'lmstudio') {
+        models = (data.data || []).map((m: any) => ({
+          id: m.id,
+          name: m.id,
+        }));
+      } else {
+        models = (data.models || []).map((m: any) => ({
+          id: m.name,
+          name: m.name,
+        }));
+      }
+
+      setAvailableModels(models);
+
+      if (models.length > 0) {
+        const firstModel = models[0];
+        const apiUrl = localModelType === 'lmstudio' 
+          ? (isDev ? '/api/lmstudio/v1/chat/completions' : 'http://localhost:1234/v1/chat/completions')
+          : (isDev ? '/api/ollama/api/chat' : 'http://localhost:11434/api/chat');
+        setForm({
+          ...form,
+          type: 'local',
+          provider: localModelType === 'lmstudio' ? 'LM Studio' : 'Ollama',
+          apiUrl: apiUrl,
+          model: firstModel.id,
+          name: form.name || firstModel.name,
+          group: '本地模型',
+        });
+      }
+    } catch (error) {
+      console.error('获取本地模型失败:', error);
+      toast.error(`获取${localModelType === 'lmstudio' ? 'LM Studio' : 'Ollama'}模型失败，请确保服务已启动`, { duration: 3000 });
+    } finally {
+      setFetchingModels(false);
+    }
+  };
+
+  const handleSelectModel = (modelId: string) => {
+    const selectedModel = availableModels.find(m => m.id === modelId);
+    if (selectedModel) {
+      const isDev = window.location.hostname === 'localhost' && window.location.port === '5173';
+      const apiUrl = localModelType === 'lmstudio' 
+        ? (isDev ? '/api/lmstudio/v1/chat/completions' : 'http://localhost:1234/v1/chat/completions')
+        : (isDev ? '/api/ollama/api/chat' : 'http://localhost:11434/api/chat');
+      
+      const currentModelName = availableModels.find(m => m.id === form.model)?.name || '';
+      const shouldUpdateName = !form.name || form.name === currentModelName || availableModels.some(m => m.name === form.name);
+      
+      setForm({
+        ...form,
+        type: 'local',
+        provider: localModelType === 'lmstudio' ? 'LM Studio' : 'Ollama',
+        apiUrl: apiUrl,
+        model: modelId,
+        name: shouldUpdateName ? selectedModel.name : form.name,
+        group: '本地模型',
+      });
+    }
+  };
 
   const handleSave = () => {
     if (!form.name || !form.apiUrl) return;
@@ -59,296 +140,398 @@ function ModelForm({
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, x: 20 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 20 }}
-      className="flex h-full flex-col"
-    >
-      <div className="flex gap-1 border-b px-6 pt-4" style={{ borderColor: 'var(--border-color)' }}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className="relative px-4 py-2.5 text-sm transition-colors"
-            style={{
-              color: activeTab === tab.id ? 'var(--primary-color)' : 'var(--text-secondary)',
-              fontWeight: activeTab === tab.id ? 600 : 400,
-            }}
-          >
-            {tab.label}
-            {activeTab === tab.id && (
-              <motion.div
-                layoutId="tab-indicator"
-                className="absolute bottom-0 left-0 right-0 h-0.5 rounded-full"
-                style={{ backgroundColor: 'var(--primary-color)' }}
-              />
-            )}
-          </button>
-        ))}
-      </div>
-
+    <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto p-6">
-        {activeTab === 'basic' && (
-          <div className="space-y-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>模型名称 *</label>
-              <input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="例如：GPT-4o"
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-primary)',
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-sm font-semibold pb-2 mb-4 border-b" style={{ color: 'var(--text-primary)', borderColor: 'var(--border-color)' }}>
+              添加类型
+            </h3>
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setForm({ ...form, type: 'remote', apiUrl: '', provider: '', model: '' });
+                  setAvailableModels([]);
                 }}
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>供应商</label>
-              <input
-                value={form.provider}
-                onChange={(e) => setForm({ ...form, provider: e.target.value })}
-                placeholder="例如：OpenAI"
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-4 text-sm transition-all"
                 style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-primary)',
+                  backgroundColor: form.type === 'remote' ? 'var(--primary-light)' : 'var(--bg-secondary)',
+                  color: form.type === 'remote' ? 'var(--primary-color)' : 'var(--text-secondary)',
+                  border: `2px solid ${form.type === 'remote' ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                  fontWeight: form.type === 'remote' ? 600 : 400,
                 }}
-              />
+              >
+                <Globe size={20} />
+                <div className="text-left">
+                  <div>远程模型</div>
+                  <div className="text-xs opacity-70 font-normal">OpenAI、Claude等</div>
+                </div>
+              </button>
+              <button
+                onClick={() => setForm({ ...form, type: 'local' })}
+                className="flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-4 text-sm transition-all"
+                style={{
+                  backgroundColor: form.type === 'local' ? 'var(--primary-light)' : 'var(--bg-secondary)',
+                  color: form.type === 'local' ? 'var(--primary-color)' : 'var(--text-secondary)',
+                  border: `2px solid ${form.type === 'local' ? 'var(--primary-color)' : 'var(--border-color)'}`,
+                  fontWeight: form.type === 'local' ? 600 : 400,
+                }}
+              >
+                <HardDrive size={20} />
+                <div className="text-left">
+                  <div>本地模型</div>
+                  <div className="text-xs opacity-70 font-normal">LM Studio、Ollama</div>
+                </div>
+              </button>
             </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>模型类型</label>
-              <div className="flex gap-2">
-                {[
-                  { value: 'remote' as const, label: '远程模型', icon: Globe },
-                  { value: 'local' as const, label: '本地模型', icon: HardDrive },
-                ].map(({ value, label, icon: Icon }) => (
-                  <button
-                    key={value}
-                    onClick={() => setForm({ ...form, type: value })}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm transition-colors"
+          </div>
+
+          {form.type === 'local' && (
+            <div className="p-4 rounded-xl" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+              <h4 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>选择本地服务</h4>
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => {
+                    setLocalModelType('lmstudio');
+                    setAvailableModels([]);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors"
+                  style={{
+                    backgroundColor: localModelType === 'lmstudio' ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                    color: localModelType === 'lmstudio' ? 'white' : 'var(--text-secondary)',
+                  }}
+                >
+                  LM Studio
+                </button>
+                <button
+                  onClick={() => {
+                    setLocalModelType('ollama');
+                    setAvailableModels([]);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm transition-colors"
+                  style={{
+                    backgroundColor: localModelType === 'ollama' ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                    color: localModelType === 'ollama' ? 'white' : 'var(--text-secondary)',
+                  }}
+                >
+                  Ollama
+                </button>
+              </div>
+              <button
+                onClick={handleFetchLocalModels}
+                disabled={fetchingModels}
+                className="w-full flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: 'var(--primary-color)',
+                  color: 'white',
+                  opacity: fetchingModels ? 0.7 : 1,
+                }}
+              >
+                <RefreshCw size={16} className={fetchingModels ? 'animate-spin' : ''} />
+                {fetchingModels ? '获取中...' : '获取本地模型'}
+              </button>
+              
+              {availableModels.length > 0 && (
+                <div className="mt-4">
+                  <label className="mb-2 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    选择模型 ({availableModels.length} 个可用)
+                  </label>
+                  <select
+                    value={form.model}
+                    onChange={(e) => handleSelectModel(e.target.value)}
+                    className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
                     style={{
-                      backgroundColor: form.type === value ? 'var(--primary-light)' : 'var(--bg-secondary)',
-                      color: form.type === value ? 'var(--primary-color)' : 'var(--text-secondary)',
-                      border: `1px solid ${form.type === value ? 'var(--primary-color)' : 'var(--border-color)'}`,
-                      fontWeight: form.type === value ? 600 : 400,
+                      backgroundColor: 'var(--bg-primary)',
+                      border: '1px solid var(--border-color)',
+                      color: 'var(--text-primary)',
                     }}
                   >
-                    <Icon size={16} />
-                    {label}
-                  </button>
-                ))}
-              </div>
+                    <option value="">请选择模型</option>
+                    {availableModels.map(m => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>API 地址 *</label>
-              <input
-                value={form.apiUrl}
-                onChange={(e) => setForm({ ...form, apiUrl: e.target.value })}
-                placeholder="https://api.openai.com/v1/chat/completions"
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors font-mono"
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-primary)',
-                }}
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>API Key</label>
-              <div className="relative">
+          )}
+
+          <div>
+            <h3 className="text-sm font-semibold pb-2 mb-4 border-b" style={{ color: 'var(--text-primary)', borderColor: 'var(--border-color)' }}>
+              基础配置
+            </h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>模型名称 *</label>
                 <input
-                  type={showKey ? 'text' : 'password'}
-                  value={form.apiKey}
-                  onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
-                  placeholder="sk-..."
-                  className="w-full rounded-lg px-3 py-2.5 pr-10 text-sm outline-none transition-colors font-mono"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                  placeholder="例如：GPT-4o"
+                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
                   style={{
                     backgroundColor: 'var(--bg-secondary)',
                     border: '1px solid var(--border-color)',
                     color: 'var(--text-primary)',
                   }}
                 />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>供应商</label>
+                <input
+                  value={form.provider}
+                  onChange={(e) => setForm({ ...form, provider: e.target.value })}
+                  placeholder="例如：OpenAI"
+                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>API 地址 *</label>
+                <input
+                  value={form.apiUrl}
+                  onChange={(e) => setForm({ ...form, apiUrl: e.target.value })}
+                  placeholder="https://api.openai.com/v1/chat/completions"
+                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors font-mono"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+              {form.type === 'remote' && (
+                <div className="col-span-2">
+                  <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>API Key</label>
+                  <div className="relative">
+                    <input
+                      type={showKey ? 'text' : 'password'}
+                      value={form.apiKey}
+                      onChange={(e) => setForm({ ...form, apiKey: e.target.value })}
+                      placeholder="sk-..."
+                      className="w-full rounded-lg px-3 py-2.5 pr-10 text-sm outline-none transition-colors font-mono"
+                      style={{
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
+                    <button
+                      onClick={() => setShowKey(!showKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2"
+                      style={{ color: 'var(--text-tertiary)' }}
+                    >
+                      {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>模型标识</label>
+                <input
+                  value={form.model}
+                  onChange={(e) => setForm({ ...form, model: e.target.value })}
+                  placeholder="例如：gpt-4o"
+                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors font-mono"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>分组</label>
+                <input
+                  value={form.group}
+                  onChange={(e) => setForm({ ...form, group: e.target.value })}
+                  placeholder="例如：OpenAI"
+                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
+                  style={{
+                    backgroundColor: 'var(--bg-secondary)',
+                    border: '1px solid var(--border-color)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between pb-2 mb-4 border-b" style={{ borderColor: 'var(--border-color)' }}>
+              <h3 className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>参数配置</h3>
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>自定义参数</span>
                 <button
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color: 'var(--text-tertiary)' }}
+                  onClick={() => setUseCustomParams(!useCustomParams)}
+                  className="relative h-5 w-9 rounded-full transition-colors"
+                  style={{
+                    backgroundColor: useCustomParams ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                  }}
                 >
-                  {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                  <motion.div
+                    animate={{ x: useCustomParams ? 18 : 2 }}
+                    className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm"
+                  />
                 </button>
               </div>
             </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>模型标识</label>
-              <input
-                value={form.model}
-                onChange={(e) => setForm({ ...form, model: e.target.value })}
-                placeholder="例如：gpt-4o"
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors font-mono"
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-primary)',
-                }}
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>分组</label>
-              <input
-                value={form.group}
-                onChange={(e) => setForm({ ...form, group: e.target.value })}
-                placeholder="例如：OpenAI"
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-colors"
-                style={{
-                  backgroundColor: 'var(--bg-secondary)',
-                  border: '1px solid var(--border-color)',
-                  color: 'var(--text-primary)',
-                }}
-              />
+            
+            {useCustomParams ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      Temperature
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="2"
+                      step="0.1"
+                      value={form.temperature}
+                      onChange={(e) => setForm({ ...form, temperature: parseFloat(e.target.value) || 0 })}
+                      className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                      style={{
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
+                    <span className="text-xs mt-1 block" style={{ color: 'var(--text-tertiary)' }}>0-2，越高越随机</span>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      Top P
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value={form.topP}
+                      onChange={(e) => setForm({ ...form, topP: parseFloat(e.target.value) || 0 })}
+                      className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                      style={{
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
+                    <span className="text-xs mt-1 block" style={{ color: 'var(--text-tertiary)' }}>0-1，核采样</span>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                      最大Tokens
+                    </label>
+                    <input
+                      type="number"
+                      min="256"
+                      max="16384"
+                      step="256"
+                      value={form.maxTokens}
+                      onChange={(e) => setForm({ ...form, maxTokens: parseInt(e.target.value) || 4096 })}
+                      className="w-full rounded-lg px-3 py-2 text-sm outline-none"
+                      style={{
+                        backgroundColor: 'var(--bg-secondary)',
+                        border: '1px solid var(--border-color)',
+                        color: 'var(--text-primary)',
+                      }}
+                    />
+                    <span className="text-xs mt-1 block" style={{ color: 'var(--text-tertiary)' }}>256-16384</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                    快捷预设
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { name: '精准模式', temp: 0.2, topP: 0.8, tokens: 2048 },
+                      { name: '均衡模式', temp: 0.7, topP: 1.0, tokens: 4096 },
+                      { name: '创意模式', temp: 1.0, topP: 0.95, tokens: 4096 },
+                      { name: '代码模式', temp: 0.1, topP: 0.9, tokens: 8192 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.name}
+                        onClick={() => setForm({
+                          ...form,
+                          temperature: preset.temp,
+                          topP: preset.topP,
+                          maxTokens: preset.tokens,
+                        })}
+                        className="rounded-lg px-3 py-1.5 text-xs transition-colors"
+                        style={{
+                          backgroundColor: 'var(--bg-secondary)',
+                          color: 'var(--text-secondary)',
+                          border: '1px solid var(--border-color)',
+                        }}
+                      >
+                        <Zap size={10} className="mr-1 inline" />
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-6 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                <Settings2 size={24} style={{ color: 'var(--text-tertiary)' }} className="mx-auto mb-2 opacity-50" />
+                <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>使用默认参数配置</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)', opacity: 0.7 }}>开启"自定义参数"可调整 Temperature、Top P 等参数</p>
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h3 className="text-sm font-semibold pb-2 mb-4 border-b" style={{ color: 'var(--text-primary)', borderColor: 'var(--border-color)' }}>高级配置</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center justify-between rounded-lg p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+              >
+                <div>
+                  <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>启用模型</div>
+                  <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>关闭后模型将不在聊天页显示</div>
+                </div>
+                <button
+                  onClick={() => setForm({ ...form, isActive: !form.isActive })}
+                  className="relative h-6 w-11 rounded-full transition-colors"
+                  style={{
+                    backgroundColor: form.isActive ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+                  }}
+                >
+                  <motion.div
+                    animate={{ x: form.isActive ? 22 : 2 }}
+                    className="absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm"
+                  />
+                </button>
+              </div>
+              <div className="flex items-center justify-between rounded-lg p-4"
+                style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
+              >
+                <div>
+                  <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>收藏模型</div>
+                  <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>收藏的模型将优先展示</div>
+                </div>
+                <button
+                  onClick={() => setForm({ ...form, isFavorite: !form.isFavorite })}
+                  className="transition-colors"
+                >
+                  <Star
+                    size={20}
+                    style={{ color: form.isFavorite ? 'var(--warning-color)' : 'var(--text-tertiary)' }}
+                    fill={form.isFavorite ? 'var(--warning-color)' : 'none'}
+                  />
+                </button>
+              </div>
             </div>
           </div>
-        )}
 
-        {activeTab === 'params' && (
-          <div className="space-y-6">
-            <div>
-              <div className="mb-3 flex items-center justify-between">
-                <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                  Temperature: {form.temperature.toFixed(2)}
-                </label>
-                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>控制输出随机性</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="2"
-                step="0.01"
-                value={form.temperature}
-                onChange={(e) => setForm({ ...form, temperature: parseFloat(e.target.value) })}
-                className="w-full accent-[var(--primary-color)]"
-              />
-              <div className="mt-1 flex justify-between text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                <span>精准 (0)</span>
-                <span>创意 (2)</span>
-              </div>
-            </div>
-            <div>
-              <div className="mb-3 flex items-center justify-between">
-                <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                  Top P: {form.topP.toFixed(2)}
-                </label>
-                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>核采样概率</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={form.topP}
-                onChange={(e) => setForm({ ...form, topP: parseFloat(e.target.value) })}
-                className="w-full accent-[var(--primary-color)]"
-              />
-            </div>
-            <div>
-              <div className="mb-3 flex items-center justify-between">
-                <label className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                  最大生成长度: {form.maxTokens}
-                </label>
-                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>tokens</span>
-              </div>
-              <input
-                type="range"
-                min="256"
-                max="16384"
-                step="256"
-                value={form.maxTokens}
-                onChange={(e) => setForm({ ...form, maxTokens: parseInt(e.target.value) })}
-                className="w-full accent-[var(--primary-color)]"
-              />
-              <div className="mt-1 flex justify-between text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                <span>256</span>
-                <span>16384</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                快捷预设
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  { name: '精准模式', temp: 0.2, topP: 0.8, tokens: 2048 },
-                  { name: '均衡模式', temp: 0.7, topP: 1.0, tokens: 4096 },
-                  { name: '创意模式', temp: 1.0, topP: 0.95, tokens: 4096 },
-                  { name: '代码模式', temp: 0.1, topP: 0.9, tokens: 8192 },
-                ].map((preset) => (
-                  <button
-                    key={preset.name}
-                    onClick={() => setForm({
-                      ...form,
-                      temperature: preset.temp,
-                      topP: preset.topP,
-                      maxTokens: preset.tokens,
-                    })}
-                    className="rounded-lg px-3 py-2 text-sm transition-colors"
-                    style={{
-                      backgroundColor: 'var(--bg-secondary)',
-                      color: 'var(--text-secondary)',
-                      border: '1px solid var(--border-color)',
-                    }}
-                  >
-                    <Zap size={12} className="mr-1 inline" />
-                    {preset.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'advanced' && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between rounded-lg p-4"
-              style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
-            >
-              <div>
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>启用模型</div>
-                <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>关闭后模型将不在聊天页显示</div>
-              </div>
-              <button
-                onClick={() => setForm({ ...form, isActive: !form.isActive })}
-                className="relative h-6 w-11 rounded-full transition-colors"
-                style={{
-                  backgroundColor: form.isActive ? 'var(--primary-color)' : 'var(--bg-tertiary)',
-                }}
-              >
-                <motion.div
-                  animate={{ x: form.isActive ? 22 : 2 }}
-                  className="absolute top-1 h-4 w-4 rounded-full bg-white shadow-sm"
-                />
-              </button>
-            </div>
-            <div className="flex items-center justify-between rounded-lg p-4"
-              style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
-            >
-              <div>
-                <div className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>收藏模型</div>
-                <div className="text-xs" style={{ color: 'var(--text-tertiary)' }}>收藏的模型将优先展示</div>
-              </div>
-              <button
-                onClick={() => setForm({ ...form, isFavorite: !form.isFavorite })}
-                className="transition-colors"
-              >
-                <Star
-                  size={20}
-                  style={{ color: form.isFavorite ? 'var(--warning-color)' : 'var(--text-tertiary)' }}
-                  fill={form.isFavorite ? 'var(--warning-color)' : 'none'}
-                />
-              </button>
-            </div>
+          {form.type === 'remote' && (
             <div className="rounded-lg p-4"
               style={{ backgroundColor: 'var(--primary-light)', border: '1px solid var(--primary-color)', opacity: 0.8 }}
             >
@@ -359,8 +542,8 @@ function ModelForm({
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="flex items-center justify-end gap-3 border-t px-6 py-4"
@@ -391,7 +574,7 @@ function ModelForm({
           保存
         </button>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -454,6 +637,14 @@ function OllamaPanel({
   const [deleteModelName, setDeleteModelName] = useState<string | null>(null);
   const [deleteModelInfo, setDeleteModelInfo] = useState<ModelShowInfo | null>(null);
   const [loadingDeleteInfo, setLoadingDeleteInfo] = useState(false);
+  const [autoConnect, setAutoConnect] = useState(() => {
+    try {
+      return configStorage.get('ollamaAutoConnect', true);
+    } catch {
+      return true;
+    }
+  });
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     if (window.electronAPI?.ollama) {
@@ -473,34 +664,52 @@ function OllamaPanel({
   }, []);
 
   useEffect(() => {
-    const initOllamaCheck = async () => {
-      try {
-        let isRunning = false;
-        
-        if (window.electronAPI?.ollama) {
-          const status = await window.electronAPI.ollama.checkStatus();
-          setOllamaStatus(status);
-          isRunning = status.isRunning;
-        } else {
-          const status = await checkOllamaStatusNetwork();
-          setOllamaStatus(status);
-          isRunning = status.isRunning;
-        }
-
-        if (isRunning) {
-          addOllamaLog({ type: 'info', message: 'Ollama 服务运行中' });
-          await loadOllamaModelsNetwork();
-          await loadRunningModels();
-        } else {
-          addOllamaLog({ type: 'warning', message: '未检测到 Ollama 服务' });
-        }
-      } catch (error) {
-        addOllamaLog({ type: 'error', message: '初始化检测失败' });
+    if (!initialized) {
+      setInitialized(true);
+      if (!autoConnect) {
+        addOllamaLog({ type: 'info', message: '自动连接已关闭' });
+        return;
       }
-    };
 
-    initOllamaCheck();
-  }, []);
+      const initOllamaCheck = async () => {
+        try {
+          let isRunning = false;
+          
+          if (window.electronAPI?.ollama) {
+            const status = await window.electronAPI.ollama.checkStatus();
+            setOllamaStatus(status);
+            isRunning = status.isRunning;
+          } else {
+            const status = await checkOllamaStatusNetwork();
+            setOllamaStatus(status);
+            isRunning = status.isRunning;
+          }
+
+          if (isRunning) {
+            addOllamaLog({ type: 'info', message: 'Ollama 服务运行中' });
+            await loadOllamaModelsNetwork();
+            await loadRunningModels();
+          } else {
+            addOllamaLog({ type: 'warning', message: '未检测到 Ollama 服务' });
+          }
+        } catch (error) {
+          addOllamaLog({ type: 'error', message: '初始化检测失败' });
+        }
+      };
+
+      initOllamaCheck();
+    }
+  }, [initialized, autoConnect]);
+
+  const handleToggleAutoConnect = (value: boolean) => {
+    setAutoConnect(value);
+    configStorage.set('ollamaAutoConnect', value);
+    if (value) {
+      addOllamaLog({ type: 'info', message: '自动连接已开启' });
+    } else {
+      addOllamaLog({ type: 'info', message: '自动连接已关闭' });
+    }
+  };
 
   const checkOllamaStatusNetwork = async () => {
     return new Promise((resolve) => {
@@ -1148,6 +1357,24 @@ function OllamaPanel({
           >
             <Settings2 size={14} /> 配置
           </button>
+          <div 
+            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm"
+            style={{ backgroundColor: 'var(--bg-secondary)' }}
+          >
+            <span style={{ color: 'var(--text-secondary)' }}>自动连接</span>
+            <button
+              onClick={() => handleToggleAutoConnect(!autoConnect)}
+              className="relative h-5 w-9 rounded-full transition-colors"
+              style={{
+                backgroundColor: autoConnect ? 'var(--primary-color)' : 'var(--bg-tertiary)',
+              }}
+            >
+              <motion.div
+                animate={{ x: autoConnect ? 18 : 2 }}
+                className="absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm"
+              />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1973,7 +2200,6 @@ export function ModelsPage() {
   const [createModelPath, setCreateModelPath] = useState('');
   const [createModelFile, setCreateModelFile] = useState<File | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [showFeatureModal, setShowFeatureModal] = useState(false);
 
   const toast = useToast();
 
@@ -1991,34 +2217,99 @@ export function ModelsPage() {
     m.provider.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const remoteModels = models.filter(m => m.type === 'remote' || m.type === 'local');
+  const remoteGroups = Array.from(new Set(remoteModels.map(m => m.group)));
+  const filteredRemoteModels = remoteModels.filter(m =>
+    m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    m.provider.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const selectedModel = models.find(m => m.id === selectedModelId);
 
   const handleTest = async (modelId: string) => {
+    const model = models.find(m => m.id === modelId);
+    if (!model) return;
+
     setTestingId(modelId);
     setTestResult(null);
 
     addLog({
       id: generateId(),
       level: 'info',
-      message: `开始测试模型连通性: ${models.find(m => m.id === modelId)?.name}`,
+      message: `开始测试模型连通性: ${model.name}`,
       timestamp: Date.now(),
       module: 'ModelManager',
     });
 
-    await new Promise(r => setTimeout(r, 1500 + Math.random() * 1000));
-    const success = Math.random() > 0.2;
-    const time = 0.5 + Math.random() * 2;
+    const startTime = Date.now();
 
-    setTestResult({ id: modelId, success, time });
-    setTestingId(null);
+    try {
+      const isAnthropic = model.apiUrl.includes('anthropic.com');
+      const isLocalModel = model.type === 'local';
+      
+      let response: Response;
+      
+      if (isAnthropic) {
+        if (!model.apiKey) {
+          throw new Error('API Key 未配置');
+        }
+        response = await fetch(model.apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': model.apiKey,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model: model.model,
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'Hi' }],
+          }),
+        });
+      } else {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (model.apiKey) {
+          headers['Authorization'] = `Bearer ${model.apiKey}`;
+        }
+        response = await fetch(model.apiUrl, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            model: model.model,
+            max_tokens: 10,
+            messages: [{ role: 'user', content: 'Hi' }],
+          }),
+        });
+      }
 
-    addLog({
-      id: generateId(),
-      level: success ? 'info' : 'error',
-      message: `模型测试${success ? '成功' : '失败'}: ${models.find(m => m.id === modelId)?.name} (${time.toFixed(2)}s)`,
-      timestamp: Date.now(),
-      module: 'ModelManager',
-    });
+      const time = (Date.now() - startTime) / 1000;
+      const success = response.ok || response.status === 401 || (isLocalModel && (response.status === 200 || response.status === 400));
+
+      setTestResult({ id: modelId, success, time });
+      setTestingId(null);
+
+      addLog({
+        id: generateId(),
+        level: success ? 'info' : 'error',
+        message: `模型测试${success ? '成功' : '失败'}: ${model.name} (${time.toFixed(2)}s)`,
+        timestamp: Date.now(),
+        module: 'ModelManager',
+      });
+    } catch (error) {
+      const time = (Date.now() - startTime) / 1000;
+      setTestResult({ id: modelId, success: false, time });
+      setTestingId(null);
+
+      addLog({
+        id: generateId(),
+        level: 'error',
+        message: `模型测试失败: ${model.name} - ${error instanceof Error ? error.message : '未知错误'}`,
+        timestamp: Date.now(),
+        module: 'ModelManager',
+      });
+    }
   };
 
   const handleSave = (model: ModelConfig) => {
@@ -2116,35 +2407,6 @@ export function ModelsPage() {
     setShowCreateModel(true);
     toast.info(`已选择文件: ${file.name}`, { duration: 1500 });
   };
-
-  if (isAdding || editingModel) {
-    return (
-      <div 
-        className="flex h-full flex-col" 
-        style={{ 
-          backgroundColor: 'var(--bg-primary)',
-          backgroundImage: chatWallpaper ? `url(${chatWallpaper})` : 'none',
-          ...wallpaperStyle
-        }}
-      >
-        <header
-          className="flex items-center gap-3 border-b px-6"
-          style={{ height: 56, borderColor: 'var(--border-color)' }}
-        >
-          <h1 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>
-            {editingModel ? '编辑模型' : '新增模型'}
-          </h1>
-        </header>
-        <div className="flex-1 overflow-hidden">
-          <ModelForm
-            model={editingModel || undefined}
-            onSave={handleSave}
-            onCancel={() => { setEditingModel(null); setIsAdding(false); }}
-          />
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div 
@@ -2333,6 +2595,80 @@ export function ModelsPage() {
               </div>
             )}
           </div>
+        ) : activeMainTab === 'remote' ? (
+          <div className="p-6">
+            <div className="mb-6 flex items-start justify-between">
+              <div className="flex items-center gap-4">
+                <div
+                  className="flex h-14 w-14 items-center justify-center rounded-xl animate-pulse"
+                  style={{ backgroundColor: 'var(--bg-tertiary)' }}
+                />
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="h-5 w-24 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                    <div className="h-4 w-12 rounded-full animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                    <div className="h-4 w-12 rounded-full animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                  </div>
+                  <div className="h-4 w-32 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <div className="h-9 w-24 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                <div className="h-9 w-16 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                <div className="h-9 w-9 rounded-lg animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+              </div>
+            </div>
+
+            <div className="mb-6 grid grid-cols-4 gap-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="rounded-xl p-4"
+                  style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}
+                >
+                  <div className="mb-2 h-5 w-5 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                  <div className="mb-1 h-5 w-12 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                  <div className="h-3 w-16 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-xl p-5" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}>
+              <div className="mb-4 h-4 w-20 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+              <div className="space-y-3">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
+                  <div key={i} className="flex items-center justify-between py-1.5">
+                    <div className="h-4 w-16 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                    <div className="h-4 w-24 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl p-5" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)' }}>
+              <div className="mb-3 h-4 w-20 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+              <div className="grid grid-cols-2 gap-2">
+                {[1, 2, 3, 4].map((i) => (
+                  <div
+                    key={i}
+                    className="rounded-lg p-3"
+                    style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}
+                  >
+                    <div className="mb-1 h-4 w-20 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                    <div className="h-3 w-28 rounded animate-pulse" style={{ backgroundColor: 'var(--bg-tertiary)' }} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6 flex flex-col items-center justify-center py-8 text-center">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full" style={{ backgroundColor: 'var(--bg-secondary)' }}>
+                <Globe size={24} style={{ color: 'var(--text-tertiary)' }} />
+              </div>
+              <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>请从右侧列表选择一个模型</p>
+              <p className="mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>或点击右上角 + 添加新模型</p>
+            </div>
+          </div>
         ) : (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
@@ -2360,20 +2696,6 @@ export function ModelsPage() {
             >
               <Plus size={16} />
             </button>
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
-              style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)' }}
-              title="导入配置"
-            >
-              <Download size={16} />
-            </button>
-            <button
-              className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
-              style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)' }}
-              title="导出配置"
-            >
-              <Upload size={16} />
-            </button>
           </div>
         </header>
 
@@ -2391,10 +2713,7 @@ export function ModelsPage() {
             Ollama
           </button>
           <button
-            onClick={() => {
-              setActiveMainTab('remote');
-              setShowFeatureModal(true);
-            }}
+            onClick={() => setActiveMainTab('remote')}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-sm transition-colors"
             style={{
               color: activeMainTab === 'remote' ? 'var(--primary-color)' : 'var(--text-secondary)',
@@ -2640,99 +2959,110 @@ export function ModelsPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto px-3">
-              {groups.map(group => {
-                const groupModels = filteredModels.filter(m => m.group === group);
-                if (groupModels.length === 0) return null;
-                return (
-                  <div key={group} className="mb-3">
-                    <div className="mb-1 flex items-center gap-1 px-2 text-xs font-medium"
-                      style={{ color: 'var(--text-tertiary)' }}
-                    >
-                      <span>{group}</span>
-                      <span>({groupModels.length})</span>
-                    </div>
-                    {groupModels.map(model => (
-                      <button
-                        key={model.id}
-                        onClick={() => setSelectedModelId(model.id)}
-                        className="mb-0.5 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
-                        style={{
-                          backgroundColor: selectedModelId === model.id ? 'var(--primary-light)' : 'transparent',
-                        }}
+              {remoteModels.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Globe size={40} style={{ color: 'var(--text-tertiary)' }} className="mb-3 opacity-40" />
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>暂无远程模型</p>
+                  <p className="mt-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>点击右上角 + 按钮添加远程模型</p>
+                </div>
+              ) : filteredRemoteModels.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <Search size={40} style={{ color: 'var(--text-tertiary)' }} className="mb-3 opacity-40" />
+                  <p className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>未找到匹配的模型</p>
+                </div>
+              ) : (
+                remoteGroups.map(group => {
+                  const groupModels = filteredRemoteModels.filter(m => m.group === group);
+                  if (groupModels.length === 0) return null;
+                  return (
+                    <div key={group} className="mb-3">
+                      <div className="mb-1 flex items-center gap-1 px-2 text-xs font-medium"
+                        style={{ color: 'var(--text-tertiary)' }}
                       >
-                        <div
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+                        <span>{group}</span>
+                        <span>({groupModels.length})</span>
+                      </div>
+                      {groupModels.map(model => (
+                        <button
+                          key={model.id}
+                          onClick={() => setSelectedModelId(model.id)}
+                          className="mb-0.5 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors"
                           style={{
-                            backgroundColor: model.isActive ? 'var(--primary-light)' : 'var(--bg-tertiary)',
-                            color: model.isActive ? 'var(--primary-color)' : 'var(--text-tertiary)',
+                            backgroundColor: selectedModelId === model.id ? 'var(--primary-light)' : 'transparent',
                           }}
                         >
-                          {model.name.charAt(0)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-1">
-                            {model.isFavorite && <Star size={10} style={{ color: 'var(--warning-color)' }} fill="var(--warning-color)" />}
-                            <span className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
-                              {model.name}
-                            </span>
+                          <div
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-bold"
+                            style={{
+                              backgroundColor: model.isActive ? 'var(--primary-light)' : 'var(--bg-tertiary)',
+                              color: model.isActive ? 'var(--primary-color)' : 'var(--text-tertiary)',
+                            }}
+                          >
+                            {model.name.charAt(0)}
                           </div>
-                          <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
-                            <span>{model.provider}</span>
-                            <span>·</span>
-                            <span className={model.isActive ? '' : 'opacity-50'}>
-                              {model.isActive ? '已启用' : '已禁用'}
-                            </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1">
+                              {model.isFavorite && <Star size={10} style={{ color: 'var(--warning-color)' }} fill="var(--warning-color)" />}
+                              <span className="truncate text-sm font-medium" style={{ color: 'var(--text-primary)' }}>
+                                {model.name}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                              <span>{model.provider}</span>
+                              <span>·</span>
+                              <span className={model.isActive ? '' : 'opacity-50'}>
+                                {model.isActive ? '已启用' : '已禁用'}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                        <ChevronRight size={14} style={{ color: 'var(--text-tertiary)' }} />
-                      </button>
-                    ))}
-                  </div>
-                );
-              })}
+                          <ChevronRight size={14} style={{ color: 'var(--text-tertiary)' }} />
+                        </button>
+                      ))}
+                    </div>
+                  );
+                })
+              )}
             </div>
           </>
         )}
       </div>
 
       <AnimatePresence>
-        {showFeatureModal && (
+        {(isAdding || editingModel) && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            onClick={() => setShowFeatureModal(false)}
+            onClick={() => { setEditingModel(null); setIsAdding(false); }}
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-              className="relative w-[400px] overflow-hidden rounded-2xl p-6"
+              className="relative flex h-[80vh] w-[800px] flex-col overflow-hidden rounded-2xl"
               style={{ backgroundColor: 'var(--bg-primary)', border: '1px solid var(--border-color)' }}
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="flex flex-col items-center text-center">
-                <div
-                  className="mb-4 flex h-14 w-14 items-center justify-center rounded-full"
-                  style={{ backgroundColor: 'var(--warning-light, rgba(245,158,11,0.1))' }}
-                >
-                  <AlertCircle size={28} style={{ color: 'var(--warning-color)' }} />
-                </div>
-                <h3 className="mb-2 text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
-                  功能开发中
-                </h3>
-                <p className="mb-6 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  远程模型管理功能暂未实现，敬请期待后续更新。
-                </p>
+              <div className="flex items-center justify-between border-b px-6 py-4" style={{ borderColor: 'var(--border-color)' }}>
+                <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>
+                  {editingModel ? '编辑模型' : '新增模型'}
+                </h2>
                 <button
-                  onClick={() => setShowFeatureModal(false)}
-                  className="w-full rounded-lg px-6 py-2.5 text-sm font-medium transition-all active:scale-95"
-                  style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+                  onClick={() => { setEditingModel(null); setIsAdding(false); }}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors"
+                  style={{ color: 'var(--text-tertiary)', backgroundColor: 'var(--bg-secondary)' }}
                 >
-                  我知道了
+                  <X size={16} />
                 </button>
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <ModelForm
+                  model={editingModel || undefined}
+                  onSave={handleSave}
+                  onCancel={() => { setEditingModel(null); setIsAdding(false); }}
+                />
               </div>
             </motion.div>
           </motion.div>

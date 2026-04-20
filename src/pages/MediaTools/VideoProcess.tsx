@@ -60,6 +60,13 @@ function formatBitrate(bps: number): string {
   return (bps / 1000000).toFixed(2) + ' Mbps';
 }
 
+function formatBitrateAlt(bps: number): string | null {
+  if (!bps || bps <= 0) return null;
+  if (bps >= 1000000) return (bps / 1000).toFixed(0) + ' kbps';
+  if (bps >= 1000) return bps + ' bps';
+  return null;
+}
+
 function formatSampleRate(hz: number): string {
   if (!hz || hz <= 0) return 'N/A';
   if (hz >= 1000) return (hz / 1000).toFixed(1) + ' kHz';
@@ -787,10 +794,22 @@ export function VideoProcess() {
 
   return (
     <div className="h-full flex flex-col space-y-3">
-      <div className="flex items-center justify-between flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <Film className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
-          <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>视频整合</h2>
+      <div 
+        className="flex items-center justify-between flex-shrink-0 px-4 py-3 rounded-xl"
+        style={{ 
+          backgroundColor: 'rgba(0, 0, 0, 0.3)',
+          backdropFilter: 'blur(8px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <div 
+            className="flex h-8 w-8 items-center justify-center rounded-lg"
+            style={{ backgroundColor: 'rgba(6, 182, 212, 0.2)' }}
+          >
+            <Film className="w-4 h-4" style={{ color: '#06b6d4' }} />
+          </div>
+          <h2 className="text-base font-semibold" style={{ color: 'white' }}>视频整合</h2>
           <Badge color="blue">信息查看</Badge>
           {selectedCount > 0 && (
             <Badge color="cyan">已选择 {selectedCount} 个</Badge>
@@ -799,13 +818,13 @@ export function VideoProcess() {
         <div className="flex items-center gap-2">
           {videos.length > 0 && (
             <>
-              <div className="flex items-center gap-0.5 p-0.5 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)', border: '1px solid var(--border-color)' }}>
+              <div className="flex items-center gap-0.5 p-0.5 rounded-lg" style={{ backgroundColor: 'rgba(255, 255, 255, 0.1)', border: '1px solid rgba(255, 255, 255, 0.15)' }}>
                 <button
                   onClick={() => setPanelView('both')}
                   className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200"
                   style={{ 
-                    backgroundColor: panelView === 'both' ? 'var(--primary-color)' : 'transparent',
-                    color: panelView === 'both' ? 'white' : 'var(--text-tertiary)',
+                    backgroundColor: panelView === 'both' ? 'rgba(6, 182, 212, 0.8)' : 'transparent',
+                    color: panelView === 'both' ? 'white' : 'rgba(255, 255, 255, 0.7)',
                   }}
                   title="显示左右双栏"
                 >
@@ -816,8 +835,8 @@ export function VideoProcess() {
                   onClick={() => setPanelView('left')}
                   className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200"
                   style={{ 
-                    backgroundColor: panelView === 'left' ? 'var(--primary-color)' : 'transparent',
-                    color: panelView === 'left' ? 'white' : 'var(--text-tertiary)',
+                    backgroundColor: panelView === 'left' ? 'rgba(6, 182, 212, 0.8)' : 'transparent',
+                    color: panelView === 'left' ? 'white' : 'rgba(255, 255, 255, 0.7)',
                   }}
                   title="仅显示左侧"
                 >
@@ -828,8 +847,8 @@ export function VideoProcess() {
                   onClick={() => setPanelView('right')}
                   className="flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all duration-200"
                   style={{ 
-                    backgroundColor: panelView === 'right' ? 'var(--primary-color)' : 'transparent',
-                    color: panelView === 'right' ? 'white' : 'var(--text-tertiary)',
+                    backgroundColor: panelView === 'right' ? 'rgba(6, 182, 212, 0.8)' : 'transparent',
+                    color: panelView === 'right' ? 'white' : 'rgba(255, 255, 255, 0.7)',
                   }}
                   title="仅显示右侧"
                 >
@@ -840,7 +859,11 @@ export function VideoProcess() {
               <button
                 onClick={sendToVideoEdit}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
-                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+                style={{ 
+                  background: 'linear-gradient(135deg, #0891b2, #06b6d4)',
+                  color: 'white',
+                  boxShadow: '0 2px 8px rgba(6, 182, 212, 0.3)'
+                }}
               >
                 <Send className="w-3 h-3" />
                 发送到视频处理{selectedCount > 0 ? ` (${selectedCount})` : ''}
@@ -848,23 +871,23 @@ export function VideoProcess() {
               <button
                 onClick={copySelectedMainInfo}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
-                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+                style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', color: 'rgba(255, 255, 255, 0.9)', border: '1px solid rgba(255, 255, 255, 0.2)' }}
               >
-                {copiedId === 'selected' ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                {copiedId === 'selected' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                 复制选中{selectedCount > 0 ? ` (${selectedCount})` : ''}
               </button>
               <button
                 onClick={copyAllInfo}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
-                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
+                style={{ backgroundColor: 'rgba(255, 255, 255, 0.15)', color: 'rgba(255, 255, 255, 0.9)', border: '1px solid rgba(255, 255, 255, 0.2)' }}
               >
-                {copiedId === 'all' ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                {copiedId === 'all' ? <Check className="w-3 h-3 text-green-400" /> : <Copy className="w-3 h-3" />}
                 复制全部
               </button>
               <button
                 onClick={clearAll}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
-                style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)', border: '1px solid var(--border-color)' }}
+                style={{ backgroundColor: 'rgba(239, 68, 68, 0.2)', color: 'rgba(255, 255, 255, 0.9)', border: '1px solid rgba(239, 68, 68, 0.3)' }}
               >
                 <Trash2 className="w-3 h-3" />
                 清空
@@ -950,73 +973,42 @@ export function VideoProcess() {
           ) : (
             <>
               <div 
-                className="sticky top-0 z-10 pb-3 mb-3"
+                className="sticky top-0 z-10 pb-3"
                 style={{ 
-                  backgroundColor: 'var(--bg-primary)',
-                  borderBottom: '1px solid var(--border-color)',
+                  backgroundColor: 'transparent',
                   marginBottom: '12px',
                   paddingBottom: '12px',
                 }}
               >
-                <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-2 mb-2">
                   <button
                     onClick={selectFiles}
                     disabled={!isElectronEnv || !isConfigured || isLoading}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105 disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105 disabled:opacity-50"
                     style={{ 
                       background: 'linear-gradient(135deg, #0891b2, #06b6d4)',
                       color: 'white',
                       boxShadow: '0 2px 8px rgba(6, 182, 212, 0.15)'
                     }}
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3 h-3" />
                     添加视频
                   </button>
                   <button
                     onClick={selectAll}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
                     style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
                   >
                     全选
                   </button>
                   <button
                     onClick={deselectAll}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105"
                     style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)', border: '1px solid var(--border-color)' }}
                   >
                     取消选择
                   </button>
-                  
-                  <div className="h-5 w-px mx-1" style={{ backgroundColor: 'var(--border-color)' }} />
-                  
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>排序:</span>
-                    {[
-                      { field: 'name' as SortField, label: '名称' },
-                      { field: 'size' as SortField, label: '大小' },
-                      { field: 'duration' as SortField, label: '时长' },
-                      { field: 'width' as SortField, label: '分辨率' },
-                      { field: 'bitrate' as SortField, label: '码率' },
-                    ].map(item => (
-                      <button
-                        key={item.field}
-                        onClick={() => toggleSort(item.field)}
-                        className="flex items-center gap-0.5 px-2 py-1 rounded text-xs transition-all duration-200"
-                        style={{ 
-                          backgroundColor: sortField === item.field ? 'var(--primary-light)' : 'var(--bg-tertiary)',
-                          color: sortField === item.field ? 'var(--primary-color)' : 'var(--text-tertiary)',
-                        }}
-                      >
-                        {item.label}
-                        {sortField === item.field && (
-                          sortOrder === 'asc' ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                  
-                  <div className="h-5 w-px mx-1" style={{ backgroundColor: 'var(--border-color)' }} />
-                  
+                  <div className="flex-1" />
                   <div className="flex items-center gap-0.5 rounded-lg p-0.5" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
                     <button
                       onClick={() => setFilterMode('all')}
@@ -1042,6 +1034,32 @@ export function VideoProcess() {
                       处理后
                     </button>
                   </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-tertiary)' }}>排序:</span>
+                  {[
+                    { field: 'name' as SortField, label: '名称' },
+                    { field: 'size' as SortField, label: '大小' },
+                    { field: 'duration' as SortField, label: '时长' },
+                    { field: 'width' as SortField, label: '分辨率' },
+                    { field: 'fps' as SortField, label: '帧率' },
+                    { field: 'bitrate' as SortField, label: '码率' },
+                  ].map(item => (
+                    <button
+                      key={item.field}
+                      onClick={() => toggleSort(item.field)}
+                      className="flex items-center gap-0.5 px-2 py-1 rounded text-xs transition-all duration-200"
+                      style={{ 
+                        backgroundColor: sortField === item.field ? 'var(--primary-light)' : 'var(--bg-tertiary)',
+                        color: sortField === item.field ? 'var(--primary-color)' : 'var(--text-tertiary)',
+                      }}
+                    >
+                      {item.label}
+                      {sortField === item.field && (
+                        sortOrder === 'asc' ? <ArrowUp className="w-2.5 h-2.5" /> : <ArrowDown className="w-2.5 h-2.5" />
+                      )}
+                    </button>
+                  ))}
                 </div>
               </div>
               
@@ -1343,9 +1361,16 @@ export function VideoProcess() {
                         </div>
                         <div className="flex justify-between items-center text-xs">
                           <span style={{ color: 'var(--text-tertiary)' }}>码率</span>
-                          <span className="px-2 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
-                            {formatBitrate(viewingVideo.bitrate)}
-                          </span>
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-2 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
+                              {formatBitrate(viewingVideo.bitrate)}
+                            </span>
+                            {formatBitrateAlt(viewingVideo.bitrate) && (
+                              <span className="px-2 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(245, 158, 11, 0.08)', color: '#d97706', fontSize: '10px' }}>
+                                {formatBitrateAlt(viewingVideo.bitrate)}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1376,9 +1401,16 @@ export function VideoProcess() {
                           {viewingVideo.audioBitrate > 0 && (
                             <div className="flex justify-between items-center text-xs">
                               <span style={{ color: 'var(--text-tertiary)' }}>码率</span>
-                              <span className="px-2 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
-                                {formatBitrate(viewingVideo.audioBitrate)}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="px-2 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
+                                  {formatBitrate(viewingVideo.audioBitrate)}
+                                </span>
+                                {formatBitrateAlt(viewingVideo.audioBitrate) && (
+                                  <span className="px-2 py-0.5 rounded font-medium" style={{ backgroundColor: 'rgba(245, 158, 11, 0.08)', color: '#d97706', fontSize: '10px' }}>
+                                    {formatBitrateAlt(viewingVideo.audioBitrate)}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>

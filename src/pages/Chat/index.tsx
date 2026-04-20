@@ -25,7 +25,7 @@ import { useStreamingContent, useThrottledCallback } from '@/hooks/useStreamingC
 export function ChatPage() {
   const {
     conversations, activeConversationId,
-    models, activeModelId, setActiveModel,
+    models, activeModelId, setActiveModel, updateModel,
     addMessage, updateMessage, deleteMessage, addConversation, updateConversation,
     addLog,
     chatWallpaper, setChatWallpaper,
@@ -888,6 +888,362 @@ export function ChatPage() {
           id: generateId(),
           level: 'error',
           message: `Ollama 连接失败: ${error}`,
+          timestamp: Date.now(),
+          module: 'Chat',
+        });
+      }
+    } else if (activeModel) {
+      const requestStartTime = Date.now();
+      try {
+        const imageBase64List = currentImages.map(img => {
+          const base64Match = img.data.match(/^data:image\/\w+;base64,(.+)$/);
+          return base64Match ? base64Match[1] : img.data;
+        });
+
+        const messages: Array<{ role: string; content: string | Array<{type: string; text?: string; image_url?: {url: string}}> }> = [];
+        
+        const currentConv = conversations.find(c => c.id === convId);
+        if (currentConv) {
+          currentConv.messages.forEach(msg => {
+            if (!msg.isStreaming) {
+              if (msg.images && msg.images.length > 0 && includeImagesInContext) {
+                const content: Array<{type: string; text?: string; image_url?: {url: string}}> = [
+                  { type: 'text', text: msg.content }
+                ];
+                msg.images.forEach(img => {
+                  content.push({
+                    type: 'image_url',
+                    image_url: { url: img }
+                  });
+                });
+                messages.push({ role: msg.role, content });
+              } else {
+                messages.push({ role: msg.role, content: msg.content });
+              }
+            }
+          });
+        }
+
+        if (imageBase64List.length > 0) {
+          const content: Array<{type: string; text?: string; image_url?: {url: string}}> = [
+            { type: 'text', text: userInput }
+          ];
+          imageBase64List.forEach(img => {
+            content.push({
+              type: 'image_url',
+              image_url: { url: `data:image/jpeg;base64,${img}` }
+            });
+          });
+          messages.push({ role: 'user', content });
+        } else {
+          messages.push({ role: 'user', content: userInput });
+        }
+
+        abortControllerRef.current = new AbortController();
+        
+        const isDev = window.location.hostname === 'localhost' && window.location.port === '5173';
+        let apiUrl = activeModel.apiUrl;
+        
+        if (activeModel.type === 'local' && isDev) {
+          if (apiUrl.includes('localhost:1234')) {
+            apiUrl = apiUrl.replace('http://localhost:1234', '/api/lmstudio');
+          } else if (apiUrl.includes('localhost:11434')) {
+            apiUrl = apiUrl.replace('http://localhost:11434', '/api/ollama');
+          }
+        }
+
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        
+        if (activeModel.apiKey) {
+          headers['Authorization'] = `Bearer ${activeModel.apiKey}`;
+        }
+
+        const isOllamaLocal = activeModel.type === 'local' && activeModel.apiUrl.includes('11434');
+        const isAnthropic = activeModel.apiUrl.includes('anthropic.com');
+
+        if (isOllamaLocal) {
+          const ollamaMessages = messages.map(msg => {
+            if (Array.isArray(msg.content)) {
+              const textContent = msg.content.find(c => c.type === 'text')?.text || '';
+              const images = msg.content
+                .filter(c => c.type === 'image_url' && c.image_url?.url)
+                .map(c => {
+                  const url = c.image_url!.url;
+                  const base64Match = url.match(/^data:image\/\w+;base64,(.+)$/);
+                  return base64Match ? base64Match[1] : url;
+                });
+              return { role: msg.role, content: textContent, images: images.length > 0 ? images : undefined };
+            }
+            return msg;
+          });
+
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              model: activeModel.model,
+              messages: ollamaMessages,
+              stream: true,
+              options: {
+                num_ctx: activeModel.maxTokens,
+              },
+            }),
+            signal: abortControllerRef.current.signal,
+          });
+
+          if (response.ok) {
+            setIsStreaming(true);
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            let fullResponse = '';
+            let startTime = Date.now();
+            let firstTokenTime = 0;
+
+            if (reader) {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(line => line.trim());
+
+                for (const line of lines) {
+                  try {
+                    const data = JSON.parse(line);
+                    
+                    if (data.message?.content) {
+                      const token = data.message.content;
+                      
+                      if (firstTokenTime === 0) {
+                        firstTokenTime = (Date.now() - startTime) / 1000;
+                      }
+                      
+                      fullResponse += token;
+                      setStreamingContent(fullResponse);
+                    }
+                    
+                    if (data.done) {
+                      const responseTime = (Date.now() - requestStartTime) / 1000;
+                      const currentStats = activeModel.stats || { totalCalls: 0, successCalls: 0, avgResponseTime: 0, lastUsed: null };
+                      const newTotalCalls = currentStats.totalCalls + 1;
+                      const newSuccessCalls = currentStats.successCalls + 1;
+                      const newAvgResponseTime = ((currentStats.avgResponseTime * currentStats.successCalls) + responseTime) / newSuccessCalls;
+                      
+                      updateModel(activeModel.id, {
+                        stats: {
+                          totalCalls: newTotalCalls,
+                          successCalls: newSuccessCalls,
+                          avgResponseTime: newAvgResponseTime,
+                          lastUsed: Date.now(),
+                        }
+                      });
+                      
+                      updateMessage(convId, aiMsgId, {
+                        content: fullResponse,
+                        isStreaming: false,
+                      });
+                      setIsStreaming(false);
+                      setStreamingContent('');
+                      toast.success(`${activeModel.name} 回复完成`, { duration: 2000 });
+                    }
+                  } catch (e) {
+                    // Ignore parse errors
+                  }
+                }
+              }
+            }
+          } else {
+            throw new Error(`HTTP ${response.status}`);
+          }
+        } else if (isAnthropic) {
+          headers['anthropic-version'] = '2023-06-01';
+          headers['x-api-key'] = activeModel.apiKey || '';
+          delete headers['Authorization'];
+
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              model: activeModel.model,
+              max_tokens: activeModel.maxTokens,
+              messages: messages.map(m => ({
+                role: m.role,
+                content: typeof m.content === 'string' ? m.content : m.content.map(c => {
+                  if (c.type === 'text') return { type: 'text', text: c.text };
+                  if (c.type === 'image_url') return { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: c.image_url!.url.replace(/^data:image\/\w+;base64,/, '') } };
+                  return c;
+                })
+              })),
+              stream: true,
+            }),
+            signal: abortControllerRef.current.signal,
+          });
+
+          if (response.ok) {
+            setIsStreaming(true);
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            let fullResponse = '';
+
+            if (reader) {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(line => line.trim());
+
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    try {
+                      const data = JSON.parse(line.slice(6));
+                      if (data.type === 'content_block_delta' && data.delta?.text) {
+                        fullResponse += data.delta.text;
+                        setStreamingContent(fullResponse);
+                      }
+                    } catch (e) {
+                      // Ignore parse errors
+                    }
+                  }
+                }
+              }
+            }
+
+            const responseTime = (Date.now() - requestStartTime) / 1000;
+            const currentStats = activeModel.stats || { totalCalls: 0, successCalls: 0, avgResponseTime: 0, lastUsed: null };
+            const newTotalCalls = currentStats.totalCalls + 1;
+            const newSuccessCalls = currentStats.successCalls + 1;
+            const newAvgResponseTime = ((currentStats.avgResponseTime * currentStats.successCalls) + responseTime) / newSuccessCalls;
+            
+            updateModel(activeModel.id, {
+              stats: {
+                totalCalls: newTotalCalls,
+                successCalls: newSuccessCalls,
+                avgResponseTime: newAvgResponseTime,
+                lastUsed: Date.now(),
+              }
+            });
+
+            updateMessage(convId, aiMsgId, {
+              content: fullResponse,
+              isStreaming: false,
+            });
+            setIsStreaming(false);
+            setStreamingContent('');
+            toast.success(`${activeModel.name} 回复完成`, { duration: 2000 });
+          } else {
+            throw new Error(`HTTP ${response.status}`);
+          }
+        } else {
+          const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              model: activeModel.model,
+              messages,
+              max_tokens: activeModel.maxTokens,
+              temperature: activeModel.temperature,
+              top_p: activeModel.topP,
+              stream: true,
+            }),
+            signal: abortControllerRef.current.signal,
+          });
+
+          if (response.ok) {
+            setIsStreaming(true);
+            const reader = response.body?.getReader();
+            const decoder = new TextDecoder();
+            let fullResponse = '';
+            let startTime = Date.now();
+            let firstTokenTime = 0;
+
+            if (reader) {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const chunk = decoder.decode(value, { stream: true });
+                const lines = chunk.split('\n').filter(line => line.trim());
+
+                for (const line of lines) {
+                  if (line.startsWith('data: ')) {
+                    const dataStr = line.slice(6);
+                    if (dataStr === '[DONE]') continue;
+                    
+                    try {
+                      const data = JSON.parse(dataStr);
+                      const token = data.choices?.[0]?.delta?.content || '';
+                      
+                      if (token) {
+                        if (firstTokenTime === 0) {
+                          firstTokenTime = (Date.now() - startTime) / 1000;
+                        }
+                        fullResponse += token;
+                        setStreamingContent(fullResponse);
+                      }
+                    } catch (e) {
+                      // Ignore parse errors
+                    }
+                  }
+                }
+              }
+            }
+
+            const responseTime = (Date.now() - requestStartTime) / 1000;
+            const currentStats = activeModel.stats || { totalCalls: 0, successCalls: 0, avgResponseTime: 0, lastUsed: null };
+            const newTotalCalls = currentStats.totalCalls + 1;
+            const newSuccessCalls = currentStats.successCalls + 1;
+            const newAvgResponseTime = ((currentStats.avgResponseTime * currentStats.successCalls) + responseTime) / newSuccessCalls;
+            
+            updateModel(activeModel.id, {
+              stats: {
+                totalCalls: newTotalCalls,
+                successCalls: newSuccessCalls,
+                avgResponseTime: newAvgResponseTime,
+                lastUsed: Date.now(),
+              }
+            });
+
+            updateMessage(convId, aiMsgId, {
+              content: fullResponse,
+              isStreaming: false,
+            });
+            setIsStreaming(false);
+            setStreamingContent('');
+            toast.success(`${activeModel.name} 回复完成`, { duration: 2000 });
+          } else {
+            throw new Error(`HTTP ${response.status}`);
+          }
+        }
+
+        addLog({
+          id: generateId(),
+          level: 'info',
+          message: `发送消息到 ${activeModel.name} 成功`,
+          timestamp: Date.now(),
+          module: 'Chat',
+        });
+      } catch (error) {
+        const currentStats = activeModel.stats || { totalCalls: 0, successCalls: 0, avgResponseTime: 0, lastUsed: null };
+        updateModel(activeModel.id, {
+          stats: {
+            ...currentStats,
+            totalCalls: currentStats.totalCalls + 1,
+          }
+        });
+        
+        updateMessage(convId, aiMsgId, { 
+          content: `连接模型失败: ${error instanceof Error ? error.message : '未知错误'}`,
+          isStreaming: false 
+        });
+        setIsStreaming(false);
+        toast.error('连接模型失败', { duration: 3000 });
+        addLog({
+          id: generateId(),
+          level: 'error',
+          message: `模型连接失败: ${error}`,
           timestamp: Date.now(),
           module: 'Chat',
         });

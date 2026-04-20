@@ -27,6 +27,7 @@ export interface AppConfig {
   ollamaVerboseMode: boolean;
   ollamaThinkMode: boolean;
   ollamaChatMode: 'single' | 'multi';
+  ollamaAutoConnect: boolean;
   includeImagesInContext: boolean;
   deleteConfirmEnabled: boolean;
   showChatWelcome: boolean;
@@ -73,6 +74,7 @@ export class ConfigStorage {
       ollamaVerboseMode: false,
       ollamaThinkMode: true,
       ollamaChatMode: 'multi',
+      ollamaAutoConnect: true,
       includeImagesInContext: true,
       deleteConfirmEnabled: true,
       showChatWelcome: true,

@@ -231,131 +231,7 @@ interface AppState {
 export const generateId = () => Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 
 // Default models
-const defaultModels: ModelConfig[] = [
-  {
-    id: 'gpt4',
-    name: 'GPT-4o',
-    provider: 'OpenAI',
-    type: 'remote',
-    apiUrl: 'https://api.openai.com/v1/chat/completions',
-    apiKey: '',
-    model: 'gpt-4o',
-    maxTokens: 4096,
-    temperature: 0.7,
-    topP: 1.0,
-    group: 'OpenAI',
-    isFavorite: true,
-    isActive: true,
-    createdAt: Date.now(),
-    presets: [
-      { id: '1', name: '创意模式', temperature: 1.0, topP: 0.95, maxTokens: 4096 },
-      { id: '2', name: '精准模式', temperature: 0.2, topP: 0.8, maxTokens: 2048 },
-      { id: '3', name: '均衡模式', temperature: 0.7, topP: 1.0, maxTokens: 4096 },
-    ],
-    stats: { totalCalls: 156, successCalls: 152, avgResponseTime: 1.8, lastUsed: Date.now() - 300000 },
-  },
-  {
-    id: 'gpt35',
-    name: 'GPT-3.5 Turbo',
-    provider: 'OpenAI',
-    type: 'remote',
-    apiUrl: 'https://api.openai.com/v1/chat/completions',
-    apiKey: '',
-    model: 'gpt-3.5-turbo',
-    maxTokens: 4096,
-    temperature: 0.7,
-    topP: 1.0,
-    group: 'OpenAI',
-    isFavorite: false,
-    isActive: true,
-    createdAt: Date.now(),
-    presets: [
-      { id: '1', name: '创意模式', temperature: 1.0, topP: 0.95, maxTokens: 4096 },
-      { id: '2', name: '精准模式', temperature: 0.3, topP: 0.8, maxTokens: 2048 },
-    ],
-    stats: { totalCalls: 423, successCalls: 420, avgResponseTime: 0.8, lastUsed: Date.now() - 600000 },
-  },
-  {
-    id: 'claude3',
-    name: 'Claude 3.5 Sonnet',
-    provider: 'Anthropic',
-    type: 'remote',
-    apiUrl: 'https://api.anthropic.com/v1/messages',
-    apiKey: '',
-    model: 'claude-3-5-sonnet-20241022',
-    maxTokens: 8192,
-    temperature: 0.7,
-    topP: 1.0,
-    group: 'Anthropic',
-    isFavorite: true,
-    isActive: true,
-    createdAt: Date.now(),
-    presets: [
-      { id: '1', name: '创意模式', temperature: 0.9, topP: 0.95, maxTokens: 8192 },
-      { id: '2', name: '精准模式', temperature: 0.2, topP: 0.8, maxTokens: 4096 },
-    ],
-    stats: { totalCalls: 89, successCalls: 87, avgResponseTime: 2.1, lastUsed: Date.now() - 120000 },
-  },
-  {
-    id: 'qwen',
-    name: '通义千问 Max',
-    provider: 'Alibaba',
-    type: 'remote',
-    apiUrl: 'https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation',
-    apiKey: '',
-    model: 'qwen-max',
-    maxTokens: 6144,
-    temperature: 0.85,
-    topP: 0.8,
-    group: '国产模型',
-    isFavorite: false,
-    isActive: true,
-    createdAt: Date.now(),
-    presets: [
-      { id: '1', name: '创意模式', temperature: 1.0, topP: 0.95, maxTokens: 6144 },
-    ],
-    stats: { totalCalls: 67, successCalls: 65, avgResponseTime: 1.5, lastUsed: Date.now() - 1800000 },
-  },
-  {
-    id: 'llama',
-    name: 'LLaMA 3.1 70B',
-    provider: 'Meta',
-    type: 'local',
-    apiUrl: 'http://localhost:11434/api/chat',
-    apiKey: '',
-    model: 'llama3.1:70b',
-    maxTokens: 4096,
-    temperature: 0.8,
-    topP: 0.9,
-    group: '本地模型',
-    isFavorite: false,
-    isActive: false,
-    createdAt: Date.now(),
-    presets: [],
-    stats: { totalCalls: 34, successCalls: 30, avgResponseTime: 3.2, lastUsed: null },
-  },
-  {
-    id: 'deepseek',
-    name: 'DeepSeek V3',
-    provider: 'DeepSeek',
-    type: 'remote',
-    apiUrl: 'https://api.deepseek.com/chat/completions',
-    apiKey: '',
-    model: 'deepseek-chat',
-    maxTokens: 8192,
-    temperature: 0.7,
-    topP: 1.0,
-    group: '国产模型',
-    isFavorite: true,
-    isActive: true,
-    createdAt: Date.now(),
-    presets: [
-      { id: '1', name: '代码模式', temperature: 0.1, topP: 0.9, maxTokens: 8192 },
-      { id: '2', name: '对话模式', temperature: 0.7, topP: 1.0, maxTokens: 4096 },
-    ],
-    stats: { totalCalls: 212, successCalls: 210, avgResponseTime: 1.2, lastUsed: Date.now() - 60000 },
-  },
-];
+const defaultModels: ModelConfig[] = [];
 
 // Demo conversations
 const demoConversations: Conversation[] = [
@@ -524,8 +400,11 @@ project/
 
 export const useStore = create<AppState>((set, get) => {
   const debouncedSaveModels = debounce(async (models: ModelConfig[]) => {
-    if (get().isHydrated) {
+    try {
       await ChatModelStorage.saveModels(models);
+      console.log('模型保存成功:', models.length, '个模型');
+    } catch (error) {
+      console.error('模型保存失败:', error);
     }
   }, 300);
 
@@ -586,7 +465,7 @@ export const useStore = create<AppState>((set, get) => {
 
   // Models
   models: defaultModels,
-  activeModelId: 'gpt4',
+  activeModelId: null,
   addModel: (model) => {
     set((state) => {
       const newModels = [...state.models, model];

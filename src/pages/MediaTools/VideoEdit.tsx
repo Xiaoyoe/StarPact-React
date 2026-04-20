@@ -54,6 +54,13 @@ function formatBitrate(bps: number): string {
   return (bps / 1000000).toFixed(2) + ' Mbps';
 }
 
+function formatBitrateAlt(bps: number): string | null {
+  if (!bps || bps <= 0) return null;
+  if (bps >= 1000000) return (bps / 1000).toFixed(0) + ' kbps';
+  if (bps >= 1000) return bps + ' bps';
+  return null;
+}
+
 function formatSampleRate(hz: number): string {
   if (!hz || hz <= 0) return 'N/A';
   if (hz >= 1000) return (hz / 1000).toFixed(1) + ' kHz';
@@ -2262,9 +2269,14 @@ export function VideoEdit() {
                                 <span style={{ color: 'var(--text-tertiary)' }}>帧率</span>
                                 <span style={{ color: 'var(--text-primary)' }}>{currentVideo.fps ? currentVideo.fps.toFixed(2) : 'N/A'} fps</span>
                               </div>
-                              <div className="flex justify-between">
+                              <div className="flex justify-between items-center">
                                 <span style={{ color: 'var(--text-tertiary)' }}>码率</span>
-                                <span style={{ color: 'var(--text-primary)' }}>{formatBitrate(currentVideo.bitrate)}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span style={{ color: 'var(--text-primary)' }}>{formatBitrate(currentVideo.bitrate)}</span>
+                                  {formatBitrateAlt(currentVideo.bitrate) && (
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: '10px' }}>({formatBitrateAlt(currentVideo.bitrate)})</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -2287,9 +2299,14 @@ export function VideoEdit() {
                                 <span style={{ color: 'var(--text-tertiary)' }}>声道</span>
                                 <span style={{ color: 'var(--text-primary)' }}>{currentVideo.audioChannels || 'N/A'}</span>
                               </div>
-                              <div className="flex justify-between">
+                              <div className="flex justify-between items-center">
                                 <span style={{ color: 'var(--text-tertiary)' }}>码率</span>
-                                <span style={{ color: 'var(--text-primary)' }}>{formatBitrate(currentVideo.audioBitrate)}</span>
+                                <div className="flex items-center gap-1.5">
+                                  <span style={{ color: 'var(--text-primary)' }}>{formatBitrate(currentVideo.audioBitrate)}</span>
+                                  {formatBitrateAlt(currentVideo.audioBitrate) && (
+                                    <span style={{ color: 'var(--text-tertiary)', fontSize: '10px' }}>({formatBitrateAlt(currentVideo.audioBitrate)})</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           </div>
