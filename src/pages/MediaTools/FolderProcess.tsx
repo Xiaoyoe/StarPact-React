@@ -146,6 +146,18 @@ export function FolderProcess() {
     setContextMenu(null);
   };
 
+  const getThumbnail = async (filePath: string): Promise<string> => {
+    try {
+      await ffmpegConfigStorage.ready();
+      const ffmpegPath = ffmpegConfigStorage.getFFmpegPath();
+      if (ffmpegPath && window.electronAPI?.ffmpeg?.getVideoFrame) {
+        const frame = await window.electronAPI.ffmpeg.getVideoFrame(ffmpegPath, filePath, 1);
+        if (frame) return frame;
+      }
+    } catch {}
+    return '';
+  };
+
   const sendToVideoProcess = async (video: VideoInfo) => {
     try {
       await ffmpegConfigStorage.ready();
@@ -162,6 +174,8 @@ export function FolderProcess() {
         return;
       }
       
+      const thumbnail = await getThumbnail(video.path);
+      
       const compareData: CompareVideoData = {
         path: video.path,
         name: video.name,
@@ -177,7 +191,7 @@ export function FolderProcess() {
         audioChannels: mediaInfo.audio?.channels || 0,
         audioBitrate: mediaInfo.audio?.bitrate || 0,
         format: video.name.split('.').pop() || '',
-        thumbnail: '',
+        thumbnail,
       };
       
       setPendingCompareVideos({
@@ -187,11 +201,64 @@ export function FolderProcess() {
         timestamp: Date.now(),
       });
       setActiveTab('video');
-      toast.success(`已发送 "${video.name}" 到视频整合`);
+      toast.success(`已发送 "${video.name}" 到视频分析`);
     } catch {
       toast.error('发送失败');
     }
     setContextMenu(null);
+  };
+
+  const sendAllToVideoProcess = async () => {
+    if (videos.length === 0) {
+      toast.error('没有视频可发送');
+      return;
+    }
+    
+    try {
+      await ffmpegConfigStorage.ready();
+      const ffprobePath = ffmpegConfigStorage.getFFprobePath();
+      
+      if (!ffprobePath) {
+        toast.error('请先配置 FFmpeg');
+        return;
+      }
+      
+      const compareVideos: CompareVideoData[] = [];
+      
+      for (const video of videos) {
+        const mediaInfo = await window.electronAPI.ffmpeg.getMediaInfo(ffprobePath, video.path);
+        const thumbnail = await getThumbnail(video.path);
+        
+        compareVideos.push({
+          path: video.path,
+          name: video.name,
+          size: video.size,
+          duration: video.duration,
+          width: video.width,
+          height: video.height,
+          codec: video.codec,
+          fps: video.fps,
+          bitrate: video.bitrate,
+          audioCodec: mediaInfo?.audio?.codec || '',
+          audioSampleRate: mediaInfo?.audio?.sampleRate || 0,
+          audioChannels: mediaInfo?.audio?.channels || 0,
+          audioBitrate: mediaInfo?.audio?.bitrate || 0,
+          format: video.name.split('.').pop() || '',
+          thumbnail,
+        });
+      }
+      
+      setPendingCompareVideos({
+        id: `folder-all-${Date.now()}`,
+        type: 'edit',
+        videos: compareVideos,
+        timestamp: Date.now(),
+      });
+      setActiveTab('video');
+      toast.success(`已发送 ${videos.length} 个视频到视频分析`);
+    } catch {
+      toast.error('发送失败');
+    }
   };
 
   const handleContextMenu = (e: React.MouseEvent, video: VideoInfo) => {
@@ -231,6 +298,8 @@ export function FolderProcess() {
       }
     };
     
+    const videoExts = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mts', '.m2ts', '.ogv', '.3gp', '.f4v'];
+    
     const items = e.dataTransfer.items;
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
@@ -255,10 +324,37 @@ export function FolderProcess() {
       const file = e.dataTransfer.files[0];
       const path = (file as any).path;
       if (path) {
+        const ext = path.substring(path.lastIndexOf('.')).toLowerCase();
+        
+        if (videoExts.includes(ext)) {
+          const lastSep = path.includes('\\') ? '\\' : '/';
+          const lastSepIndex = path.lastIndexOf(lastSep);
+          const folderPath = lastSepIndex > 0 ? path.substring(0, lastSepIndex) : path;
+          
+          setFolderPath(folderPath);
+          setVideos([]);
+          setLogs([]);
+          toast.success(`已检测到视频文件，自动选择所在文件夹: ${folderPath}`);
+          triggerScan(folderPath);
+          return;
+        }
+        
+        try {
+          const stat = await window.electronAPI?.file?.stat?.(path);
+          if (stat?.isDirectory) {
+            setFolderPath(path);
+            setVideos([]);
+            setLogs([]);
+            toast.success(`已选择文件夹: ${path}`);
+            triggerScan(path);
+            return;
+          }
+        } catch {}
+        
         setFolderPath(path);
         setVideos([]);
         setLogs([]);
-        toast.success(`已选择文件夹: ${path}`);
+        toast.success(`已选择: ${path}`);
         triggerScan(path);
       }
     }
@@ -454,6 +550,13 @@ export function FolderProcess() {
     setVideos([]);
     setLogs([]);
     setExpandedFolders(new Set());
+  };
+
+  const clearFolderList = () => {
+    setVideos([]);
+    setLogs([]);
+    setExpandedFolders(new Set());
+    toast.success('已清空文件夹列表');
   };
 
   const copyAllVideoInfo = async () => {
@@ -740,7 +843,7 @@ export function FolderProcess() {
       <div className="flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <FolderOpen className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
-          <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>文件夹处理</h2>
+          <h2 className="text-lg font-bold" style={{ color: 'var(--text-primary)' }}>文件夹分析</h2>
           <Badge color="blue">批量操作</Badge>
           {isProcessing && (
             <Badge color="green">
@@ -1139,17 +1242,31 @@ export function FolderProcess() {
                     </span>
                   )}
                 </div>
-                <button
-                  onClick={copyAllVideoInfo}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:scale-105"
-                  style={{ 
-                    background: copied ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #0891b2, #06b6d4)',
-                    boxShadow: '0 2px 8px rgba(6, 182, 212, 0.2)'
-                  }}
-                >
-                  {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-                  {copied ? '已复制' : '复制信息'}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={sendAllToVideoProcess}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:scale-105"
+                    style={{ 
+                      background: 'linear-gradient(135deg, #8b5cf6, #a78bfa)',
+                      boxShadow: '0 2px 8px rgba(139, 92, 246, 0.2)'
+                    }}
+                    title="发送所有视频到视频分析进行对比分析"
+                  >
+                    <Film className="w-3.5 h-3.5" />
+                    发送到视频分析
+                  </button>
+                  <button
+                    onClick={copyAllVideoInfo}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-all duration-200 hover:scale-105"
+                    style={{ 
+                      background: copied ? 'linear-gradient(135deg, #10b981, #059669)' : 'linear-gradient(135deg, #0891b2, #06b6d4)',
+                      boxShadow: '0 2px 8px rgba(6, 182, 212, 0.2)'
+                    }}
+                  >
+                    {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    {copied ? '已复制' : '复制信息'}
+                  </button>
+                </div>
               </div>
               <div className="max-h-80 overflow-y-auto">
                 <table className="w-full text-xs">
@@ -1240,6 +1357,16 @@ export function FolderProcess() {
                     {folderList.length}
                   </span>
                 </div>
+                {folderList.length > 0 && (
+                  <button
+                    onClick={clearFolderList}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-all duration-200 hover:scale-105"
+                    style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-tertiary)' }}
+                  >
+                    <X className="w-3 h-3" />
+                    清空
+                  </button>
+                )}
               </div>
               <div className="max-h-96 overflow-y-auto">
                 {folderList.map((folder, index) => {
@@ -1429,7 +1556,7 @@ export function FolderProcess() {
             onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
           >
             <Film className="w-3.5 h-3.5" style={{ color: '#8b5cf6' }} />
-            发送到视频整合
+            发送到视频分析
           </button>
         </div>
       )}

@@ -4,7 +4,8 @@ import {
   Copy, Check, Trash2, X, Plus, Film, MonitorPlay, 
   Music, FileText, Loader2, BarChart3, GitCompare, 
   ArrowUpDown, ArrowUp, ArrowDown, TrendingUp, Minus,
-  FolderOpen, Send, Filter, PanelLeftClose, PanelLeft, Columns, Rows
+  FolderOpen, Send, Filter, PanelLeftClose, PanelLeft, Columns, Rows,
+  Maximize2, Sparkles, Clock, HardDrive
 } from 'lucide-react';
 import { Badge, Terminal } from '@/components/ffmpeg';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -177,6 +178,7 @@ export function VideoProcess() {
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [panelView, setPanelView] = useState<'both' | 'left' | 'right'>('both');
+  const [showCompareModal, setShowCompareModal] = useState(false);
   const lastLeftClickRef = useRef<{ time: number; index: number } | null>(null);
   
   const { 
@@ -323,6 +325,47 @@ export function VideoProcess() {
       minFps,
       maxRes,
       minRes,
+    };
+  }, [selectedVideos]);
+
+  const commonAttributes = useMemo(() => {
+    if (selectedVideos.length < 2) return null;
+    
+    const fpsMap = new Map<string, number>();
+    const resolutionMap = new Map<string, number>();
+    const codecMap = new Map<string, number>();
+    const audioCodecMap = new Map<string, number>();
+    const formatMap = new Map<string, number>();
+    
+    selectedVideos.forEach(v => {
+      const fpsKey = v.fps > 0 ? v.fps.toFixed(2) : 'N/A';
+      fpsMap.set(fpsKey, (fpsMap.get(fpsKey) || 0) + 1);
+      
+      const resKey = v.width > 0 ? `${v.width}x${v.height}` : 'N/A';
+      resolutionMap.set(resKey, (resolutionMap.get(resKey) || 0) + 1);
+      
+      if (v.codec) codecMap.set(v.codec, (codecMap.get(v.codec) || 0) + 1);
+      if (v.audioCodec) audioCodecMap.set(v.audioCodec, (audioCodecMap.get(v.audioCodec) || 0) + 1);
+      if (v.format) formatMap.set(v.format, (formatMap.get(v.format) || 0) + 1);
+    });
+    
+    const getMostCommon = (map: Map<string, number>) => {
+      const sorted = Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+      return sorted.length > 0 ? { value: sorted[0][0], count: sorted[0][1], total: selectedVideos.length } : null;
+    };
+    
+    const mostCommonFps = getMostCommon(fpsMap);
+    const mostCommonResolution = getMostCommon(resolutionMap);
+    const mostCommonCodec = getMostCommon(codecMap);
+    const mostCommonAudioCodec = getMostCommon(audioCodecMap);
+    const mostCommonFormat = getMostCommon(formatMap);
+    
+    return {
+      fps: mostCommonFps,
+      resolution: mostCommonResolution,
+      codec: mostCommonCodec,
+      audioCodec: mostCommonAudioCodec,
+      format: mostCommonFormat,
     };
   }, [selectedVideos]);
 
@@ -478,34 +521,112 @@ export function VideoProcess() {
       return;
     }
     
+    const items = e.dataTransfer.items;
     const files = e.dataTransfer.files;
-    if (files.length === 0) return;
     
     setIsLoading(true);
     setLoadProgress(0);
-    addLog(`[info] 开始加载 ${files.length} 个视频文件...`);
     
     const newVideos: VideoFileInfo[] = [];
     const videoExts = ['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.flv', '.webm', '.m4v', '.ts', '.mts', '.m2ts', '.ogv', '.3gp', '.f4v'];
     
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const filePath = (file as any).path;
-      if (!filePath) continue;
+    const loadFolderVideos = async (folderPath: string) => {
+      addLog(`[info] 扫描文件夹: ${folderPath}`);
       
-      const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
-      if (!videoExts.includes(ext)) continue;
-      
-      const fileName = filePath.split(/[/\\]/).pop() || filePath;
-      setLoadingName(fileName);
-      
-      const info = await loadVideoInfo(filePath);
-      if (info) {
-        newVideos.push(info);
-        addLog(`[done] 已加载: ${info.name}`);
+      try {
+        await ffmpegConfigStorage.ready();
+        const ffprobePath = ffmpegConfigStorage.getFFprobePath();
+        
+        if (!ffprobePath || !window.electronAPI?.ffmpeg?.scanFolderVideos) {
+          addLog(`[error] 无法扫描文件夹，FFprobe 未配置或 API 不可用`);
+          return;
+        }
+        
+        const result = await window.electronAPI.ffmpeg.scanFolderVideos(ffprobePath, folderPath);
+        
+        if (result.videos && result.videos.length > 0) {
+          addLog(`[info] 找到 ${result.videos.length} 个视频文件`);
+          
+          for (let i = 0; i < result.videos.length; i++) {
+            const v = result.videos[i];
+            const thumbnail = await getThumbnail(v.path);
+            
+            newVideos.push({
+              path: v.path,
+              name: v.name,
+              size: v.size,
+              duration: v.duration,
+              width: v.width,
+              height: v.height,
+              codec: v.codec,
+              fps: v.fps,
+              bitrate: v.bitrate,
+              audioCodec: v.audioCodec || '',
+              audioSampleRate: v.audioSampleRate || 0,
+              audioChannels: v.audioChannels || 0,
+              audioBitrate: v.audioBitrate || 0,
+              format: v.format || v.name.split('.').pop() || '',
+              thumbnail,
+            });
+            
+            setLoadProgress(Math.round(((i + 1) / result.videos.length) * 100));
+            setLoadingName(v.name);
+          }
+        } else {
+          addLog(`[warn] 文件夹中未找到视频文件`);
+        }
+      } catch (error) {
+        addLog(`[error] 扫描文件夹失败: ${error}`);
       }
+    };
+    
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item.kind === 'file') {
+        const entry = item.webkitGetAsEntry?.();
+        if (entry?.isDirectory) {
+          const file = item.getAsFile();
+          if (file) {
+            const path = (file as any).path;
+            if (path) {
+              await loadFolderVideos(path);
+              continue;
+            }
+          }
+        }
+      }
+    }
+    
+    if (files.length > 0) {
+      addLog(`[info] 开始加载 ${files.length} 个项目...`);
       
-      setLoadProgress(Math.round(((i + 1) / files.length) * 100));
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const filePath = (file as any).path;
+        if (!filePath) continue;
+        
+        try {
+          const stat = await window.electronAPI?.file?.stat?.(filePath);
+          if (stat?.isDirectory) {
+            await loadFolderVideos(filePath);
+            continue;
+          }
+        } catch {}
+        
+        const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
+        if (!videoExts.includes(ext)) continue;
+        
+        const fileName = filePath.split(/[/\\]/).pop() || filePath;
+        setLoadingName(fileName);
+        
+        const info = await loadVideoInfo(filePath);
+        if (info) {
+          newVideos.push(info);
+          addLog(`[done] 已加载: ${info.name}`);
+        }
+        
+        setLoadProgress(Math.round(((i + 1) / files.length) * 100));
+      }
     }
     
     if (newVideos.length > 0) {
@@ -560,6 +681,88 @@ export function VideoProcess() {
       setViewingIndex(0);
       setSelectedIndices(new Set());
       toast.success(`已加载 ${newVideos.length} 个视频`);
+    }
+    
+    setIsLoading(false);
+    setLoadingName('');
+  };
+
+  const selectFolder = async () => {
+    if (!isElectronEnv) {
+      toast.error('请使用 Electron 模式运行此功能');
+      return;
+    }
+    
+    if (!isConfigured) {
+      toast.error('请先配置 FFmpeg');
+      return;
+    }
+    
+    const result = await window.electronAPI.file.selectFolder({
+      title: '选择视频文件夹',
+    });
+    
+    if (!result.success || !result.path) return;
+    
+    setIsLoading(true);
+    setLoadProgress(0);
+    addLog(`[info] 开始扫描文件夹: ${result.path}`);
+    
+    try {
+      await ffmpegConfigStorage.ready();
+      const ffprobePath = ffmpegConfigStorage.getFFprobePath();
+      
+      if (!ffprobePath || !window.electronAPI?.ffmpeg?.scanFolderVideos) {
+        toast.error('无法扫描文件夹，FFprobe 未配置或 API 不可用');
+        setIsLoading(false);
+        return;
+      }
+      
+      const scanResult = await window.electronAPI.ffmpeg.scanFolderVideos(ffprobePath, result.path);
+      
+      if (scanResult.videos && scanResult.videos.length > 0) {
+        addLog(`[info] 找到 ${scanResult.videos.length} 个视频文件`);
+        
+        const newVideos: VideoFileInfo[] = [];
+        
+        for (let i = 0; i < scanResult.videos.length; i++) {
+          const v = scanResult.videos[i];
+          const thumbnail = await getThumbnail(v.path);
+          
+          newVideos.push({
+            path: v.path,
+            name: v.name,
+            size: v.size,
+            duration: v.duration,
+            width: v.width,
+            height: v.height,
+            codec: v.codec,
+            fps: v.fps,
+            bitrate: v.bitrate,
+            audioCodec: v.audioCodec || '',
+            audioSampleRate: v.audioSampleRate || 0,
+            audioChannels: v.audioChannels || 0,
+            audioBitrate: v.audioBitrate || 0,
+            format: v.format || v.name.split('.').pop() || '',
+            thumbnail,
+          });
+          
+          setLoadProgress(Math.round(((i + 1) / scanResult.videos.length) * 100));
+          setLoadingName(v.name);
+        }
+        
+        setVideos(prev => [...prev, ...newVideos]);
+        setViewingIndex(0);
+        setSelectedIndices(new Set());
+        toast.success(`已加载 ${newVideos.length} 个视频`);
+        addLog(`[done] 扫描完成，共加载 ${newVideos.length} 个视频`);
+      } else {
+        addLog(`[warn] 文件夹中未找到视频文件`);
+        toast.info('文件夹中未找到视频文件');
+      }
+    } catch (error) {
+      addLog(`[error] 扫描文件夹失败: ${error}`);
+      toast.error('扫描文件夹失败');
     }
     
     setIsLoading(false);
@@ -792,6 +995,13 @@ export function VideoProcess() {
   const viewingVideo = videos.length > 0 && viewingIndex < videos.length ? videos[viewingIndex] : null;
   const selectedCount = selectedIndices.size;
 
+  const totalStats = useMemo(() => {
+    if (videos.length === 0) return null;
+    const totalDuration = videos.reduce((sum, v) => sum + v.duration, 0);
+    const totalSize = videos.reduce((sum, v) => sum + v.size, 0);
+    return { totalDuration, totalSize };
+  }, [videos]);
+
   return (
     <div className="h-full flex flex-col space-y-3">
       <div 
@@ -809,8 +1019,24 @@ export function VideoProcess() {
           >
             <Film className="w-4 h-4" style={{ color: '#06b6d4' }} />
           </div>
-          <h2 className="text-base font-semibold" style={{ color: 'white' }}>视频整合</h2>
+          <h2 className="text-base font-semibold" style={{ color: 'white' }}>视频分析</h2>
           <Badge color="blue">信息查看</Badge>
+          {videos.length > 0 && (
+            <Badge color="gray">{videos.length} 个视频</Badge>
+          )}
+          {totalStats && (
+            <div className="flex items-center gap-2 text-xs" style={{ color: 'rgba(255, 255, 255, 0.7)' }}>
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {formatDuration(totalStats.totalDuration)}
+              </span>
+              <span>·</span>
+              <span className="flex items-center gap-1">
+                <HardDrive className="w-3 h-3" />
+                {formatSize(totalStats.totalSize)}
+              </span>
+            </div>
+          )}
           {selectedCount > 0 && (
             <Badge color="cyan">已选择 {selectedCount} 个</Badge>
           )}
@@ -919,7 +1145,7 @@ export function VideoProcess() {
 
       <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
         <div 
-          className={`flex flex-col ${panelView === 'right' ? 'hidden' : panelView === 'left' ? 'col-span-12' : 'col-span-7'}`}
+          className={`flex flex-col min-h-0 ${panelView === 'right' ? 'hidden' : panelView === 'left' ? 'col-span-12' : 'col-span-7'}`}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
@@ -973,7 +1199,7 @@ export function VideoProcess() {
           ) : (
             <>
               <div 
-                className="sticky top-0 z-10 pb-3"
+                className="flex-shrink-0 pb-3"
                 style={{ 
                   backgroundColor: 'transparent',
                   marginBottom: '12px',
@@ -993,6 +1219,20 @@ export function VideoProcess() {
                   >
                     <Plus className="w-3 h-3" />
                     添加视频
+                  </button>
+                  <button
+                    onClick={selectFolder}
+                    disabled={!isElectronEnv || !isConfigured || isLoading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 hover:scale-105 disabled:opacity-50"
+                    style={{ 
+                      background: 'linear-gradient(135deg, #8b5cf6, #a78bfa)',
+                      color: 'white',
+                      boxShadow: '0 2px 8px rgba(139, 92, 246, 0.15)'
+                    }}
+                    title="扫描文件夹中的所有视频"
+                  >
+                    <FolderOpen className="w-3 h-3" />
+                    扫描文件夹
                   </button>
                   <button
                     onClick={selectAll}
@@ -1064,7 +1304,7 @@ export function VideoProcess() {
               </div>
               
               <div 
-                className="flex-1 overflow-y-auto pr-2"
+                className="flex-1 min-h-0 overflow-y-auto pr-2"
                 style={{ scrollbarGutter: 'stable' }}
               >
 
@@ -1246,7 +1486,7 @@ export function VideoProcess() {
           )}
         </div>
 
-        <div className={`space-y-3 overflow-y-auto pr-2 ${panelView === 'left' ? 'hidden' : panelView === 'right' ? 'col-span-12' : 'col-span-5'}`} style={{ scrollbarGutter: 'stable' }}>
+        <div className={`space-y-3 overflow-y-auto pr-2 min-h-0 ${panelView === 'left' ? 'hidden' : panelView === 'right' ? 'col-span-12' : 'col-span-5'}`} style={{ scrollbarGutter: 'stable' }}>
           {videos.length > 0 && (
             <div className="flex items-center gap-1 p-1 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
               {[
@@ -1441,7 +1681,7 @@ export function VideoProcess() {
                       右键点击视频卡片可快速选择
                     </p>
                   </div>
-                ) : compareData && (
+                ) : (
                   <div 
                     className="rounded-xl overflow-hidden"
                     style={{ backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}
@@ -1455,16 +1695,70 @@ export function VideoProcess() {
                             {selectedVideos.length} 个视频
                           </span>
                         </div>
-                        <button
-                          onClick={copyCompareInfo}
-                          className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all hover:scale-105"
-                          style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }}
-                        >
-                          {copiedId === 'compare' ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
-                          {copiedId === 'compare' ? '已复制' : '复制对比'}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setShowCompareModal(true)}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all hover:scale-105"
+                            style={{ backgroundColor: 'var(--primary-light)', color: 'var(--primary-color)' }}
+                            title="在悬浮窗中查看完整对比"
+                          >
+                            <Maximize2 className="w-3 h-3" />
+                            悬浮窗
+                          </button>
+                          <button
+                            onClick={copyCompareInfo}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs transition-all hover:scale-105"
+                            style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }}
+                          >
+                            {copiedId === 'compare' ? <Check className="w-3 h-3 text-green-500" /> : <Copy className="w-3 h-3" />}
+                            {copiedId === 'compare' ? '已复制' : '复制'}
+                          </button>
+                        </div>
                       </div>
                     </div>
+                    
+                    {commonAttributes && (
+                      <div className="px-4 py-3" style={{ backgroundColor: 'rgba(6, 182, 212, 0.05)', borderBottom: '1px solid var(--border-color)' }}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <Sparkles className="w-3.5 h-3.5" style={{ color: 'var(--primary-color)' }} />
+                          <span className="text-xs font-medium" style={{ color: 'var(--primary-color)' }}>相同属性统计</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {commonAttributes.fps && commonAttributes.fps.count > 1 && (
+                            <span className="px-2 py-1 rounded-lg text-xs font-medium" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+                              帧率 {commonAttributes.fps.value} fps ({commonAttributes.fps.count}/{commonAttributes.fps.total})
+                            </span>
+                          )}
+                          {commonAttributes.resolution && commonAttributes.resolution.count > 1 && (
+                            <span className="px-2 py-1 rounded-lg text-xs font-medium" style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
+                              分辨率 {commonAttributes.resolution.value} ({commonAttributes.resolution.count}/{commonAttributes.resolution.total})
+                            </span>
+                          )}
+                          {commonAttributes.codec && commonAttributes.codec.count > 1 && (
+                            <span className="px-2 py-1 rounded-lg text-xs font-medium" style={{ backgroundColor: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa' }}>
+                              编码 {commonAttributes.codec.value} ({commonAttributes.codec.count}/{commonAttributes.codec.total})
+                            </span>
+                          )}
+                          {commonAttributes.audioCodec && commonAttributes.audioCodec.count > 1 && (
+                            <span className="px-2 py-1 rounded-lg text-xs font-medium" style={{ backgroundColor: 'rgba(236, 72, 153, 0.15)', color: '#f472b6' }}>
+                              音频 {commonAttributes.audioCodec.value} ({commonAttributes.audioCodec.count}/{commonAttributes.audioCodec.total})
+                            </span>
+                          )}
+                          {commonAttributes.format && commonAttributes.format.count > 1 && (
+                            <span className="px-2 py-1 rounded-lg text-xs font-medium" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
+                              格式 {commonAttributes.format.value} ({commonAttributes.format.count}/{commonAttributes.format.total})
+                            </span>
+                          )}
+                          {(!commonAttributes.fps || commonAttributes.fps.count <= 1) && 
+                           (!commonAttributes.resolution || commonAttributes.resolution.count <= 1) &&
+                           (!commonAttributes.codec || commonAttributes.codec.count <= 1) && (
+                            <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                              暂无完全相同的属性
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     
                     <div className="p-4 overflow-x-auto">
                       <table className="w-full text-xs">
@@ -1518,8 +1812,8 @@ export function VideoProcess() {
                               <td key={i} className="py-2 px-2 text-center">
                                 <CompareValue 
                                   value={formatSize(v.size)}
-                                  isMax={compareData.maxSize === v.size && compareData.maxSize !== compareData.minSize}
-                                  isMin={compareData.minSize === v.size && compareData.maxSize !== compareData.minSize}
+                                  isMax={compareData?.maxSize === v.size && compareData?.maxSize !== compareData?.minSize}
+                                  isMin={compareData?.minSize === v.size && compareData?.maxSize !== compareData?.minSize}
                                 />
                               </td>
                             ))}
@@ -1530,8 +1824,8 @@ export function VideoProcess() {
                               <td key={i} className="py-2 px-2 text-center">
                                 <CompareValue 
                                   value={formatDuration(v.duration)}
-                                  isMax={compareData.maxDuration === v.duration && compareData.maxDuration !== compareData.minDuration}
-                                  isMin={compareData.minDuration === v.duration && compareData.maxDuration !== compareData.minDuration}
+                                  isMax={compareData?.maxDuration === v.duration && compareData?.maxDuration !== compareData?.minDuration}
+                                  isMin={compareData?.minDuration === v.duration && compareData?.maxDuration !== compareData?.minDuration}
                                 />
                               </td>
                             ))}
@@ -1542,8 +1836,8 @@ export function VideoProcess() {
                               <td key={i} className="py-2 px-2 text-center">
                                 <CompareValue 
                                   value={`${v.width}x${v.height}`}
-                                  isMax={compareData.maxRes === v.width * v.height && compareData.maxRes !== compareData.minRes}
-                                  isMin={compareData.minRes === v.width * v.height && compareData.maxRes !== compareData.minRes}
+                                  isMax={compareData?.maxRes === v.width * v.height && compareData?.maxRes !== compareData?.minRes}
+                                  isMin={compareData?.minRes === v.width * v.height && compareData?.maxRes !== compareData?.minRes}
                                 />
                               </td>
                             ))}
@@ -1554,8 +1848,8 @@ export function VideoProcess() {
                               <td key={i} className="py-2 px-2 text-center">
                                 <CompareValue 
                                   value={`${v.fps.toFixed(2)} fps`}
-                                  isMax={compareData.maxFps === v.fps && compareData.maxFps !== compareData.minFps}
-                                  isMin={compareData.minFps === v.fps && compareData.maxFps !== compareData.minFps}
+                                  isMax={compareData?.maxFps === v.fps && compareData?.maxFps !== compareData?.minFps}
+                                  isMin={compareData?.minFps === v.fps && compareData?.maxFps !== compareData?.minFps}
                                 />
                               </td>
                             ))}
@@ -1566,8 +1860,8 @@ export function VideoProcess() {
                               <td key={i} className="py-2 px-2 text-center">
                                 <CompareValue 
                                   value={formatBitrate(v.bitrate)}
-                                  isMax={compareData.maxBitrate === v.bitrate && compareData.maxBitrate !== compareData.minBitrate}
-                                  isMin={compareData.minBitrate === v.bitrate && compareData.maxBitrate !== compareData.minBitrate}
+                                  isMax={compareData?.maxBitrate === v.bitrate && compareData?.maxBitrate !== compareData?.minBitrate}
+                                  isMin={compareData?.minBitrate === v.bitrate && compareData?.maxBitrate !== compareData?.minBitrate}
                                 />
                               </td>
                             ))}
@@ -1931,6 +2225,270 @@ export function VideoProcess() {
           </button>
         </div>
       )}
+
+      <AnimatePresence>
+        {showCompareModal && selectedVideos.length >= 2 && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.6)' }}
+            onClick={() => setShowCompareModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="w-full max-w-6xl max-h-[90vh] rounded-2xl overflow-hidden flex flex-col"
+              style={{ 
+                backgroundColor: 'var(--bg-primary)',
+                border: '1px solid var(--border-color)',
+                boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between px-6 py-4" style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl" style={{ backgroundColor: 'var(--primary-light)' }}>
+                    <GitCompare className="w-5 h-5" style={{ color: 'var(--primary-color)' }} />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>视频对比</h3>
+                    <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{selectedVideos.length} 个视频</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={copyCompareInfo}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-all hover:scale-105"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}
+                  >
+                    {copiedId === 'compare' ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                    {copiedId === 'compare' ? '已复制' : '复制对比'}
+                  </button>
+                  <button
+                    onClick={() => setShowCompareModal(false)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg transition-all hover:scale-105"
+                    style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-tertiary)' }}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {commonAttributes && (
+                <div className="px-6 py-4" style={{ backgroundColor: 'rgba(6, 182, 212, 0.05)', borderBottom: '1px solid var(--border-color)' }}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="w-4 h-4" style={{ color: 'var(--primary-color)' }} />
+                    <span className="text-sm font-medium" style={{ color: 'var(--primary-color)' }}>相同属性统计</span>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    {commonAttributes.fps && commonAttributes.fps.count > 1 && (
+                      <span className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#34d399' }}>
+                        帧率 {commonAttributes.fps.value} fps ({commonAttributes.fps.count}/{commonAttributes.fps.total} 个视频)
+                      </span>
+                    )}
+                    {commonAttributes.resolution && commonAttributes.resolution.count > 1 && (
+                      <span className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ backgroundColor: 'rgba(59, 130, 246, 0.15)', color: '#60a5fa' }}>
+                        分辨率 {commonAttributes.resolution.value} ({commonAttributes.resolution.count}/{commonAttributes.resolution.total} 个视频)
+                      </span>
+                    )}
+                    {commonAttributes.codec && commonAttributes.codec.count > 1 && (
+                      <span className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ backgroundColor: 'rgba(139, 92, 246, 0.15)', color: '#a78bfa' }}>
+                        视频编码 {commonAttributes.codec.value} ({commonAttributes.codec.count}/{commonAttributes.codec.total} 个视频)
+                      </span>
+                    )}
+                    {commonAttributes.audioCodec && commonAttributes.audioCodec.count > 1 && (
+                      <span className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ backgroundColor: 'rgba(236, 72, 153, 0.15)', color: '#f472b6' }}>
+                        音频编码 {commonAttributes.audioCodec.value} ({commonAttributes.audioCodec.count}/{commonAttributes.audioCodec.total} 个视频)
+                      </span>
+                    )}
+                    {commonAttributes.format && commonAttributes.format.count > 1 && (
+                      <span className="px-3 py-1.5 rounded-lg text-sm font-medium" style={{ backgroundColor: 'rgba(245, 158, 11, 0.15)', color: '#fbbf24' }}>
+                        格式 {commonAttributes.format.value} ({commonAttributes.format.count}/{commonAttributes.format.total} 个视频)
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex-1 overflow-auto p-6">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                      <th className="text-left py-3 px-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>属性</th>
+                      {selectedVideos.map((v, i) => {
+                        const originalIndex = videos.findIndex(vid => vid.path === v.path);
+                        const isHighlighted = highlightedIndex === originalIndex;
+                        return (
+                          <th 
+                            key={i} 
+                            className="text-center py-3 px-3 font-medium min-w-[140px] cursor-pointer transition-all duration-200"
+                            style={{ 
+                              color: isHighlighted ? 'var(--primary-color)' : 'var(--text-primary)',
+                              backgroundColor: isHighlighted ? 'rgba(6, 182, 212, 0.1)' : 'transparent',
+                            }}
+                            onClick={() => {
+                              if (originalIndex !== -1) {
+                                setHighlightedIndex(isHighlighted ? null : originalIndex);
+                                setViewingIndex(originalIndex);
+                              }
+                            }}
+                          >
+                            <div className="truncate max-w-[120px] mx-auto" title={v.name}>{v.name}</div>
+                            {v.tag && (
+                              <span 
+                                className="inline-block mt-1 px-2 py-0.5 rounded text-xs font-medium text-white"
+                                style={{ 
+                                  backgroundColor: v.tag === 'original' ? '#8b5cf6' 
+                                    : v.tag === 'edited' ? '#10b981'
+                                    : v.tag === 'before-merge' ? '#f59e0b'
+                                    : '#06b6d4',
+                                }}
+                              >
+                                {v.tag === 'original' ? '原始' 
+                                  : v.tag === 'edited' ? '剪辑后'
+                                  : v.tag === 'before-merge' ? '合并前'
+                                  : '合并后'}
+                              </span>
+                            )}
+                          </th>
+                        );
+                      })}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td className="py-3 px-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>文件大小</td>
+                      {selectedVideos.map((v, i) => (
+                        <td key={i} className="py-3 px-3 text-center">
+                          <CompareValue 
+                            value={formatSize(v.size)}
+                            isMax={compareData?.maxSize === v.size && compareData?.maxSize !== compareData?.minSize}
+                            isMin={compareData?.minSize === v.size && compareData?.maxSize !== compareData?.minSize}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td className="py-3 px-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>时长</td>
+                      {selectedVideos.map((v, i) => (
+                        <td key={i} className="py-3 px-3 text-center">
+                          <CompareValue 
+                            value={formatDuration(v.duration)}
+                            isMax={compareData?.maxDuration === v.duration && compareData?.maxDuration !== compareData?.minDuration}
+                            isMin={compareData?.minDuration === v.duration && compareData?.maxDuration !== compareData?.minDuration}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td className="py-3 px-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>分辨率</td>
+                      {selectedVideos.map((v, i) => (
+                        <td key={i} className="py-3 px-3 text-center">
+                          <CompareValue 
+                            value={`${v.width}x${v.height}`}
+                            isMax={compareData?.maxRes === v.width * v.height && compareData?.maxRes !== compareData?.minRes}
+                            isMin={compareData?.minRes === v.width * v.height && compareData?.maxRes !== compareData?.minRes}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td className="py-3 px-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>帧率</td>
+                      {selectedVideos.map((v, i) => (
+                        <td key={i} className="py-3 px-3 text-center">
+                          <CompareValue 
+                            value={`${v.fps.toFixed(2)} fps`}
+                            isMax={compareData?.maxFps === v.fps && compareData?.maxFps !== compareData?.minFps}
+                            isMin={compareData?.minFps === v.fps && compareData?.maxFps !== compareData?.minFps}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td className="py-3 px-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>码率</td>
+                      {selectedVideos.map((v, i) => (
+                        <td key={i} className="py-3 px-3 text-center">
+                          <CompareValue 
+                            value={formatBitrate(v.bitrate)}
+                            isMax={compareData?.maxBitrate === v.bitrate && compareData?.maxBitrate !== compareData?.minBitrate}
+                            isMin={compareData?.minBitrate === v.bitrate && compareData?.maxBitrate !== compareData?.minBitrate}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td className="py-3 px-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>视频编码</td>
+                      {selectedVideos.map((v, i) => (
+                        <td key={i} className="py-3 px-3 text-center">
+                          <span className="px-3 py-1 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
+                            {v.codec || 'N/A'}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td className="py-3 px-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>音频编码</td>
+                      {selectedVideos.map((v, i) => (
+                        <td key={i} className="py-3 px-3 text-center">
+                          <span className="px-3 py-1 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
+                            {v.audioCodec || 'N/A'}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                    <tr style={{ borderBottom: '1px solid var(--border-color)' }}>
+                      <td className="py-3 px-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>格式</td>
+                      {selectedVideos.map((v, i) => (
+                        <td key={i} className="py-3 px-3 text-center">
+                          <span className="px-3 py-1 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-primary)' }}>
+                            {v.format || 'N/A'}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                    <tr>
+                      <td className="py-3 px-3 font-medium" style={{ color: 'var(--text-tertiary)' }}>路径</td>
+                      {selectedVideos.map((v, i) => (
+                        <td key={i} className="py-3 px-3 text-center">
+                          <span className="text-xs truncate max-w-[150px] block mx-auto" style={{ color: 'var(--text-secondary)' }} title={v.path}>
+                            {v.path}
+                          </span>
+                        </td>
+                      ))}
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="px-6 py-3" style={{ backgroundColor: 'var(--bg-secondary)', borderTop: '1px solid var(--border-color)' }}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4 text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                    <div className="flex items-center gap-1">
+                      <span className="w-3 h-3 rounded" style={{ backgroundColor: 'rgba(16, 185, 129, 0.15)' }} />
+                      <span>最大值</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="w-3 h-3 rounded" style={{ backgroundColor: 'rgba(239, 68, 68, 0.15)' }} />
+                      <span>最小值</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowCompareModal(false)}
+                    className="px-4 py-1.5 rounded-lg text-sm font-medium transition-all hover:scale-105"
+                    style={{ backgroundColor: 'var(--primary-color)', color: 'white' }}
+                  >
+                    关闭
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -89,8 +89,8 @@ function TaskItem({
       commandBuilder: '命令构建',
       icoConvert: 'ICO转换',
       imageFormatConvert: '图片格式转换',
-      folderProcess: '文件夹处理',
-      videoProcess: '视频处理',
+      folderProcess: '文件夹分析',
+      videoProcess: '视频分析',
       videoEdit: '视频编辑',
     };
     return labels[type] || type;
@@ -297,9 +297,9 @@ export function MediaToolsPage() {
   ];
 
   const processTabs = [
-    { key: 'folder', label: '文件夹处理', icon: <FolderSync className="w-4 h-4" /> },
-    { key: 'videoEdit', label: '视频处理', icon: <Film className="w-4 h-4" /> },
-    { key: 'video', label: '视频整合', icon: <Film className="w-4 h-4" /> },
+    { key: 'videoEdit', label: '视频编辑', icon: <Film className="w-4 h-4" /> },
+    { key: 'video', label: '视频分析', icon: <Film className="w-4 h-4" /> },
+    { key: 'folder', label: '文件夹分析', icon: <FolderSync className="w-4 h-4" /> },
   ];
 
   const handleOpenFolder = async (filePath: string) => {

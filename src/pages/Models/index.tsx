@@ -2468,7 +2468,7 @@ export function ModelsPage() {
                       {selectedModel.isActive ? '已启用' : '已禁用'}
                     </span>
                   </div>
-                  <p className="mt-1 text-sm" style={{ color: 'var(--text-tertiary)' }}>
+                  <p className="mt-1 text-sm" style={{ color: 'var(--text-secondary)' }}>
                     {selectedModel.provider} · {selectedModel.model}
                   </p>
                 </div>
