@@ -1,15 +1,18 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useThemeStore, useWallpaperStore } from '@/stores';
 import { useToast } from '@/composables/useToast';
 import type { ThemeType } from '@/types';
 import { Palette, Monitor, Database, Info, Type, Bell, LogOut, MessageSquareQuote, LayoutGrid, Sparkles, Image, Upload, Trash2, X, Check, Code } from 'lucide-vue-next';
+import { invoke } from '@tauri-apps/api/core';
+import { confirm } from '@tauri-apps/plugin-dialog';
 
 const themeStore = useThemeStore();
 const wallpaperStore = useWallpaperStore();
 const toast = useToast();
 
 const activeTab = ref<'appearance' | 'wallpaper' | 'general' | 'data-management' | 'about'>('appearance');
+const isResetting = ref(false);
 
 const tabs = [
   { id: 'appearance' as const, label: '外观', icon: Palette },
@@ -69,28 +72,58 @@ const handleThemeChange = (theme: ThemeType) => {
   toast.success('主题已切换');
 };
 
-const handleAppNameDisplayChange = (value: 'chinese' | 'english') => {
+const handleAppNameDisplayChange = async (value: 'chinese' | 'english') => {
   appNameDisplay.value = value;
+  await saveSettings('app_name_display', value);
   toast.success('项目名称显示已更新');
 };
 
-const handleDefaultPageChange = (value: typeof defaultPage.value) => {
+const handleDefaultPageChange = async (value: typeof defaultPage.value) => {
   defaultPage.value = value;
+  await saveSettings('default_page', value);
   toast.success('默认功能页已更新');
 };
 
-const handleGalleryLayoutChange = (value: 'grid' | 'waterfall' | 'list') => {
+const handleGalleryLayoutChange = async (value: 'grid' | 'waterfall' | 'list') => {
   galleryDefaultLayout.value = value;
+  await saveSettings('gallery_default_layout', value);
   toast.success('图片管理默认布局已更新');
 };
 
-const handleSplashScreenTypeChange = (value: 'full' | 'minimal' | 'fade') => {
+const handleSplashScreenTypeChange = async (value: 'full' | 'minimal' | 'fade') => {
   splashScreenType.value = value;
+  await saveSettings('splash_screen_type', value);
   toast.success('启动动画样式已更新');
 };
 
-const handleDailyQuoteIntervalChange = (value: 10 | 3600 | 86400) => {
+watch(splashScreenEnabled, async (newValue) => {
+  await saveSettings('splash_screen_enabled', newValue);
+  toast.success(newValue ? '启动动画已启用' : '启动动画已禁用');
+});
+
+watch(dailyQuoteEnabled, async (newValue) => {
+  await saveSettings('daily_quote_enabled', newValue);
+  toast.success(newValue ? '每日一言已启用' : '每日一言已禁用');
+});
+
+watch(chatNotificationEnabled, async (newValue) => {
+  await saveSettings('chat_notification_enabled', newValue);
+  toast.success(newValue ? '聊天通知已启用' : '聊天通知已禁用');
+});
+
+watch(closeConfirm, async (newValue) => {
+  await saveSettings('close_confirm', newValue);
+  toast.success(newValue ? '关闭确认已启用' : '关闭确认已禁用');
+});
+
+watch(sendOnEnter, async (newValue) => {
+  await saveSettings('send_on_enter', newValue);
+  toast.success(newValue ? 'Enter发送已启用' : 'Enter发送已禁用');
+});
+
+const handleDailyQuoteIntervalChange = async (value: 10 | 3600 | 86400) => {
   dailyQuoteInterval.value = value;
+  await saveSettings('daily_quote_interval', value);
   toast.success('切换间隔已更新');
 };
 
@@ -164,8 +197,108 @@ const formatFileSize = (bytes?: number): string => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const handleResetToFactory = async () => {
+  const confirmed = await confirm(
+    '此操作将清空所有数据，包括：\n' +
+    '• 所有对话记录和模型配置\n' +
+    '• 所有图片、视频、壁纸等媒体文件\n' +
+    '• 所有缓存和临时文件\n' +
+    '• 所有自定义设置和配置\n\n' +
+    '此操作不可撤销！',
+    {
+      title: '确定要恢复出厂设置吗？',
+      kind: 'warning',
+    }
+  );
+  
+  if (!confirmed) return;
+  
+  const doubleConfirmed = await confirm(
+    '您真的要清空所有数据吗？\n' +
+    '此操作将永久删除所有数据，无法恢复！',
+    {
+      title: '⚠️ 最后确认 ⚠️',
+      kind: 'warning',
+    }
+  );
+  
+  if (!doubleConfirmed) return;
+  
+  isResetting.value = true;
+  
+  try {
+    await invoke('storage_reset_to_factory');
+    toast.success('已成功恢复出厂设置，应用将重新加载');
+    
+    setTimeout(() => {
+      window.location.reload();
+    }, 1500);
+  } catch (error) {
+    console.error('Failed to reset to factory:', error);
+    toast.error('恢复出厂设置失败：' + String(error));
+  } finally {
+    isResetting.value = false;
+  }
+};
+
+const loadSettings = async () => {
+  try {
+    const config = await invoke<any>('storage_get_config');
+    
+    if (config.ui) {
+      if (config.ui.app_name_display) {
+        appNameDisplay.value = config.ui.app_name_display;
+      }
+      if (config.ui.default_page) {
+        defaultPage.value = config.ui.default_page;
+      }
+      if (config.ui.gallery_default_layout) {
+        galleryDefaultLayout.value = config.ui.gallery_default_layout;
+      }
+      if (config.ui.daily_quote_enabled !== undefined) {
+        dailyQuoteEnabled.value = config.ui.daily_quote_enabled;
+      }
+      if (config.ui.daily_quote_interval !== undefined) {
+        dailyQuoteInterval.value = config.ui.daily_quote_interval as 10 | 3600 | 86400;
+      }
+      if (config.ui.chat_notification_enabled !== undefined) {
+        chatNotificationEnabled.value = config.ui.chat_notification_enabled;
+      }
+      if (config.ui.close_confirm !== undefined) {
+        closeConfirm.value = config.ui.close_confirm;
+      }
+      if (config.ui.send_on_enter !== undefined) {
+        sendOnEnter.value = config.ui.send_on_enter;
+      }
+      if (config.ui.splash_screen_enabled !== undefined) {
+        splashScreenEnabled.value = config.ui.splash_screen_enabled;
+      }
+      if (config.ui.splash_screen_type) {
+        splashScreenType.value = config.ui.splash_screen_type;
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load settings:', error);
+  }
+};
+
+const saveSettings = async (key: string, value: any) => {
+  try {
+    const updates: any = {
+      ui: {}
+    };
+    updates.ui[key] = value;
+    
+    await invoke('storage_update_config', { updates });
+  } catch (error) {
+    console.error('Failed to save settings:', error);
+    toast.error('保存设置失败');
+  }
+};
+
 onMounted(async () => {
   await wallpaperStore.loadBackgrounds();
+  await loadSettings();
 });
 </script>
 
@@ -585,6 +718,37 @@ onMounted(async () => {
               SQLite 数据仅存储在本地程序目录中，不会上传至任何远程服务器。
               建议定期导出备份以防止数据丢失。
             </p>
+          </div>
+        </div>
+        
+        <div class="section">
+          <div class="section-header">
+            <Trash2 :size="16" class="inline-icon" />
+            <h3 class="section-title">恢复出厂设置</h3>
+          </div>
+          <p class="section-desc">清空所有数据和缓存，恢复应用到初始状态</p>
+          <div class="danger-zone">
+            <div class="danger-warning">
+              <span class="warning-icon">⚠️</span>
+              <div class="warning-content">
+                <div class="warning-title">危险操作</div>
+                <div class="warning-desc">此操作将清空所有数据，包括：</div>
+                <ul class="warning-list">
+                  <li>所有对话记录和模型配置</li>
+                  <li>所有图片、视频、壁纸等媒体文件</li>
+                  <li>所有缓存和临时文件</li>
+                  <li>所有自定义设置和配置</li>
+                </ul>
+              </div>
+            </div>
+            <button
+              @click="handleResetToFactory"
+              class="reset-button"
+              :disabled="isResetting"
+            >
+              <Trash2 :size="16" />
+              {{ isResetting ? '正在清空...' : '恢复出厂设置' }}
+            </button>
           </div>
         </div>
       </div>
@@ -1762,5 +1926,77 @@ onMounted(async () => {
   background-color: var(--primary-light);
   color: var(--primary-color);
   font-weight: 600;
+}
+
+.danger-zone {
+  margin-top: 16px;
+  padding: 20px;
+  background-color: rgba(239, 68, 68, 0.05);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 12px;
+}
+
+.danger-warning {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.warning-icon {
+  font-size: 24px;
+  flex-shrink: 0;
+}
+
+.warning-content {
+  flex: 1;
+}
+
+.warning-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #EF4444;
+  margin-bottom: 8px;
+}
+
+.warning-desc {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.warning-list {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.warning-list li {
+  margin-bottom: 4px;
+}
+
+.reset-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background-color: #EF4444;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.reset-button:hover:not(:disabled) {
+  background-color: #DC2626;
+  transform: translateY(-2px);
+}
+
+.reset-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

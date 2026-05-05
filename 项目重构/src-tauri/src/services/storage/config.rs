@@ -50,6 +50,26 @@ pub struct UiConfig {
     pub sidebar_collapsed: bool,
     #[serde(default)]
     pub window_size: WindowSize,
+    #[serde(default = "default_true")]
+    pub splash_screen_enabled: bool,
+    #[serde(default = "default_splash_screen_type")]
+    pub splash_screen_type: String,
+    #[serde(default)]
+    pub app_name_display: String,
+    #[serde(default)]
+    pub default_page: String,
+    #[serde(default)]
+    pub gallery_default_layout: String,
+    #[serde(default)]
+    pub daily_quote_enabled: bool,
+    #[serde(default = "default_daily_quote_interval")]
+    pub daily_quote_interval: u32,
+    #[serde(default)]
+    pub chat_notification_enabled: bool,
+    #[serde(default = "default_true")]
+    pub close_confirm: bool,
+    #[serde(default = "default_true")]
+    pub send_on_enter: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -71,6 +91,8 @@ pub struct ModuleConfig {
 fn default_true() -> bool { true }
 fn default_width() -> u32 { 1280 }
 fn default_height() -> u32 { 800 }
+fn default_splash_screen_type() -> String { "full".to_string() }
+fn default_daily_quote_interval() -> u32 { 10 }
 
 impl AppConfig {
     pub fn load() -> Result<Self, String> {

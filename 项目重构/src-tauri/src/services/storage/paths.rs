@@ -10,9 +10,30 @@ pub fn get_exe_dir() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
+pub fn get_project_root() -> PathBuf {
+    let exe_dir = get_exe_dir();
+    
+    let exe_dir_str = exe_dir.to_string_lossy();
+    if exe_dir_str.contains("target") {
+        if let Some(target_pos) = exe_dir.ancestors().find(|p| {
+            let path_str = p.to_string_lossy();
+            path_str.ends_with("target\\debug") || 
+            path_str.ends_with("target/debug") ||
+            path_str.ends_with("target\\release") ||
+            path_str.ends_with("target/release")
+        }) {
+            if let Some(project_root) = target_pos.parent() {
+                return project_root.to_path_buf();
+            }
+        }
+    }
+    
+    exe_dir.clone()
+}
+
 pub fn get_data_dir() -> PathBuf {
     DATA_DIR.get_or_init(|| {
-        let data_dir = get_exe_dir().join("data");
+        let data_dir = get_project_root().join("data");
         if !data_dir.exists() {
             let _ = std::fs::create_dir_all(&data_dir);
         }
@@ -95,6 +116,7 @@ pub fn ensure_data_dirs() -> Result<(), String> {
 pub fn get_data_dir_info() -> DataDirInfo {
     DataDirInfo {
         exe_dir: get_exe_dir().to_string_lossy().to_string(),
+        project_root: get_project_root().to_string_lossy().to_string(),
         data_dir: get_data_dir().to_string_lossy().to_string(),
         config_path: get_config_path().to_string_lossy().to_string(),
         database_path: get_database_path().to_string_lossy().to_string(),
@@ -109,6 +131,7 @@ pub fn get_data_dir_info() -> DataDirInfo {
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DataDirInfo {
     pub exe_dir: String,
+    pub project_root: String,
     pub data_dir: String,
     pub config_path: String,
     pub database_path: String,

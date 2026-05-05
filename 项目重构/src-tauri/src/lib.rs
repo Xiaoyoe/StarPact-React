@@ -56,6 +56,7 @@ pub fn run() {
             commands::storage::storage_list_backups,
             commands::storage::storage_delete_backup,
             commands::storage::storage_ensure_dirs,
+            commands::storage::storage_reset_to_factory,
             commands::gallery::get_albums,
             commands::gallery::save_album,
             commands::gallery::delete_album,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { Minus, Square, X } from 'lucide-vue-next';
+import { Minus, Square, X, RefreshCw } from 'lucide-vue-next';
 
 const isMaximized = ref(false);
 const appWindow = getCurrentWindow();
@@ -38,6 +38,10 @@ const handleClose = async () => {
     console.warn('Failed to close:', error);
   }
 };
+
+const handleRefresh = () => {
+  window.location.reload();
+};
 </script>
 
 <template>
@@ -47,6 +51,9 @@ const handleClose = async () => {
     </div>
     
     <div class="window-controls">
+      <button class="control-btn refresh" @click="handleRefresh" title="刷新页面">
+        <RefreshCw :size="14" />
+      </button>
       <button class="control-btn" @click="handleMinimize" title="最小化">
         <Minus :size="16" />
       </button>
@@ -108,5 +115,10 @@ const handleClose = async () => {
 .control-btn.close:hover {
   background-color: #e53935;
   color: white;
+}
+
+.control-btn.refresh:hover {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
 }
 </style>

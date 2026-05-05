@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, nextTick, onUnmounted } from 'vue';
-import { useConversationStore } from '@/stores';
+import { useConversationStore, useWallpaperStore } from '@/stores';
 import { useToast } from '@/composables/useToast';
 import {
   Send, Mic, Paperclip, Image, Smile, MoreHorizontal,
@@ -11,6 +11,7 @@ import {
 } from 'lucide-vue-next';
 
 const conversationStore = useConversationStore();
+const wallpaperStore = useWallpaperStore();
 const toast = useToast();
 
 const messagesContainer = ref<HTMLElement | null>(null);
@@ -189,7 +190,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="chat-view h-full flex flex-col" :class="{ 'compact-mode': compactMode }">
+  <div 
+    class="chat-view h-full flex flex-col" 
+    :class="{ 'compact-mode': compactMode }"
+  >
     <!-- Welcome Screen -->
     <div v-if="showWelcome" class="flex-1 flex items-center justify-center p-8">
       <div class="text-center max-w-2xl">
@@ -449,6 +453,7 @@ onMounted(async () => {
 <style scoped>
 .chat-view {
   background-color: var(--bg-primary);
+  position: relative;
 }
 
 .chat-view.compact-mode {

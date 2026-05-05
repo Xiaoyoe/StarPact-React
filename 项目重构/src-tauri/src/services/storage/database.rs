@@ -723,6 +723,32 @@ impl Database {
         
         Ok(())
     }
+    
+    pub fn clear_all_data(&self) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        conn.execute_batch(r#"
+            DELETE FROM chat_messages;
+            DELETE FROM conversations;
+            DELETE FROM model_presets;
+            DELETE FROM model_configs;
+            DELETE FROM ffmpeg_tasks;
+            DELETE FROM prompt_template_results;
+            DELETE FROM prompt_templates;
+            DELETE FROM images;
+            DELETE FROM image_albums;
+            DELETE FROM wallpapers;
+            DELETE FROM video_items;
+            DELETE FROM video_playlists;
+            DELETE FROM web_shortcuts;
+            DELETE FROM logs;
+            DELETE FROM text_contrast_files;
+            DELETE FROM ini_configs;
+            DELETE FROM settings;
+        "#).map_err(|e| format!("Failed to clear database: {}", e))?;
+        
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
