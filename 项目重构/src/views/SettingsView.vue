@@ -372,12 +372,18 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div v-else-if="activeTab === 'wallpaper'" class="tab-content">
+      <div v-else-if="activeTab === 'wallpaper'" class="tab-content wallpaper-tab">
         <div class="wallpaper-section">
           <div class="wallpaper-preview">
             <div class="preview-header">
-              <Monitor :size="14" class="inline-icon" />
+              <Monitor :size="16" class="inline-icon" />
               <span class="preview-title">当前壁纸预览</span>
+              <div class="preview-actions">
+                <button v-if="wallpaperStore.hasWallpaper" @click="handleClearWallpaper" class="preview-action-btn">
+                  <Trash2 :size="14" />
+                  清除壁纸
+                </button>
+              </div>
             </div>
             <div class="preview-content">
               <template v-if="wallpaperStore.currentWallpaper">
@@ -387,28 +393,39 @@ onMounted(async () => {
                   alt="当前壁纸"
                 />
                 <div class="preview-info" v-if="wallpaperStore.previewWallpaperInfo">
-                  <span class="info-name">{{ wallpaperStore.previewWallpaperInfo.name }}</span>
-                  <span class="info-size" v-if="wallpaperStore.previewWallpaperInfo.size">
-                    {{ formatFileSize(wallpaperStore.previewWallpaperInfo.size) }}
-                  </span>
+                  <div class="info-icon">
+                    <Image :size="16" />
+                  </div>
+                  <div class="info-details">
+                    <span class="info-name">{{ wallpaperStore.previewWallpaperInfo.name }}</span>
+                    <span class="info-size" v-if="wallpaperStore.previewWallpaperInfo.size">
+                      {{ formatFileSize(wallpaperStore.previewWallpaperInfo.size) }}
+                    </span>
+                  </div>
                 </div>
               </template>
               <div v-else class="preview-placeholder">
-                <Palette :size="32" />
-                <span>未设置壁纸，使用默认背景</span>
+                <div class="placeholder-icon">
+                  <Palette :size="48" />
+                </div>
+                <span class="placeholder-title">未设置壁纸</span>
+                <span class="placeholder-desc">使用默认背景色</span>
               </div>
             </div>
           </div>
+          
           <div class="wallpaper-list">
             <div class="list-header">
               <div class="list-header-top">
-                <div class="flex items-center gap-2">
-                  <LayoutGrid :size="16" class="text-primary" />
+                <div class="list-title">
+                  <LayoutGrid :size="18" class="text-primary" />
                   <h3>壁纸列表</h3>
+                  <span class="wallpaper-count-badge">{{ wallpaperStore.wallpaperCount }}</span>
                 </div>
                 <div class="list-actions">
                   <button @click="handleAddWallpaper" class="action-btn primary" title="添加壁纸">
-                    <Upload :size="12" />
+                    <Upload :size="14" />
+                    <span>上传壁纸</span>
                   </button>
                   <button 
                     v-if="wallpaperStore.wallpaperCount > 0" 
@@ -416,77 +433,83 @@ onMounted(async () => {
                     class="action-btn danger" 
                     title="清空所有壁纸"
                   >
-                    <Trash2 :size="12" />
+                    <Trash2 :size="14" />
                   </button>
                 </div>
               </div>
-              <p>选择或上传壁纸，为界面添加个性化背景</p>
+              <p class="list-desc">选择壁纸预览，双击应用为背景</p>
             </div>
             
-            <div class="double-click-toggle">
-              <span>双击切换</span>
-              <button
-                @click="handleDoubleClickToggle"
-                class="toggle-button-small"
-                :class="{ active: wallpaperStore.doubleClickToChange }"
-              >
-                <div class="toggle-slider-small" :class="{ active: wallpaperStore.doubleClickToChange }"></div>
-              </button>
+            <div class="wallpaper-options">
+              <div class="option-item">
+                <span class="option-label">双击切换</span>
+                <button
+                  @click="handleDoubleClickToggle"
+                  class="toggle-button"
+                  :class="{ active: wallpaperStore.doubleClickToChange }"
+                >
+                  <div class="toggle-slider" :class="{ active: wallpaperStore.doubleClickToChange }"></div>
+                </button>
+              </div>
             </div>
-            
-            <button
-              v-if="wallpaperStore.hasWallpaper"
-              @click="handleClearWallpaper"
-              class="clear-wallpaper-btn"
-            >
-              <Trash2 :size="12" />
-              清除当前壁纸
-            </button>
             
             <div class="wallpapers-container">
               <div class="wallpapers-header">
-                <Image :size="14" class="text-primary" />
+                <Image :size="16" class="text-primary" />
                 <span>我的壁纸</span>
-                <span class="wallpaper-count">{{ wallpaperStore.wallpaperCount }}</span>
               </div>
               
-              <div class="wallpapers-list">
+              <div class="wallpapers-grid">
                 <template v-if="wallpaperStore.wallpaperCount > 0">
                   <div
                     v-for="(bg, index) in wallpaperStore.customBackgrounds"
                     :key="bg.id"
-                    class="wallpaper-item"
-                    :class="{ active: wallpaperStore.selectedBackgroundId === bg.id }"
+                    class="wallpaper-card"
+                    :class="{ 
+                      active: wallpaperStore.selectedBackgroundId === bg.id,
+                      using: bg.is_active 
+                    }"
                     @click="handleWallpaperSelect(bg)"
                     @dblclick="handleWallpaperDoubleClick(bg)"
                   >
-                    <span class="item-index">{{ index + 1 }}</span>
-                    <div class="item-info">
-                      <p class="item-name">{{ bg.name }}</p>
+                    <div class="card-preview">
+                      <img :src="bg.data" :alt="bg.name" />
+                      <div class="card-overlay">
+                        <span class="card-index">{{ index + 1 }}</span>
+                        <button
+                          @click.stop="handleDeleteBackground(bg.id)"
+                          class="card-delete"
+                        >
+                          <X :size="12" />
+                        </button>
+                      </div>
                     </div>
-                    <span 
-                      v-if="wallpaperStore.doubleClickToChange && wallpaperStore.selectedBackgroundId === bg.id && !bg.is_active" 
-                      class="item-badge preview"
-                    >
-                      预览中
-                    </span>
-                    <span 
-                      v-if="bg.is_active" 
-                      class="item-badge using"
-                    >
-                      使用中
-                    </span>
-                    <button
-                      @click.stop="handleDeleteBackground(bg.id)"
-                      class="item-delete"
-                    >
-                      <X :size="10" />
-                    </button>
+                    <div class="card-info">
+                      <p class="card-name">{{ bg.name }}</p>
+                      <div class="card-badges">
+                        <span 
+                          v-if="wallpaperStore.doubleClickToChange && wallpaperStore.selectedBackgroundId === bg.id && !bg.is_active" 
+                          class="card-badge preview"
+                        >
+                          预览中
+                        </span>
+                        <span 
+                          v-if="bg.is_active" 
+                          class="card-badge using"
+                        >
+                          <Check :size="10" />
+                          使用中
+                        </span>
+                      </div>
+                    </div>
                   </div>
                 </template>
                 <div v-else class="empty-wallpapers">
-                  <Image :size="24" class="text-text-tertiary" />
-                  <p>暂无自定义壁纸</p>
+                  <div class="empty-icon">
+                    <Image :size="32" />
+                  </div>
+                  <p class="empty-title">暂无自定义壁纸</p>
+                  <p class="empty-desc">点击上方按钮上传壁纸</p>
                 </div>
               </div>
             </div>
@@ -856,7 +879,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   height: 100%;
-  background-color: var(--bg-primary);
+  background-color: transparent;
 }
 
 .settings-content {
@@ -868,6 +891,13 @@ onMounted(async () => {
 .tab-content {
   max-width: 800px;
   margin: 0 auto;
+}
+
+.tab-content.wallpaper-tab {
+  max-width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 .section {
@@ -1024,34 +1054,65 @@ onMounted(async () => {
 }
 
 .wallpaper-section {
-  display: flex;
-  gap: 16px;
-  height: calc(100vh - 200px);
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 24px;
+  height: 100%;
+  min-height: 0;
 }
 
 .wallpaper-preview {
-  flex: 1;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
+  min-height: 0;
 }
 
 .preview-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 12px 16px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
-  color: var(--primary-color);
+  background-color: var(--bg-tertiary);
 }
 
 .preview-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.preview-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.preview-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
   font-size: 12px;
   font-weight: 500;
-  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.preview-action-btn:hover {
+  background-color: rgba(239, 68, 68, 0.2);
+  transform: scale(1.02);
 }
 
 .preview-content {
@@ -1062,33 +1123,56 @@ onMounted(async () => {
   justify-content: center;
   background-color: var(--bg-tertiary);
   position: relative;
+  padding: 24px;
+  min-height: 0;
 }
 
 .preview-image {
   max-width: 100%;
   max-height: 100%;
   object-fit: contain;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .preview-info {
   position: absolute;
-  bottom: 16px;
-  left: 16px;
+  bottom: 24px;
+  left: 24px;
   display: flex;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: rgba(0, 0, 0, 0.6);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background-color: rgba(0, 0, 0, 0.75);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+}
+
+.info-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 8px;
-  backdrop-filter: blur(8px);
+  background-color: rgba(255, 255, 255, 0.1);
+  color: white;
+}
+
+.info-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .info-name {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   color: white;
 }
 
 .info-size {
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.7);
 }
 
@@ -1096,23 +1180,46 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
+  padding: 48px;
+}
+
+.placeholder-icon {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  background-color: var(--bg-secondary);
+  color: var(--text-tertiary);
+}
+
+.placeholder-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.placeholder-desc {
+  font-size: 13px;
   color: var(--text-tertiary);
 }
 
 .wallpaper-list {
-  width: 300px;
   display: flex;
   flex-direction: column;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: 16px;
   overflow: hidden;
+  min-height: 0;
 }
 
 .list-header {
-  padding: 16px;
+  padding: 20px;
   border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
 }
 
 .list-header-top {
@@ -1122,31 +1229,48 @@ onMounted(async () => {
   margin-bottom: 8px;
 }
 
+.list-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .list-header h3 {
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.list-header p {
+.wallpaper-count-badge {
+  padding: 2px 8px;
+  border-radius: 12px;
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.list-desc {
   font-size: 12px;
   color: var(--text-tertiary);
 }
 
 .list-actions {
   display: flex;
-  gap: 4px;
+  gap: 8px;
 }
 
 .action-btn {
-  padding: 6px;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s ease;
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .action-btn.primary {
@@ -1156,6 +1280,7 @@ onMounted(async () => {
 
 .action-btn.primary:hover {
   opacity: 0.9;
+  transform: scale(1.02);
 }
 
 .action-btn.danger {
@@ -1167,69 +1292,232 @@ onMounted(async () => {
   background-color: rgba(239, 68, 68, 0.2);
 }
 
-.double-click-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 16px;
+.wallpaper-options {
+  padding: 12px 20px;
   border-bottom: 1px solid var(--border-color);
 }
 
-.double-click-toggle span {
-  font-size: 12px;
-  color: var(--text-tertiary);
+.option-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.toggle-button-small {
+.option-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.toggle-button {
   position: relative;
-  width: 28px;
-  height: 16px;
-  border-radius: 8px;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
   background-color: var(--bg-tertiary);
-  border: none;
+  border: 1px solid var(--border-color);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.toggle-button-small.active {
+.toggle-button.active {
   background-color: var(--primary-color);
+  border-color: var(--primary-color);
 }
 
-.toggle-slider-small {
+.toggle-slider {
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 12px;
-  height: 12px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background-color: white;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   transition: all 0.2s ease;
 }
 
-.toggle-slider-small.active {
-  left: 14px;
+.toggle-slider.active {
+  left: 22px;
 }
 
-.clear-wallpaper-btn {
+.wallpapers-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.wallpapers-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wallpapers-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  align-content: start;
+}
+
+.wallpaper-card {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: var(--bg-tertiary);
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.wallpaper-card:hover {
+  transform: scale(1.02);
+  border-color: var(--border-color);
+}
+
+.wallpaper-card.active {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(var(--bg-primary-rgb), 0.1);
+}
+
+.wallpaper-card.using {
+  border-color: #10b981;
+}
+
+.card-preview {
+  position: relative;
+  aspect-ratio: 16/10;
+  overflow: hidden;
+}
+
+.card-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.card-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent);
+  opacity: 0;
+  transition: opacity 0.2s;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 8px;
+}
+
+.wallpaper-card:hover .card-overlay {
+  opacity: 1;
+}
+
+.card-index {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.card-delete {
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  margin: 8px 16px;
-  padding: 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  font-size: 12px;
-  font-weight: 500;
+  border-radius: 6px;
+  background-color: rgba(239, 68, 68, 0.9);
+  color: white;
+  border: none;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s;
 }
 
-.clear-wallpaper-btn:hover {
-  background-color: rgba(239, 68, 68, 0.2);
+.card-delete:hover {
+  background-color: #ef4444;
+  transform: scale(1.1);
+}
+
+.card-info {
+  padding: 10px 12px;
+}
+
+.card-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 6px;
+}
+
+.card-badges {
+  display: flex;
+  gap: 6px;
+}
+
+.card-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.card-badge.preview {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.card-badge.using {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.empty-wallpapers {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 12px;
+}
+
+.empty-icon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-tertiary);
+}
+
+.empty-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.empty-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .wallpapers-container {

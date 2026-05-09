@@ -315,7 +315,7 @@ watch([leftText, rightText], () => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-background-primary overflow-hidden">
+  <div class="h-full flex flex-col overflow-hidden" style="background-color: transparent;">
     <!-- Save Modal -->
     <Teleport to="body">
       <Transition

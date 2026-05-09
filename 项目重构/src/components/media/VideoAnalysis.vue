@@ -5,10 +5,11 @@ import { useFFmpegStore } from '@/stores';
 import { useToast } from '@/composables/useToast';
 import { ffmpegService, fileService } from '@/services';
 import {
-  Film, Scissors, Combine, RotateCw, FlipHorizontal, FlipVertical,
-  Play, Square, Upload, ChevronDown, ChevronRight, Sparkles,
-  Info, AlertCircle, Maximize2, X, Loader2, Check, Clock,
-  HardDrive, MonitorPlay, Music, Settings, Trash2, Download
+  Video, Info, AlertCircle, FileVideo,
+  Copy, Check, Trash2, X, Plus, Film, MonitorPlay,
+  Music, FileText, Loader2, BarChart3,
+  Clock, HardDrive, GitCompare, ArrowUp, ArrowDown,
+  Send, Columns, PanelLeft, PanelLeftClose
 } from 'lucide-vue-next';
 
 interface VideoFileInfo {
@@ -27,36 +28,29 @@ interface VideoFileInfo {
   audioBitrate: number;
   format: string;
   thumbnail: string;
+  tag?: 'original' | 'edited' | 'before-merge' | 'after-merge';
 }
+
+type SortField = 'name' | 'size' | 'duration' | 'width' | 'fps' | 'bitrate';
+type SortOrder = 'asc' | 'desc';
+type RightPanelTab = 'detail' | 'compare' | 'stats';
 
 const ffmpegStore = useFFmpegStore();
 const toast = useToast();
 
-const tab = ref<'cut' | 'merge' | 'rotate'>('cut');
 const videos = ref<VideoFileInfo[]>([]);
-const viewingIndex = ref(0);
+const isDragging = ref(false);
 const isLoading = ref(false);
 const loadProgress = ref(0);
 const loadingName = ref('');
-const isDragging = ref(false);
+const viewingIndex = ref(0);
+const selectedIndices = ref<Set<number>>(new Set());
 const logs = ref<string[]>([]);
-
-const startTime = ref('00:00:00');
-const endTime = ref('');
-const rotation = ref(0);
-const flipH = ref(false);
-const flipV = ref(false);
-const customFileName = ref('');
-const isInverseMode = ref(false);
-
-const mergeOrder = ref<number[]>([]);
-const draggedIndex = ref<number | null>(null);
-const dragOverIndex = ref<number | null>(null);
-
-const currentTime = ref(0);
-const currentFrame = ref<string>('');
-const isDraggingTimeline = ref(false);
-const isLoadingFrame = ref(false);
+const sortField = ref<SortField>('name');
+const sortOrder = ref<SortOrder>('asc');
+const rightPanelTab = ref<RightPanelTab>('detail');
+const panelView = ref<'both' | 'left' | 'right'>('both');
+const copiedId = ref<string | null>(null);
 
 let unlisteners: Array<() => void> = [];
 
@@ -73,13 +67,82 @@ const totalStats = computed(() => {
   return { totalDuration, totalSize };
 });
 
-const mergeDuration = computed(() => {
-  return mergeOrder.value.reduce((total, idx) => {
-    if (idx < videos.value.length) {
-      return total + videos.value[idx].duration;
-    }
-    return total;
-  }, 0);
+const selectedVideos = computed(() => {
+  return Array.from(selectedIndices.value)
+    .sort((a, b) => a - b)
+    .map(i => videos.value[i])
+    .filter(Boolean);
+});
+
+const selectedCount = computed(() => selectedIndices.value.size);
+
+const stats = computed(() => {
+  if (videos.value.length === 0) return null;
+  
+  const totalSize = videos.value.reduce((sum, v) => sum + v.size, 0);
+  const totalDuration = videos.value.reduce((sum, v) => sum + v.duration, 0);
+  const avgBitrate = videos.value.reduce((sum, v) => sum + v.bitrate, 0) / videos.value.length;
+  const avgFps = videos.value.reduce((sum, v) => sum + v.fps, 0) / videos.value.length;
+  
+  const resolutions = videos.value.map(v => v.width * v.height);
+  const maxResolution = Math.max(...resolutions);
+  const minResolution = Math.min(...resolutions);
+  
+  const codecs = [...new Set(videos.value.map(v => v.codec).filter(Boolean))];
+  const audioCodecs = [...new Set(videos.value.map(v => v.audioCodec).filter(Boolean))];
+  const formats = [...new Set(videos.value.map(v => v.format).filter(Boolean))];
+  
+  return {
+    count: videos.value.length,
+    totalSize,
+    totalDuration,
+    avgBitrate,
+    avgFps,
+    maxResolution,
+    minResolution,
+    codecs,
+    audioCodecs,
+    formats,
+  };
+});
+
+const compareData = computed(() => {
+  if (selectedVideos.value.length < 2) return null;
+  
+  const sizes = selectedVideos.value.map(v => v.size);
+  const durations = selectedVideos.value.map(v => v.duration);
+  const bitrates = selectedVideos.value.map(v => v.bitrate);
+  const fpsList = selectedVideos.value.map(v => v.fps);
+  const resolutions = selectedVideos.value.map(v => v.width * v.height);
+  
+  const maxSize = Math.max(...sizes);
+  const minSize = Math.min(...sizes);
+  const maxDuration = Math.max(...durations);
+  const minDuration = Math.min(...durations);
+  const maxBitrate = Math.max(...bitrates);
+  const minBitrate = Math.min(...bitrates);
+  const maxFps = Math.max(...fpsList);
+  const minFps = Math.min(...fpsList);
+  const maxRes = Math.max(...resolutions);
+  const minRes = Math.min(...resolutions);
+  
+  return {
+    sizes,
+    durations,
+    bitrates,
+    fpsList,
+    resolutions,
+    maxSize,
+    minSize,
+    maxDuration,
+    minDuration,
+    maxBitrate,
+    minBitrate,
+    maxFps,
+    minFps,
+    maxRes,
+    minRes,
+  };
 });
 
 onMounted(async () => {
@@ -114,14 +177,9 @@ onUnmounted(() => {
   unlisteners = [];
 });
 
-watch(() => videos.value.length, (newLength) => {
-  if (newLength > 0) {
-    const newIndices = videos.value.map((_, i) => i);
-    const existingValid = mergeOrder.value.filter(i => i < newLength);
-    const newItems = newIndices.filter(i => !mergeOrder.value.includes(i));
-    mergeOrder.value = [...existingValid, ...newItems];
-  } else {
-    mergeOrder.value = [];
+watch(selectedCount, (count) => {
+  if (count >= 2) {
+    rightPanelTab.value = 'compare';
   }
 });
 
@@ -295,17 +353,36 @@ const selectFiles = async () => {
   await handleDroppedPaths(pathArray);
 };
 
-const selectFolder = async () => {
-  if (!ffmpegStore.isConfigured) {
-    toast.error('请先配置 FFmpeg');
-    return;
+const handleVideoClick = (index: number) => {
+  viewingIndex.value = index;
+  if (selectedCount.value < 2) {
+    rightPanelTab.value = 'detail';
   }
-  
-  const path = await fileService.selectFolder({ title: '选择视频文件夹' });
-  
-  if (!path) return;
-  
-  await handleDroppedPaths([path]);
+};
+
+const toggleSelect = (index: number, event?: MouseEvent) => {
+  if (event?.ctrlKey || event?.metaKey) {
+    const newSet = new Set(selectedIndices.value);
+    if (newSet.has(index)) {
+      newSet.delete(index);
+    } else {
+      newSet.add(index);
+    }
+    selectedIndices.value = newSet;
+  } else {
+    selectedIndices.value = new Set([index]);
+  }
+};
+
+const selectAll = () => {
+  if (videos.value.length > 0) {
+    selectedIndices.value = new Set(videos.value.map((_, i) => i));
+  }
+};
+
+const deselectAll = () => {
+  selectedIndices.value = new Set();
+  rightPanelTab.value = 'detail';
 };
 
 const removeVideo = (index: number) => {
@@ -315,87 +392,112 @@ const removeVideo = (index: number) => {
   } else if (viewingIndex.value > index) {
     viewingIndex.value--;
   }
+  selectedIndices.value = new Set();
 };
 
 const clearAll = () => {
   videos.value = [];
   logs.value = [];
   viewingIndex.value = 0;
-  mergeOrder.value = [];
+  selectedIndices.value = new Set();
 };
 
-const handleVideoClick = (index: number) => {
-  viewingIndex.value = index;
-};
-
-const toggleMergeSelection = (index: number) => {
-  if (mergeOrder.value.includes(index)) {
-    mergeOrder.value = mergeOrder.value.filter(i => i !== index);
+const toggleSort = (field: SortField) => {
+  if (sortField.value === field) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc';
   } else {
-    mergeOrder.value = [...mergeOrder.value, index];
+    sortField.value = field;
+    sortOrder.value = 'asc';
   }
 };
 
-const handleDragStart = (index: number) => {
-  draggedIndex.value = index;
+const togglePanelView = () => {
+  if (panelView.value === 'both') panelView.value = 'left';
+  else if (panelView.value === 'left') panelView.value = 'right';
+  else panelView.value = 'both';
 };
 
-const handleDragOver = (e: DragEvent, index: number) => {
-  e.preventDefault();
-  dragOverIndex.value = index;
-};
-
-const handleDrop = (e: DragEvent, toIndex: number) => {
-  e.preventDefault();
-  if (draggedIndex.value !== null && draggedIndex.value !== toIndex) {
-    const newOrder = [...mergeOrder.value];
-    const [removed] = newOrder.splice(draggedIndex.value, 1);
-    newOrder.splice(toIndex, 0, removed);
-    mergeOrder.value = newOrder;
+const copyVideoInfo = async () => {
+  if (!currentVideo.value) return;
+  
+  const lines = [
+    `文件名: ${currentVideo.value.name}`,
+    `路径: ${currentVideo.value.path}`,
+    `大小: ${formatSize(currentVideo.value.size)}`,
+    `时长: ${formatDuration(currentVideo.value.duration)}`,
+    `格式: ${currentVideo.value.format}`,
+    '',
+    '--- 视频流 ---',
+    `分辨率: ${currentVideo.value.width}x${currentVideo.value.height}`,
+    `编码: ${currentVideo.value.codec}`,
+    `帧率: ${currentVideo.value.fps.toFixed(2)} fps`,
+    `码率: ${formatBitrate(currentVideo.value.bitrate)}`,
+  ];
+  
+  if (currentVideo.value.audioCodec) {
+    lines.push('', '--- 音频流 ---');
+    lines.push(`编码: ${currentVideo.value.audioCodec}`);
+    if (currentVideo.value.audioSampleRate) lines.push(`采样率: ${formatSampleRate(currentVideo.value.audioSampleRate)}`);
+    if (currentVideo.value.audioChannels) lines.push(`声道数: ${currentVideo.value.audioChannels}`);
+    if (currentVideo.value.audioBitrate) lines.push(`码率: ${formatBitrate(currentVideo.value.audioBitrate)}`);
   }
-  draggedIndex.value = null;
-  dragOverIndex.value = null;
+  
+  const text = lines.join('\n');
+  
+  try {
+    await navigator.clipboard.writeText(text);
+    copiedId.value = 'detail';
+    toast.success('已复制视频信息');
+    setTimeout(() => copiedId.value = null, 2000);
+  } catch {
+    toast.error('复制失败');
+  }
 };
 
-const handleCut = async () => {
-  if (!currentVideo.value) {
-    toast.error('请先选择要裁剪的视频');
+const copySelectedMainInfo = async () => {
+  if (selectedVideos.value.length === 0) {
+    toast.info('请先选择要复制的视频');
     return;
   }
   
-  if (!startTime.value || !endTime.value) {
-    toast.error('请设置开始和结束时间');
-    return;
+  const lines = selectedVideos.value.map(v => 
+    `${v.name}: ${formatSize(v.size)} | ${formatDuration(v.duration)} | ${v.width}x${v.height} | ${v.fps.toFixed(2)}fps | ${formatBitrate(v.bitrate)}`
+  );
+  
+  try {
+    await navigator.clipboard.writeText(lines.join('\n'));
+    copiedId.value = 'selected';
+    toast.success(`已复制 ${selectedVideos.value.length} 个视频的主要信息`);
+    setTimeout(() => copiedId.value = null, 2000);
+  } catch {
+    toast.error('复制失败');
   }
-  
-  addLog(`[info] 开始裁剪视频: ${currentVideo.value.name}`);
-  addLog(`[info] 时间段: ${startTime.value} - ${endTime.value}`);
-  
-  toast.success('视频裁剪功能开发中...');
 };
 
-const handleMerge = async () => {
-  if (mergeOrder.value.length < 2) {
-    toast.error('请至少选择2个视频进行合并');
-    return;
+const copyAllInfo = async () => {
+  if (videos.value.length === 0) return;
+  
+  const allText = videos.value.map((v, i) => {
+    const lines = [
+      `=== 视频 ${i + 1} ===`,
+      `文件名: ${v.name}`,
+      `大小: ${formatSize(v.size)}`,
+      `时长: ${formatDuration(v.duration)}`,
+      `分辨率: ${v.width}x${v.height}`,
+      `帧率: ${v.fps.toFixed(2)} fps`,
+      `码率: ${formatBitrate(v.bitrate)}`,
+    ];
+    return lines.join('\n');
+  }).join('\n\n');
+  
+  try {
+    await navigator.clipboard.writeText(allText);
+    copiedId.value = 'all';
+    toast.success(`已复制 ${videos.value.length} 个视频的信息`);
+    setTimeout(() => copiedId.value = null, 2000);
+  } catch {
+    toast.error('复制失败');
   }
-  
-  const selectedVideos = mergeOrder.value.map(i => videos.value[i]).filter(Boolean);
-  addLog(`[info] 开始合并 ${selectedVideos.length} 个视频`);
-  
-  toast.success('视频合并功能开发中...');
-};
-
-const handleRotate = async () => {
-  if (!currentVideo.value) {
-    toast.error('请先选择要旋转的视频');
-    return;
-  }
-  
-  addLog(`[info] 旋转视频: ${currentVideo.value.name}`);
-  addLog(`[info] 旋转角度: ${rotation.value}°, 水平翻转: ${flipH.value}, 垂直翻转: ${flipV.value}`);
-  
-  toast.success('视频旋转功能开发中...');
 };
 
 const openFileLocation = async (index: number) => {
@@ -406,14 +508,15 @@ const openFileLocation = async (index: number) => {
 </script>
 
 <template>
-  <div class="video-edit">
+  <div class="video-analysis">
     <div class="header">
       <div class="title-row">
         <div class="icon-wrapper">
           <Film :size="16" />
         </div>
-        <h2>视频编辑</h2>
-        <span class="badge primary">专业</span>
+        <h2>视频分析</h2>
+        <span class="badge primary">信息查看</span>
+        <span v-if="videos.length > 0" class="badge gray">{{ videos.length }} 个视频</span>
         <div v-if="totalStats" class="total-stats">
           <span class="stat-item">
             <Clock :size="12" />
@@ -425,33 +528,55 @@ const openFileLocation = async (index: number) => {
             {{ formatSize(totalStats.totalSize) }}
           </span>
         </div>
+        <span v-if="selectedCount > 0" class="badge cyan">已选择 {{ selectedCount }} 个</span>
       </div>
-      <div class="header-actions">
-        <button class="btn-add" @click="selectFiles" :disabled="!ffmpegStore.isConfigured || isLoading">
-          <Upload :size="14" />
-          导入视频
-        </button>
-        <button class="btn-folder" @click="selectFolder" :disabled="!ffmpegStore.isConfigured || isLoading">
-          <Film :size="14" />
-          扫描文件夹
-        </button>
-        <div class="tab-switch">
-          <button
-            v-for="t in [
-              { key: 'cut' as const, label: '裁剪', icon: Scissors },
-              { key: 'merge' as const, label: '合并', icon: Combine },
-              { key: 'rotate' as const, label: '旋转', icon: RotateCw },
-            ]"
-            :key="t.key"
-            :class="['tab-btn', { active: tab === t.key }]"
-            @click="tab = t.key"
+      <div v-if="videos.length > 0" class="header-actions">
+        <div class="view-toggle">
+          <button 
+            :class="['toggle-btn', { active: panelView === 'both' }]"
+            @click="panelView = 'both'"
+            title="显示左右双栏"
           >
-            <component :is="t.icon" :size="12" />
-            {{ t.label }}
+            <Columns :size="14" />
+            双栏
+          </button>
+          <button 
+            :class="['toggle-btn', { active: panelView === 'left' }]"
+            @click="panelView = 'left'"
+            title="仅显示左侧"
+          >
+            <PanelLeft :size="14" />
+            左侧
+          </button>
+          <button 
+            :class="['toggle-btn', { active: panelView === 'right' }]"
+            @click="panelView = 'right'"
+            title="仅显示右侧"
+          >
+            <PanelLeftClose :size="14" />
+            右侧
           </button>
         </div>
-        <button v-if="videos.length > 0" class="btn-danger" @click="clearAll">
-          <Trash2 :size="12" />
+        
+        <button class="btn-send" @click="copySelectedMainInfo">
+          <Send :size="14" />
+          发送到视频处理{{ selectedCount > 0 ? ` (${selectedCount})` : '' }}
+        </button>
+        
+        <button class="btn-copy" @click="copySelectedMainInfo">
+          <Check v-if="copiedId === 'selected'" :size="14" class="text-green-400" />
+          <Copy v-else :size="14" />
+          复制选中{{ selectedCount > 0 ? ` (${selectedCount})` : '' }}
+        </button>
+        
+        <button class="btn-copy" @click="copyAllInfo">
+          <Check v-if="copiedId === 'all'" :size="14" class="text-green-400" />
+          <Copy v-else :size="14" />
+          复制全部
+        </button>
+        
+        <button class="btn-danger" @click="clearAll">
+          <Trash2 :size="14" />
           清空
         </button>
       </div>
@@ -474,35 +599,55 @@ const openFileLocation = async (index: number) => {
     </div>
 
     <div class="content-grid">
-      <div class="left-panel">
+      <div v-show="panelView !== 'right'" :class="['left-panel', { 'full-width': panelView === 'left' }]">
         <div v-if="videos.length === 0" :class="['empty-state', { dragging: isDragging }]">
           <div class="empty-icon">
-            <Film :size="48" />
+            <Video :size="48" />
           </div>
           <p class="empty-title">{{ isDragging ? '松开以添加视频' : '拖拽视频文件到此处' }}</p>
-          <p class="empty-desc">或点击上方按钮选择文件</p>
+          <p class="empty-desc">或点击下方按钮选择文件</p>
+          <button class="btn-add" @click="selectFiles" :disabled="!ffmpegStore.isConfigured">
+            <Plus :size="14" />
+            选择视频文件
+          </button>
         </div>
 
         <template v-else>
-          <div class="video-list-header">
+          <div class="video-grid-header">
             <div class="header-left">
               <Film :size="16" class="icon-primary" />
               <span>视频列表</span>
               <span class="count-badge">{{ videos.length }}</span>
             </div>
+            <div class="header-right">
+              <button class="sort-btn" @click="toggleSort('name')">
+                名称
+                <ArrowUp v-if="sortField === 'name' && sortOrder === 'asc'" :size="12" />
+                <ArrowDown v-if="sortField === 'name' && sortOrder === 'desc'" :size="12" />
+              </button>
+              <button class="sort-btn" @click="toggleSort('size')">
+                大小
+                <ArrowUp v-if="sortField === 'size' && sortOrder === 'asc'" :size="12" />
+                <ArrowDown v-if="sortField === 'size' && sortOrder === 'desc'" :size="12" />
+              </button>
+              <button class="sort-btn" @click="toggleSort('duration')">
+                时长
+                <ArrowUp v-if="sortField === 'duration' && sortOrder === 'asc'" :size="12" />
+                <ArrowDown v-if="sortField === 'duration' && sortOrder === 'desc'" :size="12" />
+              </button>
+              <button class="action-btn" @click="selectAll">全选</button>
+              <button class="action-btn" @click="deselectAll">取消</button>
+            </div>
           </div>
 
-          <div class="video-list">
+          <div class="video-grid">
             <div
               v-for="(video, index) in videos"
               :key="video.path"
-              :class="[
-                'video-item',
-                { 
-                  viewing: index === viewingIndex,
-                  selected: tab === 'merge' && mergeOrder.includes(index)
-                }
-              ]"
+              :class="['video-item', { 
+                viewing: index === viewingIndex,
+                selected: selectedIndices.has(index)
+              }]"
               @click="handleVideoClick(index)"
               @contextmenu.prevent="openFileLocation(index)"
             >
@@ -513,66 +658,79 @@ const openFileLocation = async (index: number) => {
                 <button class="remove-btn" @click.stop="removeVideo(index)">
                   <X :size="10" />
                 </button>
+                <button 
+                  v-if="selectedIndices.has(index)"
+                  class="select-indicator"
+                  @click.stop="toggleSelect(index, $event)"
+                >
+                  <Check :size="12" />
+                </button>
               </div>
               <div class="video-info">
                 <p class="video-name" :title="video.name">{{ video.name }}</p>
                 <div class="video-tags">
                   <span class="tag purple">{{ formatSize(video.size) }}</span>
                   <span class="tag blue">{{ video.width }}x{{ video.height }}</span>
+                  <span class="tag green">{{ video.fps.toFixed(2) }}fps</span>
+                  <span class="tag orange">{{ formatBitrate(video.bitrate) }}</span>
                 </div>
-              </div>
-              <div v-if="tab === 'merge'" class="merge-controls">
-                <button
-                  :class="['merge-check', { active: mergeOrder.includes(index) }]"
-                  @click.stop="toggleMergeSelection(index)"
-                >
-                  <Check v-if="mergeOrder.includes(index)" :size="12" />
-                </button>
-                <span v-if="mergeOrder.includes(index)" class="merge-order">
-                  #{{ mergeOrder.indexOf(index) + 1 }}
-                </span>
               </div>
             </div>
           </div>
         </template>
       </div>
 
-      <div class="right-panel">
-        <div v-if="!currentVideo" class="panel-empty">
+      <div v-show="panelView !== 'left'" :class="['right-panel', { 'full-width': panelView === 'right' }]">
+        <div v-if="videos.length === 0" class="panel-empty">
           <div class="empty-icon">
-            <MonitorPlay :size="48" />
+            <Info :size="48" />
           </div>
-          <p>选择视频查看详情</p>
+          <p>导入视频后查看详情</p>
         </div>
 
         <template v-else>
           <div class="panel-tabs">
-            <button
-              v-for="t in [
-                { key: 'detail' as const, label: '详情', icon: Info },
-                { key: 'settings' as const, label: '设置', icon: Settings },
-              ]"
-              :key="t.key"
-              :class="['panel-tab', { active: true }]"
+            <button 
+              :class="['tab-btn', { active: rightPanelTab === 'detail' }]"
+              @click="rightPanelTab = 'detail'"
             >
-              <component :is="t.icon" :size="14" />
-              {{ t.label }}
+              <Video :size="14" />
+              详情
+            </button>
+            <button 
+              :class="['tab-btn', { active: rightPanelTab === 'compare' }]"
+              @click="rightPanelTab = 'compare'"
+            >
+              <GitCompare :size="14" />
+              对比{{ selectedCount > 0 ? `(${selectedCount})` : '' }}
+            </button>
+            <button 
+              :class="['tab-btn', { active: rightPanelTab === 'stats' }]"
+              @click="rightPanelTab = 'stats'"
+            >
+              <BarChart3 :size="14" />
+              统计
             </button>
           </div>
 
-          <div class="panel-content">
+          <div v-if="rightPanelTab === 'detail' && currentVideo" class="detail-panel">
             <div class="detail-card">
               <div class="detail-header">
                 <div class="header-left">
-                  <MonitorPlay :size="16" class="icon-primary" />
+                  <Video :size="16" class="icon-primary" />
                   <span>视频详情</span>
                   <span class="index-badge">{{ viewingIndex + 1 }}/{{ videos.length }}</span>
                 </div>
+                <button class="btn-copy" @click="copyVideoInfo">
+                  <Check v-if="copiedId === 'detail'" :size="12" class="text-green-400" />
+                  <Copy v-else :size="12" />
+                  {{ copiedId === 'detail' ? '已复制' : '复制信息' }}
+                </button>
               </div>
               <div class="detail-body">
                 <div class="section">
                   <div class="section-title">
-                    <Film :size="16" class="icon-primary" />
+                    <FileText :size="14" class="icon-primary" />
                     <span>基本信息</span>
                   </div>
                   <div class="info-grid">
@@ -601,7 +759,7 @@ const openFileLocation = async (index: number) => {
 
                 <div class="section">
                   <div class="section-title">
-                    <MonitorPlay :size="16" class="icon-primary" />
+                    <MonitorPlay :size="14" class="icon-primary" />
                     <span>视频流</span>
                   </div>
                   <div class="info-grid">
@@ -626,7 +784,7 @@ const openFileLocation = async (index: number) => {
 
                 <div v-if="currentVideo.audioCodec" class="section">
                   <div class="section-title">
-                    <Music :size="16" class="icon-primary" />
+                    <Music :size="14" class="icon-primary" />
                     <span>音频流</span>
                   </div>
                   <div class="info-grid">
@@ -650,138 +808,150 @@ const openFileLocation = async (index: number) => {
                 </div>
               </div>
             </div>
+          </div>
 
-            <div v-if="tab === 'cut'" class="edit-card">
-              <div class="edit-header">
-                <Scissors :size="16" class="icon-primary" />
-                <span>视频裁剪</span>
+          <div v-else-if="rightPanelTab === 'compare'" class="compare-panel">
+            <div v-if="selectedVideos.length < 2" class="compare-empty">
+              <GitCompare :size="48" class="empty-icon" />
+              <p>选择至少 2 个视频进行对比</p>
+              <p class="hint">按住 Ctrl 点击视频可多选</p>
+            </div>
+            <div v-else class="compare-content">
+              <div class="compare-header">
+                <GitCompare :size="16" class="icon-primary" />
+                <span>视频对比</span>
+                <span class="count-badge">{{ selectedVideos.length }} 个视频</span>
               </div>
-              <div class="edit-body">
-                <div class="time-inputs">
-                  <div class="input-group">
-                    <label>开始时间</label>
-                    <input 
-                      type="text" 
-                      v-model="startTime"
-                      placeholder="00:00:00"
-                    />
-                  </div>
-                  <div class="input-group">
-                    <label>结束时间</label>
-                    <input 
-                      type="text" 
-                      v-model="endTime"
-                      :placeholder="formatDuration(currentVideo.duration)"
-                    />
-                  </div>
-                </div>
-                <div class="inverse-mode">
-                  <label>
-                    <input type="checkbox" v-model="isInverseMode" />
-                    <span>反向裁剪（删除选定片段）</span>
-                  </label>
-                </div>
-                <button class="btn-execute" @click="handleCut">
-                  <Scissors :size="14" />
-                  开始裁剪
-                </button>
+              <div class="compare-table">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>属性</th>
+                      <th v-for="(video, i) in selectedVideos" :key="i">{{ video.name }}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td>大小</td>
+                      <td v-for="(video, i) in selectedVideos" :key="i">
+                        <span 
+                          :class="['compare-value', { 
+                            'max': compareData?.maxSize === video.size && compareData?.minSize !== video.size,
+                            'min': compareData?.minSize === video.size && compareData?.maxSize !== video.size
+                          }]"
+                        >
+                          {{ formatSize(video.size) }}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>时长</td>
+                      <td v-for="(video, i) in selectedVideos" :key="i">
+                        <span 
+                          :class="['compare-value', { 
+                            'max': compareData?.maxDuration === video.duration && compareData?.minDuration !== video.duration,
+                            'min': compareData?.minDuration === video.duration && compareData?.maxDuration !== video.duration
+                          }]"
+                        >
+                          {{ formatDuration(video.duration) }}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>分辨率</td>
+                      <td v-for="(video, i) in selectedVideos" :key="i">
+                        <span 
+                          :class="['compare-value', { 
+                            'max': compareData?.maxRes === video.width * video.height && compareData?.minRes !== video.width * video.height,
+                            'min': compareData?.minRes === video.width * video.height && compareData?.maxRes !== video.width * video.height
+                          }]"
+                        >
+                          {{ video.width }}x{{ video.height }}
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>帧率</td>
+                      <td v-for="(video, i) in selectedVideos" :key="i">
+                        <span 
+                          :class="['compare-value', { 
+                            'max': compareData?.maxFps === video.fps && compareData?.minFps !== video.fps,
+                            'min': compareData?.minFps === video.fps && compareData?.maxFps !== video.fps
+                          }]"
+                        >
+                          {{ video.fps.toFixed(2) }} fps
+                        </span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td>码率</td>
+                      <td v-for="(video, i) in selectedVideos" :key="i">
+                        <span 
+                          :class="['compare-value', { 
+                            'max': compareData?.maxBitrate === video.bitrate && compareData?.minBitrate !== video.bitrate,
+                            'min': compareData?.minBitrate === video.bitrate && compareData?.maxBitrate !== video.bitrate
+                          }]"
+                        >
+                          {{ formatBitrate(video.bitrate) }}
+                        </span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
+          </div>
 
-            <div v-else-if="tab === 'merge'" class="edit-card">
-              <div class="edit-header">
-                <Combine :size="16" class="icon-primary" />
-                <span>视频合并</span>
-                <span class="merge-count">{{ mergeOrder.length }} 个视频</span>
+          <div v-else-if="rightPanelTab === 'stats' && stats" class="stats-panel">
+            <div class="stats-card">
+              <div class="stats-header">
+                <BarChart3 :size="16" class="icon-primary" />
+                <span>视频统计</span>
               </div>
-              <div class="edit-body">
-                <div class="merge-info">
-                  <div class="info-item">
-                    <span class="label">总时长:</span>
-                    <span class="value">{{ formatDuration(mergeDuration) }}</span>
-                  </div>
+              <div class="stats-content">
+                <div class="stat-item">
+                  <span class="label">视频总数</span>
+                  <span class="value">{{ stats.count }}</span>
                 </div>
-                <div class="merge-list">
-                  <div
-                    v-for="(videoIndex, orderIndex) in mergeOrder"
-                    :key="videoIndex"
-                    class="merge-item"
-                    :class="{ dragging: draggedIndex === orderIndex, 'drag-over': dragOverIndex === orderIndex }"
-                    draggable="true"
-                    @dragstart="handleDragStart(orderIndex)"
-                    @dragover="handleDragOver($event, orderIndex)"
-                    @drop="handleDrop($event, orderIndex)"
-                  >
-                    <span class="order-number">{{ orderIndex + 1 }}</span>
-                    <span class="video-name">{{ videos[videoIndex]?.name }}</span>
-                    <span class="video-duration">{{ formatDuration(videos[videoIndex]?.duration || 0) }}</span>
-                  </div>
+                <div class="stat-item">
+                  <span class="label">总大小</span>
+                  <span class="value">{{ formatSize(stats.totalSize) }}</span>
                 </div>
-                <button class="btn-execute" @click="handleMerge" :disabled="mergeOrder.length < 2">
-                  <Combine :size="14" />
-                  开始合并
-                </button>
-              </div>
-            </div>
-
-            <div v-else-if="tab === 'rotate'" class="edit-card">
-              <div class="edit-header">
-                <RotateCw :size="16" class="icon-primary" />
-                <span>旋转与翻转</span>
-              </div>
-              <div class="edit-body">
-                <div class="rotation-controls">
-                  <div class="rotation-buttons">
-                    <button 
-                      v-for="r in [0, 90, 180, 270]" 
-                      :key="r"
-                      :class="['rotation-btn', { active: rotation === r }]"
-                      @click="rotation = r"
-                    >
-                      {{ r }}°
-                    </button>
-                  </div>
-                  <div class="flip-controls">
-                    <label class="flip-option">
-                      <input type="checkbox" v-model="flipH" />
-                      <FlipHorizontal :size="16" />
-                      <span>水平翻转</span>
-                    </label>
-                    <label class="flip-option">
-                      <input type="checkbox" v-model="flipV" />
-                      <FlipVertical :size="16" />
-                      <span>垂直翻转</span>
-                    </label>
-                  </div>
+                <div class="stat-item">
+                  <span class="label">总时长</span>
+                  <span class="value">{{ formatDuration(stats.totalDuration) }}</span>
                 </div>
-                <button class="btn-execute" @click="handleRotate">
-                  <RotateCw :size="14" />
-                  应用旋转
-                </button>
+                <div class="stat-item">
+                  <span class="label">平均码率</span>
+                  <span class="value">{{ formatBitrate(stats.avgBitrate) }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="label">平均帧率</span>
+                  <span class="value">{{ stats.avgFps.toFixed(2) }} fps</span>
+                </div>
+                <div class="stat-item">
+                  <span class="label">视频编码</span>
+                  <span class="value">{{ stats.codecs.join(', ') }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="label">音频编码</span>
+                  <span class="value">{{ stats.audioCodecs.join(', ') }}</span>
+                </div>
+                <div class="stat-item">
+                  <span class="label">格式</span>
+                  <span class="value">{{ stats.formats.join(', ') }}</span>
+                </div>
               </div>
             </div>
           </div>
         </template>
-
-        <div v-if="logs.length > 0" class="logs-card">
-          <div class="logs-header">
-            <Info :size="14" class="icon-primary" />
-            <span>操作日志</span>
-            <button class="btn-clear-logs" @click="logs = []">清空</button>
-          </div>
-          <div class="logs-content">
-            <div v-for="(log, i) in logs" :key="i" class="log-line">
-              {{ log }}
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.video-edit {
+.video-analysis {
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -837,6 +1007,16 @@ h2 {
   color: var(--primary-color);
 }
 
+.badge.gray {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.badge.cyan {
+  background-color: rgba(6, 182, 212, 0.15);
+  color: #06b6d4;
+}
+
 .total-stats {
   display: flex;
   align-items: center;
@@ -861,7 +1041,36 @@ h2 {
   flex-wrap: wrap;
 }
 
-.btn-add {
+.view-toggle {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+}
+
+.toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  background-color: transparent;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-btn.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.btn-send {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -877,68 +1086,27 @@ h2 {
   box-shadow: 0 2px 8px rgba(6, 182, 212, 0.15);
 }
 
-.btn-add:hover:not(:disabled) {
+.btn-send:hover {
   transform: scale(1.05);
 }
 
-.btn-add:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.btn-folder {
+.btn-copy {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
   border-radius: 8px;
-  border: none;
-  background: linear-gradient(135deg, #8b5cf6, #a78bfa);
-  color: white;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(139, 92, 246, 0.15);
-}
-
-.btn-folder:hover:not(:disabled) {
-  transform: scale(1.05);
-}
-
-.btn-folder:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.tab-switch {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
-  background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-}
-
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  border: none;
-  background-color: transparent;
-  color: var(--text-tertiary);
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
 }
 
-.tab-btn.active {
-  background-color: rgba(6, 182, 212, 0.15);
-  color: var(--primary-color);
+.btn-copy:hover {
+  background-color: var(--bg-primary);
 }
 
 .btn-danger {
@@ -1026,7 +1194,7 @@ h2 {
 .content-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 7fr 5fr;
   gap: 16px;
   min-height: 0;
 }
@@ -1035,9 +1203,23 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+}
+
+.left-panel.full-width {
+  grid-column: 1 / -1;
+}
+
+.right-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
   overflow-y: auto;
-  padding-right: 4px;
-  scrollbar-gutter: stable;
+}
+
+.right-panel.full-width {
+  grid-column: 1 / -1;
 }
 
 .empty-state {
@@ -1089,9 +1271,35 @@ h2 {
 .empty-desc {
   font-size: 14px;
   color: var(--text-tertiary);
+  margin-bottom: 16px;
 }
 
-.video-list-header {
+.btn-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #0891b2, #06b6d4);
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.2);
+}
+
+.btn-add:hover:not(:disabled) {
+  transform: scale(1.05);
+}
+
+.btn-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.video-grid-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1123,26 +1331,71 @@ h2 {
   font-weight: 600;
 }
 
-.video-list {
+.header-right {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
+}
+
+.sort-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.sort-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.action-btn {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  overflow-y: auto;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .video-item {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
+  flex-direction: column;
   border-radius: 12px;
   background-color: var(--bg-secondary);
   border: 2px solid var(--border-color);
   cursor: pointer;
   transition: all 0.2s;
+  overflow: hidden;
 }
 
 .video-item:hover {
-  transform: scale(1.01);
+  transform: scale(1.02);
   border-color: var(--primary-color);
 }
 
@@ -1152,17 +1405,16 @@ h2 {
 }
 
 .video-item.selected {
-  border-color: #10b981;
+  border-color: #06b6d4;
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.25);
 }
 
 .video-thumbnail {
   position: relative;
-  width: 120px;
-  height: 68px;
-  border-radius: 8px;
-  overflow: hidden;
+  width: 100%;
+  height: 100px;
   background-color: var(--bg-tertiary);
-  flex-shrink: 0;
+  overflow: hidden;
 }
 
 .video-thumbnail img {
@@ -1214,31 +1466,46 @@ h2 {
   opacity: 1;
 }
 
+.select-indicator {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  border: none;
+  background-color: rgba(6, 182, 212, 0.9);
+  color: white;
+  cursor: pointer;
+}
+
 .video-info {
-  flex: 1;
-  min-width: 0;
+  padding: 8px;
 }
 
 .video-name {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-primary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .video-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 2px;
 }
 
 .tag {
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 8px;
   font-weight: 500;
 }
 
@@ -1267,50 +1534,6 @@ h2 {
   color: #f472b6;
 }
 
-.merge-controls {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.merge-check {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  border: 2px solid var(--border-color);
-  background-color: transparent;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.merge-check.active {
-  background-color: #10b981;
-  border-color: #10b981;
-  color: white;
-}
-
-.merge-order {
-  padding: 2px 8px;
-  border-radius: 6px;
-  background-color: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.right-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  overflow-y: auto;
-  padding-right: 4px;
-  scrollbar-gutter: stable;
-}
-
 .panel-empty {
   flex: 1;
   display: flex;
@@ -1330,22 +1553,21 @@ h2 {
 
 .panel-tabs {
   display: flex;
-  align-items: center;
   gap: 2px;
-  padding: 2px;
-  border-radius: 8px;
+  padding: 4px;
+  border-radius: 12px;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
 }
 
-.panel-tab {
+.tab-btn {
   flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px;
-  border-radius: 6px;
+  padding: 10px;
+  border-radius: 8px;
   border: none;
   background-color: transparent;
   color: var(--text-tertiary);
@@ -1355,16 +1577,20 @@ h2 {
   transition: all 0.2s;
 }
 
-.panel-tab.active {
+.tab-btn.active {
   background-color: rgba(6, 182, 212, 0.15);
   color: var(--primary-color);
 }
 
-.panel-content {
+.tab-btn:hover:not(.active) {
+  background-color: var(--bg-tertiary);
+}
+
+.detail-panel,
+.compare-panel,
+.stats-panel {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  overflow-y: auto;
 }
 
 .detail-card {
@@ -1407,7 +1633,7 @@ h2 {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -1425,7 +1651,7 @@ h2 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .info-row .label {
@@ -1441,17 +1667,110 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 200px;
+  max-width: 150px;
 }
 
-.edit-card {
+.compare-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  gap: 12px;
+}
+
+.compare-empty .empty-icon {
+  color: var(--text-tertiary);
+}
+
+.compare-empty p {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.compare-empty .hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.compare-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.compare-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.compare-table {
   border-radius: 12px;
   overflow: hidden;
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-color);
 }
 
-.edit-header {
+.compare-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+}
+
+.compare-table th {
+  background-color: var(--bg-tertiary);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.compare-table td {
+  color: var(--text-secondary);
+}
+
+.compare-value {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.compare-value.max {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.compare-value.min {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.stats-card {
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.stats-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1462,296 +1781,29 @@ h2 {
   color: var(--text-primary);
 }
 
-.merge-count {
-  padding: 2px 8px;
-  border-radius: 6px;
-  background-color: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.edit-body {
+.stats-content {
   padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-
-.time-inputs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
-.input-group {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.input-group label {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.input-group input {
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-tertiary);
-  color: var(--text-primary);
-  font-size: 13px;
-  font-family: monospace;
-}
-
-.input-group input:focus {
-  outline: none;
-  border-color: var(--primary-color);
-}
-
-.inverse-mode {
-  display: flex;
-  align-items: center;
-}
-
-.inverse-mode label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-}
-
-.inverse-mode input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-.merge-info {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 8px;
-  background-color: var(--bg-tertiary);
-}
-
-.info-item {
+.stats-content .stat-item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background-color: var(--bg-tertiary);
   font-size: 12px;
 }
 
-.info-item .label {
+.stats-content .stat-item .label {
   color: var(--text-tertiary);
 }
 
-.info-item .value {
+.stats-content .stat-item .value {
   color: var(--text-primary);
   font-weight: 500;
-}
-
-.merge-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.merge-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background-color: var(--bg-tertiary);
-  border: 2px solid transparent;
-  cursor: move;
-  transition: all 0.2s;
-}
-
-.merge-item.dragging {
-  opacity: 0.5;
-}
-
-.merge-item.drag-over {
-  border-color: var(--primary-color);
-  background-color: rgba(6, 182, 212, 0.05);
-}
-
-.order-number {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background-color: var(--primary-color);
-  color: white;
-  font-size: 11px;
-  font-weight: 600;
-  flex-shrink: 0;
-}
-
-.merge-item .video-name {
-  flex: 1;
-  font-size: 12px;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.merge-item .video-duration {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  font-family: monospace;
-}
-
-.rotation-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.rotation-buttons {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-}
-
-.rotation-btn {
-  padding: 10px;
-  border-radius: 8px;
-  border: 2px solid var(--border-color);
-  background-color: var(--bg-tertiary);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.rotation-btn:hover {
-  border-color: var(--primary-color);
-}
-
-.rotation-btn.active {
-  background-color: rgba(6, 182, 212, 0.15);
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-}
-
-.flip-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.flip-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background-color: var(--bg-tertiary);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.flip-option:hover {
-  background-color: var(--bg-primary);
-}
-
-.flip-option input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
-
-.flip-option span {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.btn-execute {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 12px;
-  border-radius: 8px;
-  border: none;
-  background: linear-gradient(135deg, var(--primary-color), #2563eb);
-  color: white;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.2);
-}
-
-.btn-execute:hover:not(:disabled) {
-  transform: scale(1.02);
-  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
-}
-
-.btn-execute:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.logs-card {
-  padding: 12px;
-  border-radius: 12px;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.logs-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.btn-clear-logs {
-  margin-left: auto;
-  padding: 4px 8px;
-  border-radius: 6px;
-  border: none;
-  background-color: var(--bg-tertiary);
-  color: var(--text-tertiary);
-  font-size: 11px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-clear-logs:hover {
-  background-color: var(--bg-primary);
-}
-
-.logs-content {
-  max-height: 120px;
-  overflow-y: auto;
-  font-family: monospace;
-  font-size: 11px;
-}
-
-.log-line {
-  padding: 4px 0;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.log-line:last-child {
-  border-bottom: none;
 }
 </style>

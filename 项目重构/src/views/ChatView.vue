@@ -452,7 +452,7 @@ onMounted(async () => {
 
 <style scoped>
 .chat-view {
-  background-color: var(--bg-primary);
+  background-color: transparent;
   position: relative;
 }
 

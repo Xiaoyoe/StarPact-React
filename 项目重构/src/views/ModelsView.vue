@@ -137,6 +137,7 @@ onMounted(() => {
   height: 100%;
   overflow-y: auto;
   padding: 24px;
+  background-color: transparent;
 }
 
 .page-header {

@@ -493,7 +493,7 @@ const getSliderPercent = (param: IniParameter): number => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-background-primary overflow-hidden text-text-primary">
+  <div class="h-full flex flex-col overflow-hidden text-text-primary" style="background-color: transparent;">
     <!-- Help Modal -->
     <Teleport to="body">
       <Transition

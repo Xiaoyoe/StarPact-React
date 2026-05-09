@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { useFFmpegStore } from '@/stores';
 import FolderProcess from '@/components/media/FolderProcess.vue';
 import FormatConvert from '@/components/media/FormatConvert.vue';
@@ -8,7 +9,7 @@ import AdvancedTools from '@/components/media/AdvancedTools.vue';
 import IcoConvert from '@/components/media/IcoConvert.vue';
 import ImageFormatConvert from '@/components/media/ImageFormatConvert.vue';
 import CommandBuilder from '@/components/media/CommandBuilder.vue';
-import VideoEdit from '@/components/media/VideoEdit.vue';
+import VideoAnalysis from '@/components/media/VideoAnalysis.vue';
 import VideoProcess from '@/components/media/VideoProcess.vue';
 import {
   FileType, Music, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon, FileImage, FolderSync, Minimize2, Film, ChevronsUp, Terminal
@@ -21,10 +22,82 @@ const showTaskList = ref(false);
 const showFFmpegConfig = ref(false);
 const expandedTaskId = ref<string | null>(null);
 const showBottomNav = ref(true);
+const ffmpegMode = ref<'global' | 'folder'>('folder');
+const globalStatus = ref({
+  available: false,
+  ffmpegAvailable: false,
+  ffprobeAvailable: false,
+});
 
 onMounted(async () => {
   await ffmpegStore.loadConfig();
+  await checkGlobalFFmpeg();
 });
+
+async function checkGlobalFFmpeg() {
+  try {
+    const result = await invoke<{
+      available: boolean;
+      ffmpegAvailable: boolean;
+      ffprobeAvailable: boolean;
+    }>('ffmpeg_check_global');
+    
+    globalStatus.value = result;
+    
+    if (result.available && !ffmpegStore.config.configured) {
+      ffmpegMode.value = 'global';
+    }
+  } catch (error) {
+    console.error('Failed to check global FFmpeg:', error);
+  }
+}
+
+async function handleModeChange(mode: 'global' | 'folder') {
+  ffmpegMode.value = mode;
+  
+  if (mode === 'global') {
+    const result = await invoke<{
+      available: boolean;
+      ffmpegPath: string;
+      ffprobePath: string;
+    }>('ffmpeg_check_global');
+    
+    if (result.available) {
+      ffmpegStore.setConfig({
+        binPath: '',
+        ffmpegPath: result.ffmpegPath,
+        ffprobePath: result.ffprobePath,
+        configured: true,
+      });
+      ffmpegStore.saveConfig();
+    } else {
+      alert('全局 FFmpeg 未安装或未添加到系统 PATH');
+    }
+  }
+}
+
+async function selectFFmpegPath() {
+  const { fileService } = await import('@/services');
+  const path = await fileService.selectFolder({ title: '选择 FFmpeg bin 目录' });
+  if (path) {
+    const result = await invoke<{ valid: boolean; ffmpegPath: string; ffprobePath: string; error?: string }>(
+      'ffmpeg_validate_path', 
+      { binPath: path }
+    );
+    
+    if (result.valid) {
+      ffmpegStore.setConfig({
+        binPath: path,
+        ffmpegPath: result.ffmpegPath,
+        ffprobePath: result.ffprobePath,
+        configured: true,
+      });
+      ffmpegStore.saveConfig();
+    } else {
+      alert(result.error || '无效的 FFmpeg 目录');
+    }
+  }
+}
 
 const tabs = [
   { key: 'format', label: '格式转换', icon: FileType },
@@ -36,8 +109,8 @@ const tabs = [
 ];
 
 const processTabs = [
-  { key: 'videoEdit', label: '视频编辑', icon: Film },
-  { key: 'video', label: '视频分析', icon: Film },
+  { key: 'videoEdit', label: '视频分析', icon: Film },
+  { key: 'video', label: '视频处理', icon: Film },
   { key: 'folder', label: '文件夹分析', icon: FolderSync },
 ];
 
@@ -71,8 +144,8 @@ const getTypeLabel = (type: string) => {
     icoConvert: 'ICO转换',
     imageFormatConvert: '图片格式转换',
     folderProcess: '文件夹分析',
-    videoProcess: '视频分析',
-    videoEdit: '视频编辑',
+    videoProcess: '视频处理',
+    videoEdit: '视频分析',
   };
   return labels[type] || type;
 };
@@ -115,7 +188,7 @@ const formatTime = (timestamp: number) => {
       </div>
       
       <div v-show="activeTab === 'videoEdit'" class="tab-content">
-        <VideoEdit />
+        <VideoAnalysis />
       </div>
       
       <div v-show="activeTab === 'video'" class="tab-content">
@@ -286,6 +359,49 @@ const formatTime = (timestamp: number) => {
         <div class="modal-body">
           <div class="config-form">
             <div class="form-group">
+              <label>使用方式</label>
+              <div class="mode-selector">
+                <button 
+                  class="mode-btn"
+                  :class="{ active: ffmpegMode === 'global' }"
+                  @click="handleModeChange('global')"
+                >
+                  <Terminal :size="16" />
+                  <span>全局 FFmpeg</span>
+                </button>
+                <button 
+                  class="mode-btn"
+                  :class="{ active: ffmpegMode === 'folder' }"
+                  @click="handleModeChange('folder')"
+                >
+                  <FolderOpen :size="16" />
+                  <span>指定文件夹</span>
+                </button>
+              </div>
+            </div>
+
+            <div v-if="ffmpegMode === 'global'" class="global-status">
+              <div class="status-item">
+                <span class="status-label">FFmpeg:</span>
+                <span :class="['status-value', { available: globalStatus.ffmpegAvailable }]">
+                  {{ globalStatus.ffmpegAvailable ? '✓ 已安装' : '✗ 未安装' }}
+                </span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">FFprobe:</span>
+                <span :class="['status-value', { available: globalStatus.ffprobeAvailable }]">
+                  {{ globalStatus.ffprobeAvailable ? '✓ 已安装' : '✗ 未安装' }}
+                </span>
+              </div>
+              <div v-if="!globalStatus.available" class="global-help">
+                <p>全局 FFmpeg 未安装或未添加到系统 PATH</p>
+                <a href="https://ffmpeg.org/download.html" target="_blank" class="help-link">
+                  下载 FFmpeg →
+                </a>
+              </div>
+            </div>
+
+            <div v-if="ffmpegMode === 'folder'" class="form-group">
               <label>FFmpeg bin 目录</label>
               <div class="input-row">
                 <input 
@@ -297,6 +413,7 @@ const formatTime = (timestamp: number) => {
                 <button class="btn-browse" @click="selectFFmpegPath">浏览</button>
               </div>
             </div>
+
             <div class="config-status" :class="{ configured: ffmpegStore.isConfigured }">
               {{ ffmpegStore.isConfigured ? '✓ 已配置' : '✗ 未配置' }}
             </div>
@@ -307,34 +424,6 @@ const formatTime = (timestamp: number) => {
   </div>
 </template>
 
-<script lang="ts">
-import { invoke } from '@tauri-apps/api/core';
-
-async function selectFFmpegPath() {
-  const { fileService } = await import('@/services');
-  const path = await fileService.selectFolder({ title: '选择 FFmpeg bin 目录' });
-  if (path) {
-    const ffmpegStore = useFFmpegStore();
-    const result = await invoke<{ valid: boolean; ffmpegPath: string; ffprobePath: string; error?: string }>(
-      'ffmpeg_validate_path', 
-      { binPath: path }
-    );
-    
-    if (result.valid) {
-      ffmpegStore.setConfig({
-        binPath: path,
-        ffmpegPath: result.ffmpegPath,
-        ffprobePath: result.ffprobePath,
-        configured: true,
-      });
-      ffmpegStore.saveConfig();
-    } else {
-      alert(result.error || '无效的 FFmpeg 目录');
-    }
-  }
-}
-</script>
-
 <style scoped>
 .media-tools-page {
   height: 100%;
@@ -342,6 +431,7 @@ async function selectFFmpegPath() {
   flex-direction: column;
   position: relative;
   overflow: hidden;
+  background-color: transparent;
 }
 
 .content-area {
@@ -718,6 +808,94 @@ async function selectFFmpegPath() {
 
 .btn-open:hover {
   background-color: rgba(59, 130, 246, 0.1);
+}
+
+.mode-selector {
+  display: flex;
+  gap: 8px;
+}
+
+.mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mode-btn:hover {
+  border-color: var(--primary-color);
+  background-color: var(--hover-bg);
+}
+
+.mode-btn.active {
+  border-color: var(--primary-color);
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
+.global-status {
+  padding: 16px;
+  background-color: var(--bg-tertiary);
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+.status-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.status-item:not(:last-child) {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.status-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.status-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ef4444;
+}
+
+.status-value.available {
+  color: #10b981;
+}
+
+.global-help {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-color);
+}
+
+.global-help p {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+
+.help-link {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+.help-link:hover {
+  text-decoration: underline;
 }
 
 .config-form {

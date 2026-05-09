@@ -31,6 +31,18 @@ export const ffmpegService = {
     return invoke('ffmpeg_merge_videos', { ffmpegPath, folderPath, outputName, overwrite });
   },
 
+  async classifyByFps(ffprobePath: string, folderPath: string): Promise<{ success: boolean; classifiedCount: number; folders: string[]; error?: string }> {
+    return invoke('ffmpeg_classify_by_fps', { ffprobePath, folderPath });
+  },
+
+  async collectSubfolderVideos(folderPath: string): Promise<{ success: boolean; collectedCount: number; error?: string }> {
+    return invoke('ffmpeg_collect_subfolder_videos', { folderPath });
+  },
+
+  async extractFrame(ffmpegPath: string, videoPath: string, timestamp: number = 1): Promise<string> {
+    return invoke<string>('ffmpeg_extract_frame', { ffmpegPath, videoPath, timestamp });
+  },
+
   onProgress(callback: (progress: FfmpegProgress) => void) {
     return listen<FfmpegProgress>('ffmpeg:progress', (event) => {
       callback(event.payload);

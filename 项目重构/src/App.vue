@@ -206,6 +206,7 @@ onMounted(async () => {
   display: flex;
   flex: 1;
   min-width: 0;
+  background-color: transparent;
 }
 
 .loading-screen {

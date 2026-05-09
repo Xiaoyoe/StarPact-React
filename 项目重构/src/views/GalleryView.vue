@@ -462,7 +462,7 @@ onMounted(async () => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  background-color: var(--bg-primary);
+  background-color: transparent;
 }
 
 .gallery-container {

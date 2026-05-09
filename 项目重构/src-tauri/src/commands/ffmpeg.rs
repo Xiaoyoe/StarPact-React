@@ -192,6 +192,30 @@ pub async fn ffmpeg_validate_path(
 }
 
 #[tauri::command]
+pub async fn ffmpeg_check_global() -> Result<serde_json::Value, String> {
+    use std::process::Command;
+
+    let ffmpeg_result = Command::new("ffmpeg")
+        .arg("-version")
+        .output();
+
+    let ffprobe_result = Command::new("ffprobe")
+        .arg("-version")
+        .output();
+
+    let ffmpeg_available = ffmpeg_result.is_ok() && ffmpeg_result.unwrap().status.success();
+    let ffprobe_available = ffprobe_result.is_ok() && ffprobe_result.unwrap().status.success();
+
+    Ok(serde_json::json!({
+        "available": ffmpeg_available,
+        "ffmpegAvailable": ffmpeg_available,
+        "ffprobeAvailable": ffprobe_available,
+        "ffmpegPath": if ffmpeg_available { "ffmpeg".to_string() } else { String::new() },
+        "ffprobePath": if ffprobe_available { "ffprobe".to_string() } else { String::new() }
+    }))
+}
+
+#[tauri::command]
 pub async fn ffmpeg_scan_folder_videos(
     ffprobe_path: String,
     folder_path: String,
@@ -199,7 +223,7 @@ pub async fn ffmpeg_scan_folder_videos(
 ) -> Result<serde_json::Value, String> {
     use walkdir::WalkDir;
 
-    let video_extensions = [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"];
+    let video_extensions = [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".ts", ".mts", ".m2ts", ".ogv", ".3gp", ".f4v"];
     let mut videos: Vec<VideoFile> = Vec::new();
     let mut total_size = 0u64;
 
@@ -211,7 +235,8 @@ pub async fn ffmpeg_scan_folder_videos(
                 .map(|e| e.to_lowercase());
 
             if let Some(ext) = ext {
-                if video_extensions.contains(&ext.as_str()) {
+                let ext_with_dot = format!(".{}", ext);
+                if video_extensions.contains(&ext_with_dot.as_str()) {
                     if let Ok(metadata) = std::fs::metadata(path) {
                         let size = metadata.len();
                         total_size += size;
@@ -347,4 +372,191 @@ pub async fn ffmpeg_merge_videos(
             "error": e.to_string()
         })),
     }
+}
+
+#[tauri::command]
+pub async fn ffmpeg_classify_by_fps(
+    ffprobe_path: String,
+    folder_path: String,
+    app: tauri::AppHandle,
+) -> Result<serde_json::Value, String> {
+    use std::fs;
+    use std::path::Path;
+    use walkdir::WalkDir;
+
+    let video_extensions = [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".ts", ".mts", ".m2ts", ".ogv", ".3gp", ".f4v"];
+    let mut video_files: Vec<(String, f32)> = Vec::new();
+
+    for entry in WalkDir::new(&folder_path).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_file() {
+            let ext = path.extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase());
+
+            if let Some(ext) = ext {
+                let ext_with_dot = format!(".{}", ext);
+                if video_extensions.contains(&ext_with_dot.as_str()) {
+                    let path_str = path.to_string_lossy().to_string();
+                    
+                    if let Ok(Some(info)) = ffmpeg_get_media_info(ffprobe_path.clone(), path_str.clone()).await {
+                        let fps = info.video.as_ref().map(|v| v.fps).unwrap_or(0.0);
+                        if fps > 0.0 {
+                            video_files.push((path_str, fps));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    let total = video_files.len();
+    let mut classified_count = 0;
+    let mut folders: Vec<String> = Vec::new();
+
+    for (i, (video_path, fps)) in video_files.iter().enumerate() {
+        let fps_int = fps.round() as i32;
+        let folder_name = format!("FPS_{}", fps_int);
+        let target_folder = Path::new(&folder_path).join(&folder_name);
+
+        if !target_folder.exists() {
+            fs::create_dir_all(&target_folder).map_err(|e| e.to_string())?;
+            if !folders.contains(&folder_name) {
+                folders.push(folder_name.clone());
+            }
+        }
+
+        let source_path = Path::new(video_path);
+        if let Some(file_name) = source_path.file_name() {
+            let dest_path = target_folder.join(file_name);
+            
+            if source_path != dest_path {
+                if let Err(e) = fs::rename(source_path, &dest_path) {
+                    eprintln!("Failed to move {}: {}", video_path, e);
+                } else {
+                    classified_count += 1;
+                }
+            }
+        }
+
+        let progress = ((i + 1) as f64 / total as f64 * 100.0) as u32;
+        let _ = app.emit("ffmpeg:progress", serde_json::json!({ "progress": progress }));
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "classifiedCount": classified_count,
+        "folders": folders
+    }))
+}
+
+#[tauri::command]
+pub async fn ffmpeg_collect_subfolder_videos(
+    folder_path: String,
+) -> Result<serde_json::Value, String> {
+    use std::fs;
+    use std::path::Path;
+    use walkdir::WalkDir;
+
+    let video_extensions = [".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".ts", ".mts", ".m2ts", ".ogv", ".3gp", ".f4v"];
+    let root_path = Path::new(&folder_path);
+    let mut collected_count = 0;
+
+    let mut video_files: Vec<std::path::PathBuf> = Vec::new();
+
+    for entry in WalkDir::new(&folder_path).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.is_file() {
+            let parent = path.parent();
+            if parent == Some(root_path) {
+                continue;
+            }
+
+            let ext = path.extension()
+                .and_then(|e| e.to_str())
+                .map(|e| e.to_lowercase());
+
+            if let Some(ext) = ext {
+                let ext_with_dot = format!(".{}", ext);
+                if video_extensions.contains(&ext_with_dot.as_str()) {
+                    video_files.push(path.to_path_buf());
+                }
+            }
+        }
+    }
+
+    for video_path in video_files {
+        if let Some(file_name) = video_path.file_name() {
+            let dest_path = root_path.join(file_name);
+            
+            if video_path != dest_path {
+                let final_dest = if dest_path.exists() {
+                    let stem = dest_path.file_stem().and_then(|s| s.to_str()).unwrap_or("video");
+                    let ext = dest_path.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
+                    let mut counter = 1;
+                    loop {
+                        let new_name = format!("{}_{}.{}", stem, counter, ext);
+                        let new_path = root_path.join(&new_name);
+                        if !new_path.exists() {
+                            break new_path;
+                        }
+                        counter += 1;
+                    }
+                } else {
+                    dest_path
+                };
+
+                if let Err(e) = fs::rename(&video_path, &final_dest) {
+                    eprintln!("Failed to move {:?} to {:?}: {}", video_path, final_dest, e);
+                } else {
+                    collected_count += 1;
+                }
+            }
+        }
+    }
+
+    Ok(serde_json::json!({
+        "success": true,
+        "collectedCount": collected_count
+    }))
+}
+
+#[tauri::command]
+pub async fn ffmpeg_extract_frame(
+    ffmpeg_path: String,
+    video_path: String,
+    timestamp: f64,
+) -> Result<String, String> {
+    use std::process::Command;
+    use base64::{engine::general_purpose, Engine as _};
+    
+    let temp_dir = std::env::temp_dir();
+    let output_file = temp_dir.join(format!("frame_{}.jpg", uuid::Uuid::new_v4()));
+    
+    let timestamp_str = format!("{:.2}", timestamp);
+    
+    let output = Command::new(&ffmpeg_path)
+        .args([
+            "-ss", &timestamp_str,
+            "-i", &video_path,
+            "-vframes", "1",
+            "-q:v", "2",
+            "-f", "image2",
+            output_file.to_str().unwrap(),
+            "-y",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to execute ffmpeg: {}", e))?;
+    
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+    
+    let image_data = std::fs::read(&output_file).map_err(|e| format!("Failed to read frame: {}", e))?;
+    
+    let _ = std::fs::remove_file(&output_file);
+    
+    let base64_str = general_purpose::STANDARD.encode(&image_data);
+    
+    Ok(format!("data:image/jpeg;base64,{}", base64_str))
 }
