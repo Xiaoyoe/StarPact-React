@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { Bot } from 'lucide-vue-next';
+import { useWallpaperStore } from '@/stores';
+import { invoke } from '@tauri-apps/api/core';
 
 interface Props {
   enabled: boolean;
@@ -15,12 +17,37 @@ const emit = defineEmits<{
   (e: 'complete'): void;
 }>();
 
+const wallpaperStore = useWallpaperStore();
 const canClose = ref(false);
+const useWallpaper = ref(true);
 
-onMounted(() => {
+const backgroundStyle = computed(() => {
+  if (useWallpaper.value && wallpaperStore.currentWallpaper) {
+    return {
+      backgroundImage: `url(${wallpaperStore.currentWallpaper})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+    };
+  }
+  return {
+    backgroundColor: 'var(--bg-primary)',
+  };
+});
+
+onMounted(async () => {
   if (!props.enabled) {
     emit('complete');
     return;
+  }
+  
+  try {
+    const config = await invoke<any>('storage_get_config');
+    if (config.ui?.splash_screen_use_wallpaper !== undefined) {
+      useWallpaper.value = config.ui.splash_screen_use_wallpaper;
+    }
+  } catch (error) {
+    console.error('Failed to load splash screen wallpaper setting:', error);
   }
   
   setTimeout(() => {
@@ -44,7 +71,7 @@ watch(canClose, (newVal) => {
     <div
       v-if="enabled"
       class="fixed inset-0 z-[9999] flex items-center justify-center"
-      style="background-color: var(--bg-primary)"
+      :style="backgroundStyle"
     >
       <Transition
         leave-active-class="transition-all duration-300"

@@ -49,6 +49,16 @@ export const useConversationStore = defineStore('conversation', () => {
   const searchQuery = ref('');
   const isLoading = ref(false);
 
+  const deleteConfirmEnabled = ref(true);
+  const ollamaVerboseMode = ref(false);
+  const ollamaThinkMode = ref(false);
+  const ollamaChatMode = ref<'single' | 'multi'>('multi');
+  const includeImagesInContext = ref(false);
+  const showWelcomePage = ref(true);
+  const compactMode = ref(false);
+  const showNavigationDots = ref(true);
+  const autoHideInputEnabled = ref(false);
+
   const activeConversation = computed(() => {
     return conversations.value.find(c => c.id === activeConversationId.value);
   });
@@ -106,15 +116,11 @@ export const useConversationStore = defineStore('conversation', () => {
   };
 
   const createNewConversation = async () => {
-    if (!activeModelId.value) {
-      return null;
-    }
-    
     const conversation: Conversation = {
       id: `conv_${generateId()}`,
       title: '新对话',
       messages: [],
-      model_id: activeModelId.value,
+      model_id: activeModelId.value || 'default',
       created_at: Date.now(),
       updated_at: Date.now(),
       is_favorite: false,
@@ -235,6 +241,42 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   };
 
+  const setDeleteConfirmEnabled = (enabled: boolean) => {
+    deleteConfirmEnabled.value = enabled;
+  };
+
+  const setOllamaVerboseMode = (enabled: boolean) => {
+    ollamaVerboseMode.value = enabled;
+  };
+
+  const setOllamaThinkMode = (enabled: boolean) => {
+    ollamaThinkMode.value = enabled;
+  };
+
+  const setOllamaChatMode = (mode: 'single' | 'multi') => {
+    ollamaChatMode.value = mode;
+  };
+
+  const setIncludeImagesInContext = (enabled: boolean) => {
+    includeImagesInContext.value = enabled;
+  };
+
+  const setShowWelcomePage = (show: boolean) => {
+    showWelcomePage.value = show;
+  };
+
+  const setCompactMode = (compact: boolean) => {
+    compactMode.value = compact;
+  };
+
+  const setShowNavigationDots = (show: boolean) => {
+    showNavigationDots.value = show;
+  };
+
+  const setAutoHideInputEnabled = (enabled: boolean) => {
+    autoHideInputEnabled.value = enabled;
+  };
+
   return {
     conversations,
     activeConversationId,
@@ -242,6 +284,15 @@ export const useConversationStore = defineStore('conversation', () => {
     activeModelId,
     searchQuery,
     isLoading,
+    deleteConfirmEnabled,
+    ollamaVerboseMode,
+    ollamaThinkMode,
+    ollamaChatMode,
+    includeImagesInContext,
+    showWelcomePage,
+    compactMode,
+    showNavigationDots,
+    autoHideInputEnabled,
     activeConversation,
     activeModel,
     filteredConversations,
@@ -257,5 +308,14 @@ export const useConversationStore = defineStore('conversation', () => {
     deleteMessage,
     updateConversation,
     toggleFavorite,
+    setDeleteConfirmEnabled,
+    setOllamaVerboseMode,
+    setOllamaThinkMode,
+    setOllamaChatMode,
+    setIncludeImagesInContext,
+    setShowWelcomePage,
+    setCompactMode,
+    setShowNavigationDots,
+    setAutoHideInputEnabled,
   };
 });

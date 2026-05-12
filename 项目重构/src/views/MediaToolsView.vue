@@ -10,7 +10,7 @@ import IcoConvert from '@/components/media/IcoConvert.vue';
 import ImageFormatConvert from '@/components/media/ImageFormatConvert.vue';
 import CommandBuilder from '@/components/media/CommandBuilder.vue';
 import VideoAnalysis from '@/components/media/VideoAnalysis.vue';
-import VideoProcess from '@/components/media/VideoProcess.vue';
+import VideoEdit from '@/components/media/VideoEdit.vue';
 import {
   FileType, Music, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon, FileImage, FolderSync, Minimize2, Film, ChevronsUp, Terminal
 } from 'lucide-vue-next';
@@ -192,7 +192,7 @@ const formatTime = (timestamp: number) => {
       </div>
       
       <div v-show="activeTab === 'video'" class="tab-content">
-        <VideoProcess />
+        <VideoEdit />
       </div>
     </div>
 

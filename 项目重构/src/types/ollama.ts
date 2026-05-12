@@ -56,3 +56,24 @@ export interface OllamaPullProgress {
   total?: number;
   completed?: number;
 }
+
+export interface LMStudioModel {
+  id: string;
+  object: string;
+  owned_by?: string;
+}
+
+export interface LMStudioStatus {
+  running: boolean;
+  version?: string;
+  models: LMStudioModel[];
+}
+
+export interface LocalServiceStatus {
+  provider: string;
+  running: boolean;
+  host: string;
+  port: number;
+  version?: string;
+  models_count: number;
+}

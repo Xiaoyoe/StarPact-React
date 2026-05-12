@@ -1,10 +1,38 @@
 use crate::models::{ModelConfig, Conversation};
 use crate::services::storage::{
-    paths::{get_data_dir_info, ensure_data_dirs, get_data_dir},
+    paths::{get_data_dir_info, ensure_data_dirs, get_data_dir, get_prompt_templates_path},
     config::{get_config, update_config, AppConfig, FfmpegConfig, save_ffmpeg_config, get_ffmpeg_config, get_module_path, save_module_path},
     database::get_database,
     backup::{create_backup, restore_backup, list_backups, delete_backup, BackupInfo},
 };
+use serde::{Deserialize, Serialize};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptTemplateResult {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub result_type: String,
+    pub version_note: String,
+    pub created_at: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptTemplate {
+    pub id: String,
+    pub title: String,
+    pub category: String,
+    pub tags: Vec<String>,
+    pub version_note: String,
+    pub content: String,
+    pub results: Vec<PromptTemplateResult>,
+    pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PromptTemplatesData {
+    pub templates: Vec<PromptTemplate>,
+}
 
 #[tauri::command]
 pub async fn get_models() -> Result<Vec<ModelConfig>, String> {
@@ -199,6 +227,38 @@ pub async fn storage_reset_to_factory() -> Result<(), String> {
         .map_err(|e| format!("Failed to write default config: {}", e))?;
     
     ensure_data_dirs()?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn get_prompt_templates() -> Result<Vec<PromptTemplate>, String> {
+    let path = get_prompt_templates_path();
+    
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    
+    let content = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read prompt templates: {}", e))?;
+    
+    let data: PromptTemplatesData = serde_json::from_str(&content)
+        .map_err(|e| format!("Failed to parse prompt templates: {}", e))?;
+    
+    Ok(data.templates)
+}
+
+#[tauri::command]
+pub async fn save_prompt_templates(templates: Vec<PromptTemplate>) -> Result<(), String> {
+    let path = get_prompt_templates_path();
+    
+    let data = PromptTemplatesData { templates };
+    
+    let content = serde_json::to_string_pretty(&data)
+        .map_err(|e| format!("Failed to serialize prompt templates: {}", e))?;
+    
+    std::fs::write(&path, content)
+        .map_err(|e| format!("Failed to write prompt templates: {}", e))?;
     
     Ok(())
 }

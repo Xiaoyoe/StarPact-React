@@ -1,10 +1,18 @@
 use rusqlite::{Connection, params, OptionalExtension};
-use std::sync::Mutex;
-use crate::models::{ModelConfig, Conversation, ChatMessage, ModelStats};
+use std::sync::{Mutex, OnceLock};
+use crate::models::{ModelConfig, Conversation, ModelStats, LocalServiceConfig, Wallpaper, ImageAlbum, ImageMetadata, ChatMessage};
 use super::paths::get_database_path;
+
+static DATABASE: OnceLock<Database> = OnceLock::new();
 
 pub struct Database {
     conn: Mutex<Connection>,
+}
+
+pub fn get_database() -> &'static Database {
+    DATABASE.get_or_init(|| {
+        Database::new().expect("Failed to initialize database")
+    })
 }
 
 impl Database {
@@ -25,6 +33,12 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
         conn.execute_batch(r#"
+            -- 首先创建 settings 表（用于迁移）
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT
+            );
+            
             CREATE TABLE IF NOT EXISTS model_configs (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -43,7 +57,13 @@ impl Database {
                 total_calls INTEGER DEFAULT 0,
                 success_calls INTEGER DEFAULT 0,
                 avg_response_time REAL DEFAULT 0.0,
-                last_used INTEGER
+                last_used INTEGER,
+                local_provider TEXT,
+                local_service_host TEXT,
+                local_service_port INTEGER,
+                local_service_base_url TEXT,
+                supports_vision INTEGER,
+                supports_streaming INTEGER
             );
             
             CREATE TABLE IF NOT EXISTS model_presets (
@@ -209,12 +229,112 @@ impl Database {
                 created_at INTEGER NOT NULL,
                 FOREIGN KEY (template_id) REFERENCES prompt_templates(id) ON DELETE CASCADE
             );
-            
-            CREATE TABLE IF NOT EXISTS settings (
-                key TEXT PRIMARY KEY,
-                value TEXT
-            );
         "#).map_err(|e| format!("Failed to initialize tables: {}", e))?;
+        
+        // 执行数据库迁移
+        self.run_migrations(&conn)?;
+        
+        Ok(())
+    }
+    
+    fn run_migrations(&self, conn: &Connection) -> Result<(), String> {
+        // 先插入迁移标记（如果不存在）
+        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('col_local_provider_added', '0')", [])
+            .ok();
+        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('col_local_service_host_added', '0')", [])
+            .ok();
+        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('col_local_service_port_added', '0')", [])
+            .ok();
+        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('col_local_service_base_url_added', '0')", [])
+            .ok();
+        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('col_supports_vision_added', '0')", [])
+            .ok();
+        conn.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('col_supports_streaming_added', '0')", [])
+            .ok();
+        
+        // 添加 local_provider 列
+        let local_provider_added: bool = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'col_local_provider_added'",
+            [],
+            |row| row.get::<_, String>(0)
+        ).unwrap_or_else(|_| "0".to_string()) == "1";
+        
+        if !local_provider_added {
+            conn.execute("ALTER TABLE model_configs ADD COLUMN local_provider TEXT", [])
+                .ok();
+            conn.execute("UPDATE settings SET value = '1' WHERE key = 'col_local_provider_added'", [])
+                .map_err(|e| e.to_string())?;
+        }
+        
+        // 添加 local_service_host 列
+        let local_service_host_added: bool = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'col_local_service_host_added'",
+            [],
+            |row| row.get::<_, String>(0)
+        ).unwrap_or_else(|_| "0".to_string()) == "1";
+        
+        if !local_service_host_added {
+            conn.execute("ALTER TABLE model_configs ADD COLUMN local_service_host TEXT", [])
+                .ok();
+            conn.execute("UPDATE settings SET value = '1' WHERE key = 'col_local_service_host_added'", [])
+                .map_err(|e| e.to_string())?;
+        }
+        
+        // 添加 local_service_port 列
+        let local_service_port_added: bool = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'col_local_service_port_added'",
+            [],
+            |row| row.get::<_, String>(0)
+        ).unwrap_or_else(|_| "0".to_string()) == "1";
+        
+        if !local_service_port_added {
+            conn.execute("ALTER TABLE model_configs ADD COLUMN local_service_port INTEGER", [])
+                .ok();
+            conn.execute("UPDATE settings SET value = '1' WHERE key = 'col_local_service_port_added'", [])
+                .map_err(|e| e.to_string())?;
+        }
+        
+        // 添加 local_service_base_url 列
+        let local_service_base_url_added: bool = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'col_local_service_base_url_added'",
+            [],
+            |row| row.get::<_, String>(0)
+        ).unwrap_or_else(|_| "0".to_string()) == "1";
+        
+        if !local_service_base_url_added {
+            conn.execute("ALTER TABLE model_configs ADD COLUMN local_service_base_url TEXT", [])
+                .ok();
+            conn.execute("UPDATE settings SET value = '1' WHERE key = 'col_local_service_base_url_added'", [])
+                .map_err(|e| e.to_string())?;
+        }
+        
+        // 添加 supports_vision 列
+        let supports_vision_added: bool = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'col_supports_vision_added'",
+            [],
+            |row| row.get::<_, String>(0)
+        ).unwrap_or_else(|_| "0".to_string()) == "1";
+        
+        if !supports_vision_added {
+            conn.execute("ALTER TABLE model_configs ADD COLUMN supports_vision INTEGER", [])
+                .ok();
+            conn.execute("UPDATE settings SET value = '1' WHERE key = 'col_supports_vision_added'", [])
+                .map_err(|e| e.to_string())?;
+        }
+        
+        // 添加 supports_streaming 列
+        let supports_streaming_added: bool = conn.query_row(
+            "SELECT value FROM settings WHERE key = 'col_supports_streaming_added'",
+            [],
+            |row| row.get::<_, String>(0)
+        ).unwrap_or_else(|_| "0".to_string()) == "1";
+        
+        if !supports_streaming_added {
+            conn.execute("ALTER TABLE model_configs ADD COLUMN supports_streaming INTEGER", [])
+                .ok();
+            conn.execute("UPDATE settings SET value = '1' WHERE key = 'col_supports_streaming_added'", [])
+                .map_err(|e| e.to_string())?;
+        }
         
         Ok(())
     }
@@ -224,12 +344,32 @@ impl Database {
         
         let mut stmt = conn.prepare(r#"
             SELECT id, name, provider, type, api_url, api_key, model, max_tokens, 
-                   temperature, top_p, "group", is_favorite, is_active, created_at
+                   temperature, top_p, "group", is_favorite, is_active, created_at,
+                   total_calls, success_calls, avg_response_time, last_used,
+                   local_provider, local_service_host, local_service_port, local_service_base_url,
+                   supports_vision, supports_streaming
             FROM model_configs
             ORDER BY created_at DESC
         "#).map_err(|e| e.to_string())?;
         
         let models = stmt.query_map([], |row| {
+            let local_provider: Option<String> = row.get(18)?;
+            let local_service_host: Option<String> = row.get(19)?;
+            let local_service_port: Option<u16> = row.get(20)?;
+            let local_service_base_url: Option<String> = row.get(21)?;
+            
+            let local_service_config = if let (Some(provider), Some(host), Some(port), Some(base_url)) = 
+                (local_provider.clone(), local_service_host, local_service_port, local_service_base_url) {
+                Some(LocalServiceConfig {
+                    provider,
+                    host,
+                    port,
+                    base_url,
+                })
+            } else {
+                None
+            };
+            
             Ok(ModelConfig {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -247,11 +387,15 @@ impl Database {
                 created_at: row.get(13)?,
                 presets: vec![],
                 stats: ModelStats {
-                    total_calls: 0,
-                    success_calls: 0,
-                    avg_response_time: 0.0,
-                    last_used: None,
+                    total_calls: row.get::<_, u32>(14)?,
+                    success_calls: row.get::<_, u32>(15)?,
+                    avg_response_time: row.get(16)?,
+                    last_used: row.get(17)?,
                 },
+                local_provider,
+                local_service_config,
+                supports_vision: row.get::<_, Option<i32>>(22)?.map(|v| v == 1),
+                supports_streaming: row.get::<_, Option<i32>>(23)?.map(|v| v == 1),
             })
         }).map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
@@ -268,11 +412,21 @@ impl Database {
             .map_err(|e| e.to_string())?;
         
         for model in models {
+            let (local_provider, local_host, local_port, local_base_url) = 
+                if let Some(config) = &model.local_service_config {
+                    (Some(config.provider.clone()), Some(config.host.clone()), Some(config.port), Some(config.base_url.clone()))
+                } else {
+                    (model.local_provider.clone(), None, None, None)
+                };
+            
             conn.execute(r#"
                 INSERT INTO model_configs 
                 (id, name, provider, type, api_url, api_key, model, max_tokens, 
-                 temperature, top_p, "group", is_favorite, is_active, created_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+                 temperature, top_p, "group", is_favorite, is_active, created_at,
+                 total_calls, success_calls, avg_response_time, last_used,
+                 local_provider, local_service_host, local_service_port, local_service_base_url,
+                 supports_vision, supports_streaming)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24)
             "#, params![
                 model.id,
                 model.name,
@@ -288,6 +442,16 @@ impl Database {
                 if model.is_favorite { 1 } else { 0 },
                 if model.is_active { 1 } else { 0 },
                 model.created_at,
+                model.stats.total_calls,
+                model.stats.success_calls,
+                model.stats.avg_response_time,
+                model.stats.last_used,
+                local_provider,
+                local_host,
+                local_port,
+                local_base_url,
+                model.supports_vision.map(|v| if v { 1 } else { 0 }),
+                model.supports_streaming.map(|v| if v { 1 } else { 0 }),
             ]).map_err(|e| e.to_string())?;
             
             for preset in model.presets {
@@ -332,7 +496,44 @@ impl Database {
         }).map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
         
-        Ok(conversations)
+        let mut result = Vec::new();
+        for mut conv in conversations {
+            let mut msg_stmt = conn.prepare(r#"
+                SELECT id, role, content, timestamp, model_id, model_name, 
+                       is_streaming, is_favorite, thinking, show_thinking, thinking_duration, images
+                FROM chat_messages
+                WHERE conversation_id = ?1
+                ORDER BY timestamp ASC
+            "#).map_err(|e| e.to_string())?;
+            
+            let messages = msg_stmt.query_map(params![conv.id], |row| {
+                let images_json: Option<String> = row.get(11)?;
+                let images = images_json.and_then(|json| {
+                    serde_json::from_str(&json).ok()
+                });
+                
+                Ok(ChatMessage {
+                    id: row.get(0)?,
+                    role: row.get(1)?,
+                    content: row.get(2)?,
+                    timestamp: row.get(3)?,
+                    model_id: row.get(4)?,
+                    model_name: row.get(5)?,
+                    is_streaming: Some(row.get::<_, i32>(6)? == 1),
+                    is_favorite: Some(row.get::<_, i32>(7)? == 1),
+                    thinking: row.get(8)?,
+                    show_thinking: Some(row.get::<_, i32>(9)? == 1),
+                    thinking_duration: row.get(10)?,
+                    images,
+                })
+            }).map_err(|e| e.to_string())?
+            .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+            
+            conv.messages = messages;
+            result.push(conv);
+        }
+        
+        Ok(result)
     }
     
     pub fn save_conversations(&self, conversations: Vec<Conversation>) -> Result<(), String> {
@@ -359,7 +560,13 @@ impl Database {
             ]).map_err(|e| e.to_string())?;
             
             for msg in conv.messages {
-                let images_json = msg.images.map(|imgs| serde_json::to_string(&imgs).unwrap_or_default());
+                let images_json = msg.images.as_ref().and_then(|imgs| {
+                    if imgs.is_empty() {
+                        None
+                    } else {
+                        serde_json::to_string(imgs).ok()
+                    }
+                });
                 
                 conn.execute(r#"
                     INSERT INTO chat_messages 
@@ -387,218 +594,6 @@ impl Database {
         Ok(())
     }
     
-    pub fn get_conversation_messages(&self, conversation_id: &str) -> Result<Vec<ChatMessage>, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        
-        let mut stmt = conn.prepare(r#"
-            SELECT id, role, content, timestamp, model_id, model_name, 
-                   is_streaming, is_favorite, thinking, show_thinking, thinking_duration, images
-            FROM chat_messages
-            WHERE conversation_id = ?1
-            ORDER BY timestamp ASC
-        "#).map_err(|e| e.to_string())?;
-        
-        let messages = stmt.query_map([conversation_id], |row| {
-            let images_json: Option<String> = row.get(11)?;
-            let images = images_json.and_then(|s| serde_json::from_str(&s).ok());
-            
-            Ok(ChatMessage {
-                id: row.get(0)?,
-                role: row.get(1)?,
-                content: row.get(2)?,
-                timestamp: row.get(3)?,
-                model_id: row.get(4)?,
-                model_name: row.get(5)?,
-                is_streaming: Some(row.get::<_, i32>(6)? == 1),
-                is_favorite: Some(row.get::<_, i32>(7)? == 1),
-                thinking: row.get(8)?,
-                show_thinking: Some(row.get::<_, i32>(9)? == 1),
-                thinking_duration: row.get(10)?,
-                images,
-            })
-        }).map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
-        
-        Ok(messages)
-    }
-    
-    pub fn get_albums(&self) -> Result<Vec<crate::models::ImageAlbum>, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        
-        let mut stmt = conn.prepare(r#"
-            SELECT id, name, created_at, updated_at, cover_image_id, description
-            FROM image_albums
-            ORDER BY created_at DESC
-        "#).map_err(|e| e.to_string())?;
-        
-        let albums = stmt.query_map([], |row| {
-            Ok(crate::models::ImageAlbum {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                created_at: row.get(2)?,
-                updated_at: row.get(3)?,
-                cover_image_id: row.get(4)?,
-                description: row.get(5)?,
-            })
-        }).map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
-        
-        Ok(albums)
-    }
-    
-    pub fn save_album(&self, album: &crate::models::ImageAlbum) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        
-        conn.execute(r#"
-            INSERT OR REPLACE INTO image_albums 
-            (id, name, created_at, updated_at, cover_image_id, description)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-        "#, params![
-            album.id,
-            album.name,
-            album.created_at,
-            album.updated_at,
-            album.cover_image_id,
-            album.description,
-        ]).map_err(|e| e.to_string())?;
-        
-        Ok(())
-    }
-    
-    pub fn delete_album(&self, album_id: &str) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        
-        conn.execute("DELETE FROM image_albums WHERE id = ?1", params![album_id])
-            .map_err(|e| e.to_string())?;
-        
-        Ok(())
-    }
-    
-    pub fn get_images(&self, album_id: &str) -> Result<Vec<crate::models::ImageMetadata>, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        
-        let mut stmt = conn.prepare(r#"
-            SELECT id, name, size, type, file_path, width, height, added_at, 
-                   tags, description, thumbnail_path, favorite, album_id
-            FROM images
-            WHERE album_id = ?1
-            ORDER BY added_at DESC
-        "#).map_err(|e| e.to_string())?;
-        
-        let images = stmt.query_map(params![album_id], |row| {
-            let tags_str: Option<String> = row.get(8)?;
-            let tags = tags_str.map(|s| {
-                serde_json::from_str(&s).unwrap_or_else(|_| vec![])
-            });
-            
-            Ok(crate::models::ImageMetadata {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                size: row.get(2)?,
-                image_type: row.get(3)?,
-                file_path: row.get(4)?,
-                width: row.get(5)?,
-                height: row.get(6)?,
-                added_at: row.get(7)?,
-                tags,
-                description: row.get(9)?,
-                thumbnail_path: row.get(10)?,
-                favorite: Some(row.get::<_, i32>(11)? == 1),
-                album_id: row.get(12)?,
-            })
-        }).map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
-        
-        Ok(images)
-    }
-    
-    pub fn save_image(&self, image: &crate::models::ImageMetadata) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        
-        let tags_str = image.tags.as_ref()
-            .map(|t| serde_json::to_string(t).unwrap_or_else(|_| "[]".to_string()));
-        
-        conn.execute(r#"
-            INSERT OR REPLACE INTO images 
-            (id, name, size, type, file_path, width, height, added_at, 
-             tags, description, thumbnail_path, favorite, album_id)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
-        "#, params![
-            image.id,
-            image.name,
-            image.size,
-            image.image_type,
-            image.file_path,
-            image.width,
-            image.height,
-            image.added_at,
-            tags_str,
-            image.description,
-            image.thumbnail_path,
-            image.favorite.map(|f| if f { 1 } else { 0 }).unwrap_or(0),
-            image.album_id,
-        ]).map_err(|e| e.to_string())?;
-        
-        Ok(())
-    }
-    
-    pub fn delete_image(&self, image_id: &str) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        
-        conn.execute("DELETE FROM images WHERE id = ?1", params![image_id])
-            .map_err(|e| e.to_string())?;
-        
-        Ok(())
-    }
-    
-    pub fn update_image_favorite(&self, image_id: &str, favorite: bool) -> Result<(), String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        
-        conn.execute(
-            "UPDATE images SET favorite = ?1 WHERE id = ?2",
-            params![if favorite { 1 } else { 0 }, image_id]
-        ).map_err(|e| e.to_string())?;
-        
-        Ok(())
-    }
-    
-    pub fn get_images_by_id(&self, image_id: &str) -> Result<Vec<crate::models::ImageMetadata>, String> {
-        let conn = self.conn.lock().map_err(|e| e.to_string())?;
-        
-        let mut stmt = conn.prepare(r#"
-            SELECT id, name, size, type, file_path, width, height, added_at, 
-                   tags, description, thumbnail_path, favorite, album_id
-            FROM images
-            WHERE id = ?1
-        "#).map_err(|e| e.to_string())?;
-        
-        let images = stmt.query_map(params![image_id], |row| {
-            let tags_str: Option<String> = row.get(8)?;
-            let tags = tags_str.map(|s| {
-                serde_json::from_str(&s).unwrap_or_else(|_| vec![])
-            });
-            
-            Ok(crate::models::ImageMetadata {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                size: row.get(2)?,
-                image_type: row.get(3)?,
-                file_path: row.get(4)?,
-                width: row.get(5)?,
-                height: row.get(6)?,
-                added_at: row.get(7)?,
-                tags,
-                description: row.get(9)?,
-                thumbnail_path: row.get(10)?,
-                favorite: Some(row.get::<_, i32>(11)? == 1),
-                album_id: row.get(12)?,
-            })
-        }).map_err(|e| e.to_string())?
-        .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
-        
-        Ok(images)
-    }
-    
     pub fn get_wallpapers(&self) -> Result<Vec<Wallpaper>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
@@ -623,11 +618,71 @@ impl Database {
         Ok(wallpapers)
     }
     
-    pub fn save_wallpaper(&self, wallpaper: &Wallpaper) -> Result<(), String> {
+    pub fn save_wallpapers(&self, wallpapers: Vec<Wallpaper>) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        conn.execute("DELETE FROM wallpapers", [])
+            .map_err(|e| e.to_string())?;
+        
+        for wallpaper in wallpapers {
+            conn.execute(r#"
+                INSERT INTO wallpapers 
+                (id, name, file_path, size, added_at, is_active)
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+            "#, params![
+                wallpaper.id,
+                wallpaper.name,
+                wallpaper.file_path,
+                wallpaper.size,
+                wallpaper.added_at,
+                if wallpaper.is_active { 1 } else { 0 },
+            ]).map_err(|e| e.to_string())?;
+        }
+        
+        Ok(())
+    }
+    
+    pub fn get_active_wallpaper(&self) -> Result<Option<Wallpaper>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        let mut stmt = conn.prepare(r#"
+            SELECT id, name, file_path, size, added_at, is_active
+            FROM wallpapers
+            WHERE is_active = 1
+            LIMIT 1
+        "#).map_err(|e| e.to_string())?;
+        
+        let result = stmt.query_row([], |row| {
+            Ok(Wallpaper {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                file_path: row.get(2)?,
+                size: row.get(3)?,
+                added_at: row.get(4)?,
+                is_active: row.get::<_, i32>(5)? == 1,
+            })
+        }).optional().map_err(|e| e.to_string())?;
+        
+        Ok(result)
+    }
+    
+    pub fn set_active_wallpaper(&self, id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        conn.execute("UPDATE wallpapers SET is_active = 0", [])
+            .map_err(|e| e.to_string())?;
+        
+        conn.execute("UPDATE wallpapers SET is_active = 1 WHERE id = ?1", [id])
+            .map_err(|e| e.to_string())?;
+        
+        Ok(())
+    }
+    
+    pub fn add_wallpaper(&self, wallpaper: Wallpaper) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
         conn.execute(r#"
-            INSERT OR REPLACE INTO wallpapers 
+            INSERT INTO wallpapers 
             (id, name, file_path, size, added_at, is_active)
             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
         "#, params![
@@ -645,13 +700,13 @@ impl Database {
     pub fn delete_wallpaper(&self, id: &str) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
-        conn.execute("DELETE FROM wallpapers WHERE id = ?1", params![id])
+        conn.execute("DELETE FROM wallpapers WHERE id = ?1", [id])
             .map_err(|e| e.to_string())?;
         
         Ok(())
     }
     
-    pub fn clear_wallpapers(&self) -> Result<(), String> {
+    pub fn clear_all_wallpapers(&self) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
         conn.execute("DELETE FROM wallpapers", [])
@@ -660,65 +715,200 @@ impl Database {
         Ok(())
     }
     
-    pub fn set_active_wallpaper(&self, id: &str) -> Result<(), String> {
+    pub fn clear_active_wallpaper(&self) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
         conn.execute("UPDATE wallpapers SET is_active = 0", [])
             .map_err(|e| e.to_string())?;
         
-        if !id.is_empty() {
-            conn.execute("UPDATE wallpapers SET is_active = 1 WHERE id = ?1", params![id])
-                .map_err(|e| e.to_string())?;
-        }
-        
         Ok(())
     }
     
-    pub fn get_active_wallpaper(&self) -> Result<Option<Wallpaper>, String> {
+    pub fn get_albums(&self) -> Result<Vec<ImageAlbum>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
         let mut stmt = conn.prepare(r#"
-            SELECT id, name, file_path, size, added_at, is_active
-            FROM wallpapers
-            WHERE is_active = 1
-            LIMIT 1
+            SELECT id, name, created_at, updated_at, cover_image_id, description
+            FROM image_albums
+            ORDER BY created_at DESC
         "#).map_err(|e| e.to_string())?;
         
-        let wallpapers = stmt.query_map([], |row| {
-            Ok(Wallpaper {
+        let albums = stmt.query_map([], |row| {
+            Ok(ImageAlbum {
                 id: row.get(0)?,
                 name: row.get(1)?,
-                file_path: row.get(2)?,
-                size: row.get(3)?,
-                added_at: row.get(4)?,
-                is_active: row.get::<_, i32>(5)? == 1,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+                cover_image_id: row.get(4)?,
+                description: row.get(5)?,
             })
         }).map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
         
-        Ok(wallpapers.into_iter().next())
+        Ok(albums)
     }
     
-    pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
+    pub fn get_album_by_id(&self, id: &str) -> Result<Option<ImageAlbum>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
-        let mut stmt = conn.prepare("SELECT value FROM settings WHERE key = ?1")
-            .map_err(|e| e.to_string())?;
+        let mut stmt = conn.prepare(r#"
+            SELECT id, name, created_at, updated_at, cover_image_id, description
+            FROM image_albums
+            WHERE id = ?1
+        "#).map_err(|e| e.to_string())?;
         
-        let result = stmt.query_row(params![key], |row| row.get::<_, String>(0))
-            .optional()
-            .map_err(|e| e.to_string())?;
+        let result = stmt.query_row([id], |row| {
+            Ok(ImageAlbum {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+                cover_image_id: row.get(4)?,
+                description: row.get(5)?,
+            })
+        }).optional().map_err(|e| e.to_string())?;
         
         Ok(result)
     }
     
-    pub fn set_setting(&self, key: &str, value: &str) -> Result<(), String> {
+    pub fn save_album(&self, album: &ImageAlbum) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
         conn.execute(r#"
-            INSERT OR REPLACE INTO settings (key, value)
-            VALUES (?1, ?2)
-        "#, params![key, value])
+            INSERT OR REPLACE INTO image_albums 
+            (id, name, created_at, updated_at, cover_image_id, description)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+        "#, params![
+            album.id,
+            album.name,
+            album.created_at,
+            album.updated_at,
+            album.cover_image_id,
+            album.description,
+        ]).map_err(|e| e.to_string())?;
+        
+        Ok(())
+    }
+    
+    pub fn delete_album(&self, id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        conn.execute("DELETE FROM image_albums WHERE id = ?1", [id])
+            .map_err(|e| e.to_string())?;
+        
+        Ok(())
+    }
+    
+    pub fn get_images(&self, album_id: &str) -> Result<Vec<ImageMetadata>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        let mut stmt = conn.prepare(r#"
+            SELECT id, name, size, type, file_path, width, height, added_at, tags, description, thumbnail_path, favorite, album_id
+            FROM images
+            WHERE album_id = ?1
+            ORDER BY added_at DESC
+        "#).map_err(|e| e.to_string())?;
+        
+        let images = stmt.query_map([album_id], |row| {
+            let tags_str: Option<String> = row.get(8)?;
+            let tags = tags_str.and_then(|s| serde_json::from_str(&s).ok());
+            
+            Ok(ImageMetadata {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                size: row.get(2)?,
+                image_type: row.get(3)?,
+                file_path: row.get(4)?,
+                width: row.get(5)?,
+                height: row.get(6)?,
+                added_at: row.get(7)?,
+                tags,
+                description: row.get(9)?,
+                thumbnail_path: row.get(10)?,
+                favorite: row.get::<_, Option<i32>>(11)?.map(|v| v == 1),
+                album_id: row.get(12)?,
+            })
+        }).map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+        
+        Ok(images)
+    }
+    
+    pub fn get_all_images(&self) -> Result<Vec<ImageMetadata>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        let mut stmt = conn.prepare(r#"
+            SELECT id, name, size, type, file_path, width, height, added_at, tags, description, thumbnail_path, favorite, album_id
+            FROM images
+            ORDER BY added_at DESC
+        "#).map_err(|e| e.to_string())?;
+        
+        let images = stmt.query_map([], |row| {
+            let tags_str: Option<String> = row.get(8)?;
+            let tags = tags_str.and_then(|s| serde_json::from_str(&s).ok());
+            
+            Ok(ImageMetadata {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                size: row.get(2)?,
+                image_type: row.get(3)?,
+                file_path: row.get(4)?,
+                width: row.get(5)?,
+                height: row.get(6)?,
+                added_at: row.get(7)?,
+                tags,
+                description: row.get(9)?,
+                thumbnail_path: row.get(10)?,
+                favorite: row.get::<_, Option<i32>>(11)?.map(|v| v == 1),
+                album_id: row.get(12)?,
+            })
+        }).map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+        
+        Ok(images)
+    }
+    
+    pub fn save_image(&self, image: &ImageMetadata) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        let tags_json = image.tags.as_ref().and_then(|t| serde_json::to_string(t).ok());
+        
+        conn.execute(r#"
+            INSERT OR REPLACE INTO images 
+            (id, name, size, type, file_path, width, height, added_at, tags, description, thumbnail_path, favorite, album_id)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+        "#, params![
+            image.id,
+            image.name,
+            image.size,
+            image.image_type,
+            image.file_path,
+            image.width,
+            image.height,
+            image.added_at,
+            tags_json,
+            image.description,
+            image.thumbnail_path,
+            image.favorite.map(|v| if v { 1 } else { 0 }),
+            image.album_id,
+        ]).map_err(|e| e.to_string())?;
+        
+        Ok(())
+    }
+    
+    pub fn delete_image(&self, id: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        conn.execute("DELETE FROM images WHERE id = ?1", [id])
+            .map_err(|e| e.to_string())?;
+        
+        Ok(())
+    }
+    
+    pub fn update_image_favorite(&self, id: &str, favorite: bool) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        conn.execute("UPDATE images SET favorite = ?1 WHERE id = ?2", params![if favorite { 1 } else { 0 }, id])
             .map_err(|e| e.to_string())?;
         
         Ok(())
@@ -728,43 +918,24 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
         conn.execute_batch(r#"
-            DELETE FROM chat_messages;
-            DELETE FROM conversations;
-            DELETE FROM model_presets;
             DELETE FROM model_configs;
+            DELETE FROM model_presets;
+            DELETE FROM conversations;
+            DELETE FROM chat_messages;
             DELETE FROM ffmpeg_tasks;
-            DELETE FROM prompt_template_results;
             DELETE FROM prompt_templates;
-            DELETE FROM images;
             DELETE FROM image_albums;
+            DELETE FROM images;
             DELETE FROM wallpapers;
-            DELETE FROM video_items;
             DELETE FROM video_playlists;
+            DELETE FROM video_items;
             DELETE FROM web_shortcuts;
             DELETE FROM logs;
             DELETE FROM text_contrast_files;
             DELETE FROM ini_configs;
-            DELETE FROM settings;
-        "#).map_err(|e| format!("Failed to clear database: {}", e))?;
+            DELETE FROM prompt_template_results;
+        "#).map_err(|e| e.to_string())?;
         
         Ok(())
     }
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Wallpaper {
-    pub id: String,
-    pub name: String,
-    pub file_path: String,
-    pub size: i64,
-    pub added_at: i64,
-    pub is_active: bool,
-}
-
-static DATABASE: once_cell::sync::Lazy<Database> = once_cell::sync::Lazy::new(|| {
-    Database::new().expect("Failed to initialize database")
-});
-
-pub fn get_database() -> &'static Database {
-    &DATABASE
 }

@@ -4,17 +4,34 @@
 
 :root {
   --primary-color: #3b82f6;
+  --primary-color-rgb: 59, 130, 246;
+  --primary-light: rgba(59, 130, 246, 0.1);
   --secondary-color: #6366f1;
+  --secondary-color-rgb: 99, 102, 241;
+  --success-color: #10b981;
+  --success-color-rgb: 16, 185, 129;
+  --error-color: #ef4444;
+  --error-color-rgb: 239, 68, 68;
   --bg-primary: #ffffff;
   --bg-primary-rgb: 255, 255, 255;
   --bg-secondary: #f8fafc;
+  --bg-secondary-rgb: 248, 250, 252;
   --bg-tertiary: #f1f5f9;
+  --bg-tertiary-rgb: 241, 245, 249;
+  --bg-chat-user: #E8F3FF;
+  --bg-chat-ai: #F2F3F5;
   --text-primary: #1e293b;
+  --text-primary-rgb: 30, 41, 59;
   --text-secondary: #64748b;
+  --text-secondary-rgb: 100, 116, 139;
   --text-tertiary: #94a3b8;
+  --text-tertiary-rgb: 148, 163, 184;
   --border-color: #e2e8f0;
+  --border-color-rgb: 226, 232, 240;
   --hover-bg: #f1f5f9;
+  --hover-bg-rgb: 241, 245, 249;
   --active-bg: #e2e8f0;
+  --active-bg-rgb: 226, 232, 240;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
@@ -22,17 +39,34 @@
 
 .dark {
   --primary-color: #60a5fa;
+  --primary-color-rgb: 96, 165, 250;
+  --primary-light: rgba(96, 165, 250, 0.15);
   --secondary-color: #818cf8;
+  --secondary-color-rgb: 129, 140, 248;
+  --success-color: #10b981;
+  --success-color-rgb: 16, 185, 129;
+  --error-color: #ef4444;
+  --error-color-rgb: 239, 68, 68;
   --bg-primary: #0f172a;
   --bg-primary-rgb: 15, 23, 42;
   --bg-secondary: #1e293b;
+  --bg-secondary-rgb: 30, 41, 59;
   --bg-tertiary: #334155;
+  --bg-tertiary-rgb: 51, 65, 85;
+  --bg-chat-user: #1A2744;
+  --bg-chat-ai: #232324;
   --text-primary: #f1f5f9;
+  --text-primary-rgb: 241, 245, 249;
   --text-secondary: #94a3b8;
+  --text-secondary-rgb: 148, 163, 184;
   --text-tertiary: #64748b;
+  --text-tertiary-rgb: 100, 116, 139;
   --border-color: #334155;
+  --border-color-rgb: 51, 65, 85;
   --hover-bg: #1e293b;
+  --hover-bg-rgb: 30, 41, 59;
   --active-bg: #334155;
+  --active-bg-rgb: 51, 65, 85;
 }
 
 * {
@@ -47,7 +81,7 @@ body {
   font-size: 14px;
   line-height: 1.5;
   color: var(--text-primary);
-  background-color: var(--bg-primary);
+  background-color: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

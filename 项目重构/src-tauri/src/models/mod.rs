@@ -19,6 +19,22 @@ pub struct ModelConfig {
     pub created_at: u64,
     pub presets: Vec<ModelPreset>,
     pub stats: ModelStats,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_provider: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub local_service_config: Option<LocalServiceConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_vision: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub supports_streaming: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalServiceConfig {
+    pub provider: String,
+    pub host: String,
+    pub port: u16,
+    pub base_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,6 +173,31 @@ pub struct OllamaStatus {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LMStudioModel {
+    pub id: String,
+    pub object: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owned_by: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LMStudioStatus {
+    pub running: bool,
+    pub version: Option<String>,
+    pub models: Vec<LMStudioModel>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocalServiceStatus {
+    pub provider: String,
+    pub running: bool,
+    pub host: String,
+    pub port: u16,
+    pub version: Option<String>,
+    pub models_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ImageMetadata {
     pub id: String,
     pub name: String,
@@ -182,4 +223,14 @@ pub struct ImageAlbum {
     pub updated_at: u64,
     pub cover_image_id: Option<String>,
     pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Wallpaper {
+    pub id: String,
+    pub name: String,
+    pub file_path: String,
+    pub size: u64,
+    pub added_at: u64,
+    pub is_active: bool,
 }

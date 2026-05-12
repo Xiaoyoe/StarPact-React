@@ -98,12 +98,12 @@ onMounted(async () => {
   initProgress.value = INIT_STEPS[2].progress;
   initStep.value = INIT_STEPS[2].label;
   
-  await themeStore.initTheme();
+  await wallpaperStore.loadBackgrounds();
   
   initProgress.value = INIT_STEPS[3].progress;
   initStep.value = INIT_STEPS[3].label;
   
-  await wallpaperStore.loadBackgrounds();
+  await themeStore.initTheme();
   
   initProgress.value = INIT_STEPS[4].progress;
   initStep.value = INIT_STEPS[4].label;

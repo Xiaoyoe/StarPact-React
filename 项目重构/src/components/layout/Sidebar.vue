@@ -45,6 +45,13 @@ const panelItems = [
 const isActive = (path: string) => route.path === path;
 const isChatPage = computed(() => route.path === '/chat');
 
+const sidebarStyle = computed(() => {
+  const isDark = themeStore.theme === 'dark';
+  return {
+    backgroundColor: isDark ? 'transparent' : 'var(--bg-secondary)',
+  };
+});
+
 const navigate = (path: string) => {
   router.push(path);
 };
@@ -103,6 +110,7 @@ onMounted(async () => {
   <aside 
     class="sidebar"
     :class="{ collapsed: appStore.sidebarCollapsed }"
+    :style="sidebarStyle"
   >
     <!-- Header -->
     <div class="sidebar-header">
@@ -290,7 +298,7 @@ onMounted(async () => {
   flex-direction: column;
   height: 100%;
   width: 280px;
-  background-color: var(--bg-secondary);
+  background-color: transparent;
   border-right: 1px solid var(--border-color);
   transition: width 0.2s ease;
   padding-bottom: 60px;

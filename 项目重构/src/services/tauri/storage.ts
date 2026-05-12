@@ -121,4 +121,12 @@ export const storageService = {
   async saveConversations(conversations: any[]): Promise<void> {
     return invoke('save_conversations', { conversations });
   },
+
+  async getPromptTemplates(): Promise<any[]> {
+    return invoke('get_prompt_templates');
+  },
+
+  async savePromptTemplates(templates: any[]): Promise<void> {
+    return invoke('save_prompt_templates', { templates });
+  },
 };

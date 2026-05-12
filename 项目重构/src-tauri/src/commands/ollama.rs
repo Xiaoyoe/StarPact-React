@@ -1,4 +1,4 @@
-use crate::models::{OllamaModel, OllamaStatus};
+use crate::models::{LMStudioModel, LMStudioStatus, OllamaModel, OllamaStatus, LocalServiceStatus};
 use tauri::Emitter;
 
 #[tauri::command]
@@ -131,4 +131,166 @@ pub async fn ollama_chat(
     let json = response.json().await.map_err(|e| e.to_string())?;
 
     Ok(json)
+}
+
+#[tauri::command]
+pub async fn lmstudio_check_status() -> Result<LMStudioStatus, String> {
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get("http://localhost:1234/v1/models")
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            let json: serde_json::Value = resp.json().await.map_err(|e| e.to_string())?;
+            
+            let models = json
+                .get("data")
+                .and_then(|d| d.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|m| serde_json::from_value(m.clone()).ok())
+                        .collect()
+                })
+                .unwrap_or_default();
+
+            Ok(LMStudioStatus {
+                running: true,
+                version: None,
+                models,
+            })
+        }
+        Err(_) => Ok(LMStudioStatus {
+            running: false,
+            version: None,
+            models: Vec::new(),
+        }),
+    }
+}
+
+#[tauri::command]
+pub async fn lmstudio_get_models() -> Result<Vec<LMStudioModel>, String> {
+    let client = reqwest::Client::new();
+
+    let response = client
+        .get("http://localhost:1234/v1/models")
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let json: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+
+    let models = json
+        .get("data")
+        .and_then(|d| d.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| serde_json::from_value(m.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(models)
+}
+
+#[tauri::command]
+pub async fn check_local_service(
+    provider: String,
+    host: String,
+    port: u16,
+) -> Result<LocalServiceStatus, String> {
+    let client = reqwest::Client::new();
+    
+    let (url, models_url) = match provider.as_str() {
+        "ollama" => {
+            let base = format!("http://{}:{}", host, port);
+            (format!("{}/api/version", base), format!("{}/api/tags", base))
+        }
+        "lmstudio" => {
+            let base = format!("http://{}:{}", host, port);
+            (format!("{}/v1/models", base), format!("{}/v1/models", base))
+        }
+        _ => {
+            let base = format!("http://{}:{}", host, port);
+            (format!("{}/v1/models", base), format!("{}/v1/models", base))
+        }
+    };
+
+    let response = client
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await;
+
+    match response {
+        Ok(resp) => {
+            let version = if provider == "ollama" {
+                match resp.json::<serde_json::Value>().await {
+                    Ok(v) => v.get("version").and_then(|v| v.as_str().map(|s| s.to_string())),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+
+            let models_count = if provider == "ollama" {
+                match client
+                    .get(&models_url)
+                    .timeout(std::time::Duration::from_secs(5))
+                    .send()
+                    .await
+                {
+                    Ok(r) => {
+                        match r.json::<serde_json::Value>().await {
+                            Ok(j) => j.get("models")
+                                .and_then(|m| m.as_array())
+                                .map(|a| a.len() as u32)
+                                .unwrap_or(0),
+                            Err(_) => 0,
+                        }
+                    }
+                    Err(_) => 0,
+                }
+            } else {
+                match client
+                    .get(&models_url)
+                    .timeout(std::time::Duration::from_secs(5))
+                    .send()
+                    .await
+                {
+                    Ok(r) => {
+                        match r.json::<serde_json::Value>().await {
+                            Ok(j) => j.get("data")
+                                .and_then(|d| d.as_array())
+                                .map(|a| a.len() as u32)
+                                .unwrap_or(0),
+                            Err(_) => 0,
+                        }
+                    }
+                    Err(_) => 0,
+                }
+            };
+
+            Ok(LocalServiceStatus {
+                provider,
+                running: true,
+                host,
+                port,
+                version,
+                models_count,
+            })
+        }
+        Err(_) => Ok(LocalServiceStatus {
+            provider,
+            running: false,
+            host,
+            port,
+            version: None,
+            models_count: 0,
+        }),
+    }
 }

@@ -1,12 +1,19 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { invoke } from '@tauri-apps/api/core';
 import { useToast } from '@/composables/useToast';
+import { videoService } from '@/services/tauri/video';
+import { fileService } from '@/services';
+import { open, confirm } from '@tauri-apps/plugin-dialog';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import {
   Play, Pause, Volume2, VolumeX, Maximize, Minimize,
   SkipBack, SkipForward, Camera, ChevronLeft, ChevronRight,
   PictureInPicture2, PictureInPicture, Plus, Trash2, Repeat, Repeat1,
-  List, X
+  List, X, Maximize2, Grid3X3, Save, FileJson, FolderOpen
 } from 'lucide-vue-next';
+import MultiVideoPlayer from '@/components/video/MultiVideoPlayer.vue';
+import Modal from '@/components/common/Modal.vue';
 
 const toast = useToast();
 
@@ -14,6 +21,7 @@ interface VideoItem {
   id: string;
   name: string;
   url: string;
+  path?: string;
   size: number;
   duration: number;
   addedAt: number;
@@ -23,12 +31,22 @@ const playlist = ref<VideoItem[]>([]);
 const currentIndex = ref(-1);
 const sidebarOpen = ref(true);
 const repeatMode = ref<'none' | 'one' | 'all'>('none');
-const autoPlay = ref(true);
+const autoPlay = ref(false);
+const autoLoad = ref(false);
+const multiVideoMode = ref(false);
+const currentPlaylistId = ref<string | null>(null);
+
+const jsonModalVisible = ref(false);
+const jsonContent = ref<string>('');
+const jsonTotalCount = ref(0);
+const jsonDisplayCount = ref(100);
+const jsonAllData = ref<any[]>([]);
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 const containerRef = ref<HTMLDivElement | null>(null);
 const progressRef = ref<HTMLDivElement | null>(null);
 const volumeRef = ref<HTMLDivElement | null>(null);
+const multiVideoPlayerRef = ref<InstanceType<typeof MultiVideoPlayer> | null>(null);
 
 const isPlaying = ref(false);
 const currentTime = ref(0);
@@ -40,6 +58,8 @@ const playbackRate = ref(1);
 const showControls = ref(true);
 const buffered = ref(0);
 const showSpeedMenu = ref(false);
+const showAspectMenu = ref(false);
+const aspectRatio = ref<'fit' | 'fill' | 'original' | '16:9' | '4:3'>('fit');
 const hoverTime = ref<number | null>(null);
 const hoverX = ref(0);
 const screenshotFlash = ref(false);
@@ -187,6 +207,21 @@ const changePlaybackRate = (rate: number) => {
   showSpeedMenu.value = false;
 };
 
+const changeAspectRatio = (ratio: 'fit' | 'fill' | 'original' | '16:9' | '4:3') => {
+  aspectRatio.value = ratio;
+  showAspectMenu.value = false;
+  
+  const ratioNames = {
+    'fit': '适应窗口',
+    'fill': '填充窗口',
+    'original': '原始大小',
+    '16:9': '16:9',
+    '4:3': '4:3'
+  };
+  
+  toast.success(`视频比例: ${ratioNames[ratio]}`);
+};
+
 const takeScreenshot = () => {
   if (!videoRef.value) return;
   
@@ -217,27 +252,32 @@ const takeScreenshot = () => {
 };
 
 const addVideoFiles = async () => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'video/*,.mkv,.avi,.mov,.flv,.wmv,.m4v';
-  input.multiple = true;
-  
-  input.onchange = (e: any) => {
-    const files = Array.from(e.target.files) as File[];
-    if (files.length === 0) return;
-    
-    for (const file of files) {
+  try {
+    const selected = await open({
+      multiple: true,
+      filters: [{
+        name: 'Video',
+        extensions: ['mp4', 'webm', 'ogg', 'mkv', 'avi', 'mov', 'flv', 'wmv', 'm4v']
+      }]
+    });
+
+    if (!selected) return;
+
+    const files = Array.isArray(selected) ? selected : [selected];
+
+    for (const filePath of files) {
       const videoItem: VideoItem = {
         id: `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        name: file.name,
-        url: URL.createObjectURL(file),
-        size: file.size,
+        name: filePath.split(/[/\\]/).pop() || '视频',
+        url: convertFileSrc(filePath),
+        path: filePath,
+        size: 0,
         duration: 0,
         addedAt: Date.now(),
       };
-      
+
       playlist.value.push(videoItem);
-      
+
       const tempVideo = document.createElement('video');
       tempVideo.preload = 'metadata';
       tempVideo.src = videoItem.url;
@@ -245,15 +285,16 @@ const addVideoFiles = async () => {
         videoItem.duration = tempVideo.duration;
       };
     }
-    
+
     if (currentIndex.value === -1 && playlist.value.length > 0) {
       currentIndex.value = 0;
     }
-    
+
     toast.success(`已添加 ${files.length} 个视频`);
-  };
-  
-  input.click();
+  } catch (error) {
+    console.error('Failed to add videos:', error);
+    toast.error('添加视频失败');
+  }
 };
 
 const removeVideo = (index: number) => {
@@ -267,8 +308,6 @@ const removeVideo = (index: number) => {
     currentIndex.value--;
   }
   
-  const video = playlist.value[index];
-  URL.revokeObjectURL(video.url);
   playlist.value.splice(index, 1);
   
   toast.success('已删除视频');
@@ -276,8 +315,10 @@ const removeVideo = (index: number) => {
 
 const playVideo = (index: number) => {
   currentIndex.value = index;
-  if (autoPlay.value) {
-    isPlaying.value = true;
+  if (autoPlay.value && videoRef.value) {
+    videoRef.value.play().catch(() => {
+      toast.error('播放失败');
+    });
   }
 };
 
@@ -299,13 +340,158 @@ const playNext = () => {
   if (autoPlay.value) isPlaying.value = true;
 };
 
-const clearPlaylist = () => {
-  if (!confirm('确定要清空播放列表吗？')) return;
+const clearPlaylist = async () => {
+  const confirmed = await confirm('确定要清空播放列表吗？', {
+    title: '确认',
+    kind: 'warning',
+  });
   
-  playlist.value.forEach(video => URL.revokeObjectURL(video.url));
+  if (!confirmed) return;
+  
   playlist.value = [];
   currentIndex.value = -1;
   toast.success('播放列表已清空');
+};
+
+const savePlaylist = async () => {
+  if (playlist.value.length === 0) {
+    toast.warning('播放列表为空');
+    return;
+  }
+
+  try {
+    const name = `播放列表 ${new Date().toLocaleString('zh-CN')}`;
+    const newPlaylist = await videoService.createVideoPlaylist(name);
+    currentPlaylistId.value = newPlaylist.id;
+
+    for (const video of playlist.value) {
+      await videoService.addVideoToPlaylist(newPlaylist.id, {
+        id: video.id,
+        name: video.name,
+        path: video.path || video.url,
+        size: video.size,
+        duration: video.duration,
+        added_at: video.addedAt,
+      });
+    }
+
+    toast.success('播放列表已保存');
+  } catch (error) {
+    toast.error('保存播放列表失败');
+    console.error(error);
+  }
+};
+
+const loadPlaylist = async () => {
+  try {
+    const playlists = await videoService.getVideoPlaylists();
+    if (playlists.length === 0) {
+      toast.info('暂无保存的播放列表');
+      return;
+    }
+
+    const lastPlaylist = playlists[playlists.length - 1];
+    currentPlaylistId.value = lastPlaylist.id;
+
+    playlist.value = lastPlaylist.videos.map(v => ({
+      id: v.id,
+      name: v.name,
+      url: v.path.startsWith('blob:') ? v.path : convertFileSrc(v.path),
+      path: v.path,
+      size: v.size,
+      duration: v.duration,
+      addedAt: v.added_at,
+    }));
+
+    if (playlist.value.length > 0) {
+      currentIndex.value = 0;
+    }
+
+    toast.success('播放列表已加载');
+  } catch (error) {
+    toast.error('加载播放列表失败');
+    console.error(error);
+  }
+};
+
+const toggleMultiVideoMode = () => {
+  multiVideoMode.value = !multiVideoMode.value;
+  toast.info(multiVideoMode.value ? '已切换到多视频播放模式' : '已切换到单视频播放模式');
+  
+  if (multiVideoMode.value && autoLoad.value && playlist.value.length > 0) {
+    nextTick(() => {
+      handleAddAllVideos();
+    });
+  }
+};
+
+const handleVideoDragStart = (e: DragEvent, video: VideoItem) => {
+  if (!multiVideoMode.value) {
+    e.preventDefault();
+    return;
+  }
+  
+  const videoData = {
+    name: video.name,
+    path: video.path || video.url,
+    url: video.url,
+  };
+  
+  e.dataTransfer?.setData('application/x-video-item', JSON.stringify(videoData));
+  e.dataTransfer!.effectAllowed = 'copy';
+};
+
+const handleMultiVideoClose = () => {
+  multiVideoMode.value = false;
+};
+
+const handleAddSelectedVideos = () => {
+  if (!multiVideoPlayerRef.value || !currentVideo.value) {
+    toast.warning('请先在播放列表中选择一个视频');
+    return;
+  }
+
+  multiVideoPlayerRef.value.addVideoFromPlaylist({
+    name: currentVideo.value.name,
+    path: currentVideo.value.path || currentVideo.value.url,
+    url: currentVideo.value.url,
+  });
+};
+
+const handleAddAllVideos = () => {
+  if (!multiVideoPlayerRef.value) {
+    toast.warning('多视频播放器未初始化');
+    return;
+  }
+
+  if (playlist.value.length === 0) {
+    toast.warning('播放列表为空');
+    return;
+  }
+
+  let addedCount = 0;
+  playlist.value.forEach(video => {
+    const exists = multiVideoPlayerRef.value?.videos.some(v => v.path === video.path || v.path === video.url);
+    if (!exists) {
+      multiVideoPlayerRef.value?.addVideoFromPlaylist({
+        name: video.name,
+        path: video.path || video.url,
+        url: video.url,
+      });
+      addedCount++;
+    }
+  });
+
+  if (addedCount > 0) {
+    toast.success(`已添加 ${addedCount} 个视频`);
+  } else {
+    toast.info('所有视频已在播放列表中');
+  }
+};
+
+const isVideoInMultiPlayer = (video: VideoItem) => {
+  if (!multiVideoPlayerRef.value || !multiVideoMode.value) return false;
+  return multiVideoPlayerRef.value.videos.some(v => v.path === video.path || v.path === video.url);
 };
 
 const toggleRepeatMode = () => {
@@ -315,6 +501,51 @@ const toggleRepeatMode = () => {
   
   const modeNames = { none: '关闭循环', one: '单曲循环', all: '列表循环' };
   toast.success(`循环模式: ${modeNames[repeatMode.value]}`);
+};
+
+const showJsonContent = async () => {
+  try {
+    const content = await invoke<string>('get_all_playlists_json');
+    const data = JSON.parse(content);
+    
+    jsonAllData.value = data;
+    jsonTotalCount.value = data.length;
+    jsonDisplayCount.value = 100;
+    
+    const displayData = data.slice(0, jsonDisplayCount.value);
+    jsonContent.value = JSON.stringify(displayData, null, 2);
+    jsonModalVisible.value = true;
+  } catch (error) {
+    console.error('Failed to read JSON data:', error);
+    toast.error('读取播放列表数据失败');
+  }
+};
+
+const loadMoreJson = () => {
+  jsonDisplayCount.value += 100;
+  const displayData = jsonAllData.value.slice(0, jsonDisplayCount.value);
+  jsonContent.value = JSON.stringify(displayData, null, 2);
+};
+
+const copyJsonContent = async () => {
+  try {
+    await navigator.clipboard.writeText(jsonContent.value);
+    toast.success('已复制到剪贴板');
+  } catch (error) {
+    console.error('Failed to copy:', error);
+    toast.error('复制失败');
+  }
+};
+
+const openJsonFolder = async () => {
+  try {
+    const dataPath = await invoke<string>('get_data_dir');
+    await fileService.showInFolder(dataPath);
+    toast.success('已打开文件夹');
+  } catch (error) {
+    console.error('Failed to open folder:', error);
+    toast.error('打开文件夹失败');
+  }
 };
 
 const onVideoPlay = () => {
@@ -457,10 +688,11 @@ const handleDragLeave = (e: DragEvent) => {
 
 const handleDragOver = (e: DragEvent) => e.preventDefault();
 
-const handleDrop = (e: DragEvent) => {
+const handleDrop = async (e: DragEvent) => {
   e.preventDefault();
   dragCount.value = 0;
   isDragging.value = false;
+  
   if (e.dataTransfer?.files) {
     const files = Array.from(e.dataTransfer.files).filter(file => 
       file.type.startsWith('video/') || 
@@ -469,10 +701,12 @@ const handleDrop = (e: DragEvent) => {
     
     if (files.length > 0) {
       for (const file of files) {
+        const filePath = (file as any).path || file.name;
         const videoItem: VideoItem = {
           id: `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           name: file.name,
-          url: URL.createObjectURL(file),
+          url: filePath && !filePath.startsWith('blob:') ? convertFileSrc(filePath) : URL.createObjectURL(file),
+          path: filePath,
           size: file.size,
           duration: 0,
           addedAt: Date.now(),
@@ -519,14 +753,18 @@ onUnmounted(() => {
   
   if (hideTimer.value) clearTimeout(hideTimer.value);
   
-  playlist.value.forEach(video => URL.revokeObjectURL(video.url));
+  playlist.value.forEach(video => {
+    if (video.url.startsWith('blob:')) {
+      URL.revokeObjectURL(video.url);
+    }
+  });
 });
 
 watch(isPlaying, () => {
   resetHideTimer();
 });
 
-watch(currentIndex, () => {
+watch(currentIndex, async () => {
   currentTime.value = 0;
   duration.value = 0;
   buffered.value = 0;
@@ -535,9 +773,23 @@ watch(currentIndex, () => {
   showControls.value = true;
   isLoading.value = true;
   
+  if (!autoPlay.value) {
+    isPlaying.value = false;
+  }
+  
   if (videoRef.value) {
     videoRef.value.playbackRate = 1;
     videoRef.value.currentTime = 0;
+    
+    if (!autoPlay.value) {
+      videoRef.value.pause();
+    } else {
+      await nextTick();
+      videoRef.value.play().catch(() => {
+        isPlaying.value = false;
+      });
+      isPlaying.value = true;
+    }
   }
 });
 </script>
@@ -558,27 +810,48 @@ watch(currentIndex, () => {
       <div
         ref="containerRef"
         class="video-container"
-        :class="{ 'sidebar-open': sidebarOpen }"
+        :class="{ 'sidebar-open': sidebarOpen, 'empty': !currentVideo }"
         @mousemove="resetHideTimer"
         @mouseleave="() => { if (isPlaying) showControls = false; hoverTime = null; }"
+        @click="() => { showSpeedMenu = false; showAspectMenu = false; }"
       >
-        <div v-if="!currentVideo" class="empty-state">
+        <MultiVideoPlayer 
+          v-if="multiVideoMode" 
+          ref="multiVideoPlayerRef"
+          class="multi-video-overlay" 
+          @close="handleMultiVideoClose"
+          @add-selected="handleAddSelectedVideos"
+          @add-all="handleAddAllVideos"
+          @toggle-playlist="sidebarOpen = !sidebarOpen"
+        />
+        
+        <div v-if="!currentVideo && !multiVideoMode" class="empty-state">
           <div class="empty-icon">
             <Play :size="64" />
           </div>
           <h2>视频播放器</h2>
           <p>拖放视频文件到窗口中，或点击下方按钮选择文件</p>
           <button class="open-btn" @click="addVideoFiles">
-            <Plus :size="20" />
-            添加视频文件
+            <Play :size="20" />
+            播放视频
           </button>
         </div>
+        
+        <button 
+          v-if="!currentVideo && !multiVideoMode && !sidebarOpen"
+          class="show-sidebar-btn"
+          @click="sidebarOpen = true"
+          title="显示播放列表"
+        >
+          <List :size="20" />
+        </button>
 
-        <template v-else>
+        <template v-else-if="currentVideo && !multiVideoMode">
           <div class="video-wrapper">
             <video
               ref="videoRef"
               class="video-element"
+              :class="`aspect-${aspectRatio}`"
               :src="currentVideo.url"
               :loop="repeatMode === 'one'"
               @play="onVideoPlay"
@@ -594,19 +867,37 @@ watch(currentIndex, () => {
             ></video>
           </div>
 
-          <div v-if="screenshotFlash" class="screenshot-flash"></div>
+          <div v-if="screenshotFlash && !multiVideoMode" class="screenshot-flash"></div>
 
-          <div v-if="isLoading && isPlaying" class="loading-overlay">
+          <div v-if="isLoading && isPlaying && !multiVideoMode" class="loading-overlay">
             <div class="loading-spinner"></div>
           </div>
 
-          <div v-if="!isPlaying && !isLoading" class="click-overlay" @click="togglePlay"></div>
+          <div v-if="!isPlaying && !isLoading && !multiVideoMode" class="click-overlay" @click="togglePlay"></div>
 
-          <div class="mini-progress" :class="{ visible: !showControls }">
+          <button 
+            v-if="!sidebarOpen && !multiVideoMode"
+            class="toggle-sidebar-btn left"
+            @click="sidebarOpen = true"
+            title="显示播放列表"
+          >
+            <List :size="20" />
+          </button>
+
+          <button 
+            v-if="!sidebarOpen && !multiVideoMode"
+            class="toggle-sidebar-btn right"
+            @click="sidebarOpen = true"
+            title="显示播放列表"
+          >
+            <List :size="20" />
+          </button>
+
+          <div v-if="!multiVideoMode" class="mini-progress" :class="{ visible: !showControls }">
             <div class="mini-progress-bar" :style="{ width: `${progress}%` }"></div>
           </div>
 
-          <div class="controls-overlay" :class="{ visible: showControls }">
+          <div v-if="!multiVideoMode" class="controls-overlay" :class="{ visible: showControls }">
             <div class="controls-gradient"></div>
 
             <div class="controls-content">
@@ -681,11 +972,65 @@ watch(currentIndex, () => {
                     <PictureInPicture2 :size="18" />
                   </button>
 
+                  <div class="aspect-control">
+                    <button
+                      class="aspect-btn"
+                      :class="{ active: aspectRatio !== 'fit' }"
+                      @click.stop="showAspectMenu = !showAspectMenu"
+                      title="视频比例"
+                    >
+                      <Maximize2 :size="16" />
+                    </button>
+                    
+                    <div v-if="showAspectMenu" class="aspect-menu">
+                      <button
+                        class="aspect-option"
+                        :class="{ active: aspectRatio === 'fit' }"
+                        @click="changeAspectRatio('fit')"
+                      >
+                        <span>适应窗口</span>
+                        <span v-if="aspectRatio === 'fit'" class="check-icon">✓</span>
+                      </button>
+                      <button
+                        class="aspect-option"
+                        :class="{ active: aspectRatio === 'fill' }"
+                        @click="changeAspectRatio('fill')"
+                      >
+                        <span>填充窗口</span>
+                        <span v-if="aspectRatio === 'fill'" class="check-icon">✓</span>
+                      </button>
+                      <button
+                        class="aspect-option"
+                        :class="{ active: aspectRatio === 'original' }"
+                        @click="changeAspectRatio('original')"
+                      >
+                        <span>原始大小</span>
+                        <span v-if="aspectRatio === 'original'" class="check-icon">✓</span>
+                      </button>
+                      <button
+                        class="aspect-option"
+                        :class="{ active: aspectRatio === '16:9' }"
+                        @click="changeAspectRatio('16:9')"
+                      >
+                        <span>16:9</span>
+                        <span v-if="aspectRatio === '16:9'" class="check-icon">✓</span>
+                      </button>
+                      <button
+                        class="aspect-option"
+                        :class="{ active: aspectRatio === '4:3' }"
+                        @click="changeAspectRatio('4:3')"
+                      >
+                        <span>4:3</span>
+                        <span v-if="aspectRatio === '4:3'" class="check-icon">✓</span>
+                      </button>
+                    </div>
+                  </div>
+
                   <div class="speed-control">
                     <button
                       class="speed-btn"
                       :class="{ active: playbackRate !== 1 }"
-                      @click="showSpeedMenu = !showSpeedMenu"
+                      @click.stop="showSpeedMenu = !showSpeedMenu"
                     >
                       {{ playbackRate === 1 ? '倍速' : `${playbackRate}x` }}
                     </button>
@@ -735,7 +1080,6 @@ watch(currentIndex, () => {
 
         <div class="sidebar-content">
           <div v-if="playlist.length === 0" class="empty-playlist">
-            <Play :size="48" class="empty-icon" />
             <h4>播放列表为空</h4>
             <p>添加视频文件开始播放</p>
             <button class="add-video-btn" @click="addVideoFiles">
@@ -749,8 +1093,14 @@ watch(currentIndex, () => {
               v-for="(video, index) in playlist"
               :key="video.id"
               class="playlist-item"
-              :class="{ active: currentIndex === index }"
+              :class="{ 
+                active: currentIndex === index, 
+                draggable: multiVideoMode,
+                'in-multi-player': multiVideoMode && isVideoInMultiPlayer(video)
+              }"
+              :draggable="multiVideoMode"
               @click="playVideo(index)"
+              @dragstart="handleVideoDragStart($event, video)"
             >
               <div class="item-left">
                 <div class="item-index">
@@ -758,7 +1108,10 @@ watch(currentIndex, () => {
                   <Play v-else :size="14" />
                 </div>
                 <div class="item-info">
-                  <h4 class="item-name">{{ video.name }}</h4>
+                  <h4 class="item-name">
+                    {{ video.name }}
+                    <span v-if="multiVideoMode && isVideoInMultiPlayer(video)" class="multi-badge">多</span>
+                  </h4>
                   <div class="item-meta">
                     <span>{{ formatTime(video.duration) }}</span>
                     <span>{{ formatFileSize(video.size) }}</span>
@@ -773,31 +1126,103 @@ watch(currentIndex, () => {
         </div>
 
         <div class="sidebar-footer">
-          <div class="footer-actions">
-            <button class="footer-btn primary" @click="addVideoFiles">
-              <Plus :size="16" />
-              添加视频
-            </button>
-            <button class="footer-btn" @click="clearPlaylist">
-              <Trash2 :size="16" />
-              清空列表
-            </button>
+          <div class="footer-section">
+            <div class="footer-section-title">播放控制</div>
+            <div class="footer-actions inline">
+              <button
+                class="footer-btn small repeat-btn"
+                :class="{ active: repeatMode !== 'none' }"
+                @click="toggleRepeatMode"
+                :title="repeatMode === 'none' ? '不循环' : repeatMode === 'one' ? '单曲循环' : '列表循环'"
+              >
+                <Repeat1 v-if="repeatMode === 'one'" :size="14" />
+                <Repeat v-else :size="14" />
+              </button>
+              <button 
+                class="footer-btn small toggle-btn" 
+                :class="{ active: autoPlay }"
+                @click="autoPlay = !autoPlay"
+                title="自动播放"
+              >
+                <Play :size="14" />
+              </button>
+              <button 
+                class="footer-btn small toggle-btn" 
+                :class="{ active: autoLoad }"
+                @click="autoLoad = !autoLoad"
+                title="自动加载"
+              >
+                <Grid3X3 :size="14" />
+              </button>
+            </div>
           </div>
 
-          <div class="repeat-control">
-            <button
-              class="repeat-btn"
-              :class="{ active: repeatMode !== 'none' }"
-              @click="toggleRepeatMode"
-            >
-              <Repeat1 v-if="repeatMode === 'one'" :size="16" />
-              <Repeat v-else :size="16" />
-              <span>{{ repeatMode === 'none' ? '不循环' : repeatMode === 'one' ? '单曲循环' : '列表循环' }}</span>
-            </button>
+          <div class="footer-section">
+            <div class="footer-section-title">播放列表</div>
+            <div class="footer-actions inline">
+              <button class="footer-btn small primary" @click="addVideoFiles" title="添加视频">
+                <Plus :size="14" />
+              </button>
+              <button class="footer-btn small" @click="savePlaylist" title="保存列表">
+                <Save :size="14" />
+              </button>
+              <button class="footer-btn small" @click="loadPlaylist" title="加载列表">
+                <List :size="14" />
+              </button>
+              <button class="footer-btn small" @click="showJsonContent" title="查看JSON">
+                <FileJson :size="14" />
+              </button>
+              <button class="footer-btn small danger" @click="clearPlaylist" title="清空列表">
+                <Trash2 :size="14" />
+              </button>
+            </div>
+          </div>
+
+          <div class="footer-section">
+            <div class="footer-section-title">多视频播放</div>
+            <div class="footer-actions inline">
+              <button 
+                class="footer-btn small full-width" 
+                :class="{ active: multiVideoMode }"
+                @click="toggleMultiVideoMode"
+              >
+                <Grid3X3 :size="14" />
+              </button>
+            </div>
           </div>
         </div>
       </aside>
     </div>
+
+    <Modal
+      v-model:visible="jsonModalVisible"
+      :title="`播放列表数据 (显示 ${Math.min(jsonDisplayCount, jsonTotalCount)} / ${jsonTotalCount} 条)`"
+      width="800px"
+    >
+      <div class="json-content-wrapper">
+        <pre class="json-content">{{ jsonContent }}</pre>
+      </div>
+      
+      <template #footer>
+        <button 
+          v-if="jsonDisplayCount < jsonTotalCount"
+          class="btn btn-secondary"
+          @click="loadMoreJson"
+        >
+          加载更多 (还剩 {{ jsonTotalCount - jsonDisplayCount }} 条)
+        </button>
+        <button class="btn btn-secondary" @click="openJsonFolder">
+          <FolderOpen :size="14" />
+          打开文件夹
+        </button>
+        <button class="btn btn-secondary" @click="jsonModalVisible = false">
+          关闭
+        </button>
+        <button class="btn btn-primary" @click="copyJsonContent">
+          复制内容
+        </button>
+      </template>
+    </Modal>
   </div>
 </template>
 
@@ -872,8 +1297,18 @@ watch(currentIndex, () => {
   transition: all 0.4s ease;
 }
 
+.video-container.empty {
+  background-color: transparent;
+}
+
 .video-container.sidebar-open {
   margin-right: 0;
+}
+
+.multi-video-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
 }
 
 .empty-state {
@@ -930,6 +1365,30 @@ watch(currentIndex, () => {
   transform: translateY(-2px);
 }
 
+.show-sidebar-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+}
+
+.show-sidebar-btn:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
 .video-wrapper {
   width: 100%;
   height: 100%;
@@ -942,6 +1401,43 @@ watch(currentIndex, () => {
 .video-element {
   cursor: pointer;
   pointer-events: auto;
+  max-width: 100%;
+  max-height: 100%;
+  transition: all 0.3s ease;
+}
+
+.video-element.aspect-fit {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+}
+
+.video-element.aspect-fill {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.video-element.aspect-original {
+  width: auto;
+  height: auto;
+  max-width: none;
+  max-height: none;
+}
+
+.video-element.aspect-16\:9 {
+  aspect-ratio: 16 / 9;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.video-element.aspect-4\:3 {
+  aspect-ratio: 4 / 3;
+  width: auto;
+  height: auto;
   max-width: 100%;
   max-height: 100%;
 }
@@ -988,6 +1484,45 @@ watch(currentIndex, () => {
   inset: 0;
   cursor: pointer;
   z-index: 10;
+}
+
+.toggle-sidebar-btn {
+  position: absolute;
+  top: 16px;
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: all 0.3s ease;
+  backdrop-filter: blur(8px);
+}
+
+.toggle-sidebar-btn.left {
+  left: 16px;
+}
+
+.toggle-sidebar-btn.right {
+  right: 16px;
+}
+
+.video-container:hover .toggle-sidebar-btn {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.toggle-sidebar-btn:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
 .mini-progress {
@@ -1243,6 +1778,69 @@ watch(currentIndex, () => {
   transform: scale(1.05);
 }
 
+.aspect-control {
+  position: relative;
+}
+
+.aspect-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-radius: 50%;
+  background: transparent;
+  border: none;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.aspect-btn:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.aspect-btn.active {
+  color: var(--primary-color);
+}
+
+.aspect-menu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  min-width: 140px;
+  background-color: rgba(0, 0, 0, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+}
+
+.aspect-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 16px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.aspect-option:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+.aspect-option.active {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
 .speed-control {
   position: relative;
 }
@@ -1401,11 +1999,6 @@ watch(currentIndex, () => {
   padding: 32px;
 }
 
-.empty-playlist .empty-icon {
-  color: var(--text-tertiary);
-  margin-bottom: 16px;
-}
-
 .empty-playlist h4 {
   font-size: 16px;
   font-weight: 500;
@@ -1457,6 +2050,14 @@ watch(currentIndex, () => {
   transition: all 0.2s ease;
 }
 
+.playlist-item.draggable {
+  cursor: grab;
+}
+
+.playlist-item.draggable:active {
+  cursor: grabbing;
+}
+
 .playlist-item:hover {
   background-color: var(--primary-light);
   border-color: var(--primary-color);
@@ -1465,6 +2066,11 @@ watch(currentIndex, () => {
 .playlist-item.active {
   background-color: var(--primary-light);
   border-color: var(--primary-color);
+}
+
+.playlist-item.in-multi-player {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 1px var(--primary-color);
 }
 
 .item-left {
@@ -1506,6 +2112,22 @@ watch(currentIndex, () => {
   overflow: hidden;
   text-overflow: ellipsis;
   margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.multi-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: var(--primary-color);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
 }
 
 .item-meta {
@@ -1543,13 +2165,36 @@ watch(currentIndex, () => {
 .sidebar-footer {
   padding: 16px;
   border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.footer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.footer-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-left: 4px;
 }
 
 .footer-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  margin-bottom: 12px;
+}
+
+.footer-actions.inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .footer-btn {
@@ -1557,7 +2202,7 @@ watch(currentIndex, () => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 10px 12px;
   border-radius: 8px;
   background-color: var(--bg-tertiary);
   border: 1px solid var(--border-color);
@@ -1566,6 +2211,12 @@ watch(currentIndex, () => {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
+}
+
+.footer-btn.small {
+  padding: 8px 10px;
+  min-width: 36px;
+  height: 36px;
 }
 
 .footer-btn:hover {
@@ -1582,32 +2233,81 @@ watch(currentIndex, () => {
   opacity: 0.9;
 }
 
-.repeat-control {
-  display: flex;
-  justify-content: center;
+.footer-btn.danger {
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
 }
 
-.repeat-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s ease;
+.footer-btn.danger:hover {
+  background-color: rgba(239, 68, 68, 0.1);
 }
 
-.repeat-btn:hover {
-  background-color: var(--bg-primary);
-}
-
-.repeat-btn.active {
+.footer-btn.repeat-btn.active {
   background-color: var(--primary-light);
   color: var(--primary-color);
   border-color: var(--primary-color);
+}
+
+.footer-btn.full-width {
+  grid-column: 1 / -1;
+}
+
+.footer-btn.active {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.footer-btn.toggle-btn {
+  gap: 8px;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.toggle-switch.on {
+  background-color: var(--primary-color);
+}
+
+.toggle-slider {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background-color: white;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch.on .toggle-slider {
+  left: 18px;
+}
+
+.json-content-wrapper {
+  max-height: 60vh;
+  overflow-y: auto;
+  background-color: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.json-content {
+  margin: 0;
+  padding: 0;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 </style>

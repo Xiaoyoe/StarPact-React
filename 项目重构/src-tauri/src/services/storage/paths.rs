@@ -89,6 +89,10 @@ pub fn get_wallpapers_dir() -> PathBuf {
     dir
 }
 
+pub fn get_prompt_templates_path() -> PathBuf {
+    get_data_dir().join("prompt_templates.json")
+}
+
 pub fn ensure_data_dirs() -> Result<(), String> {
     let data_dir = get_data_dir();
     let subdirs = [

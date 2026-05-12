@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import type { OllamaModel, OllamaStatus, OllamaPullProgress } from '@/types/ollama';
+import type { OllamaModel, OllamaStatus, OllamaPullProgress, LMStudioModel, LMStudioStatus, LocalServiceStatus } from '@/types/ollama';
 
 export interface OllamaChatRequest {
   model: string;
@@ -64,5 +64,21 @@ export const ollamaService = {
     return listen<OllamaPullProgress>('ollama:pull_progress', (event) => {
       callback(event.payload);
     });
+  },
+};
+
+export const lmstudioService = {
+  async checkStatus(): Promise<LMStudioStatus> {
+    return invoke<LMStudioStatus>('lmstudio_check_status');
+  },
+
+  async getModels(): Promise<LMStudioModel[]> {
+    return invoke<LMStudioModel[]>('lmstudio_get_models');
+  },
+};
+
+export const localService = {
+  async checkService(provider: string, host: string, port: number): Promise<LocalServiceStatus> {
+    return invoke<LocalServiceStatus>('check_local_service', { provider, host, port });
   },
 };

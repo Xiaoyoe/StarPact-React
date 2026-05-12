@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { useToast } from '@/composables/useToast';
+import { useWallpaperStyle } from '@/composables/useWallpaperStyle';
+import { storageService } from '@/services/tauri/storage';
 import {
-  Plus, Search, Copy, Edit3, Trash2, ChevronDown,
+  Plus, Search, Copy, Edit3, Trash2, ChevronDown, ChevronUp,
   X, FileText, Image, Eye, Link2, FolderOpen,
   Tag, Filter, Clock, Layers, BookOpen
 } from 'lucide-vue-next';
 
 const toast = useToast();
+const { wallpaperStyle, hasWallpaper } = useWallpaperStyle();
 
 interface TemplateResult {
   id: string;
@@ -63,6 +66,7 @@ const editingTemplate = ref<Template | null>(null);
 const resultModalTemplate = ref<Template | null>(null);
 const confirmDelete = ref<string | null>(null);
 const isLoading = ref(true);
+const expandedCards = ref<Set<string>>(new Set());
 
 const formData = ref({
   title: '',
@@ -126,46 +130,26 @@ const sortedResults = computed(() => {
   );
 });
 
-const loadTemplates = () => {
+const loadTemplates = async () => {
   isLoading.value = true;
   try {
-    const saved = localStorage.getItem('prompt_templates');
-    if (saved) {
-      templates.value = JSON.parse(saved);
-    } else {
-      templates.value = [
-        {
-          id: generateId(),
-          title: '代码审查助手',
-          category: '代码生成',
-          tags: ['代码', '审查', '优化'],
-          versionNote: 'v1.0',
-          content: '你是一位专业的代码审查专家。请审查以下代码，并提供详细的改进建议：\n\n1. 代码质量分析\n2. 潜在问题识别\n3. 性能优化建议\n4. 最佳实践推荐',
-          results: [],
-          createdAt: new Date().toISOString()
-        },
-        {
-          id: generateId(),
-          title: '翻译助手',
-          category: '翻译润色',
-          tags: ['翻译', '多语言'],
-          versionNote: 'v1.0',
-          content: '你是一位专业的翻译专家。请将以下内容翻译成目标语言，确保：\n\n1. 翻译准确\n2. 语言流畅\n3. 符合目标语言的表达习惯\n4. 保持原文的风格和语气',
-          results: [],
-          createdAt: new Date().toISOString()
-        }
-      ];
-      saveTemplates();
-    }
-  } catch {
+    const loaded = await storageService.getPromptTemplates();
+    templates.value = loaded || [];
+  } catch (error) {
+    console.error('加载提示词模板失败:', error);
     templates.value = [];
   } finally {
     isLoading.value = false;
   }
 };
 
-const saveTemplates = () => {
-  localStorage.setItem('prompt_templates', JSON.stringify(templates.value));
+const saveTemplates = async () => {
+  try {
+    await storageService.savePromptTemplates(templates.value);
+  } catch (error) {
+    console.error('保存提示词模板失败:', error);
+    toast.error('保存失败');
+  }
 };
 
 const openAdd = () => {
@@ -194,9 +178,9 @@ const openEdit = (t: Template) => {
   showForm.value = true;
 };
 
-const deleteTemplate = (id: string) => {
+const deleteTemplate = async (id: string) => {
   templates.value = templates.value.filter(t => t.id !== id);
-  saveTemplates();
+  await saveTemplates();
   confirmDelete.value = null;
   toast.success('模板已删除');
 };
@@ -209,7 +193,7 @@ const validateForm = (): boolean => {
   return Object.keys(errors).length === 0;
 };
 
-const handleSaveTemplate = () => {
+const handleSaveTemplate = async () => {
   if (!validateForm()) return;
   
   if (editingTemplate.value) {
@@ -231,7 +215,7 @@ const handleSaveTemplate = () => {
     toast.success('模板已创建');
   }
   
-  saveTemplates();
+  await saveTemplates();
   showForm.value = false;
   editingTemplate.value = null;
 };
@@ -274,6 +258,22 @@ const openResultModal = (template: Template) => {
   resultModalTemplate.value = template;
 };
 
+const toggleCardExpand = (templateId: string) => {
+  if (expandedCards.value.has(templateId)) {
+    expandedCards.value.delete(templateId);
+  } else {
+    expandedCards.value.add(templateId);
+  }
+};
+
+const isCardExpanded = (templateId: string) => {
+  return expandedCards.value.has(templateId);
+};
+
+const isContentLong = (content: string) => {
+  return content.length > 120;
+};
+
 const startAddResult = () => {
   resultFormData.value = {
     id: generateId(),
@@ -297,7 +297,7 @@ const cancelResultForm = () => {
   editingResult.value = null;
 };
 
-const saveResult = () => {
+const saveResult = async () => {
   if (!resultFormData.value.content.trim() || !resultModalTemplate.value) return;
   
   if (editingResult.value) {
@@ -309,15 +309,15 @@ const saveResult = () => {
     resultModalTemplate.value.results.unshift(resultFormData.value);
   }
   
-  saveTemplates();
+  await saveTemplates();
   cancelResultForm();
   toast.success(editingResult.value ? '结果已更新' : '结果已添加');
 };
 
-const deleteResult = (id: string) => {
+const deleteResult = async (id: string) => {
   if (!resultModalTemplate.value) return;
   resultModalTemplate.value.results = resultModalTemplate.value.results.filter(r => r.id !== id);
-  saveTemplates();
+  await saveTemplates();
   confirmDeleteResult.value = null;
   toast.success('结果已删除');
 };
@@ -335,7 +335,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col overflow-hidden" style="background-color: transparent;">
+  <div 
+    class="h-full flex flex-col overflow-hidden select-none" 
+    :style="wallpaperStyle"
+  >
     <!-- Search & Filter Bar -->
     <div class="sticky top-0 z-20 border-b border-border bg-background-primary px-4 sm:px-6 lg:px-8 py-3">
       <div class="flex flex-wrap items-center gap-3">
@@ -420,6 +423,7 @@ onMounted(() => {
           <div class="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
         </div>
         <p class="text-base font-medium text-text-secondary">正在加载模板...</p>
+        <p class="mt-1 text-sm text-text-tertiary">请稍候，正在从存储中读取数据</p>
       </div>
 
       <!-- Empty State -->
@@ -447,8 +451,8 @@ onMounted(() => {
         <div
           v-for="template in filteredTemplates"
           :key="template.id"
-          class="group relative rounded-2xl border border-border p-5 shadow-sm hover:shadow-lg hover:border-slate-200 transition-all duration-300 cursor-pointer bg-transparent"
-          @click="openResultModal(template)"
+          class="group relative rounded-2xl border border-white/20 p-5 shadow-sm hover:shadow-lg hover:border-white/30 transition-all duration-300 cursor-pointer backdrop-blur-md backdrop-saturate-150 bg-white/10 select-none"
+          @click="toggleCardExpand(template.id)"
         >
           <div :class="['absolute top-0 left-6 right-6 h-1 rounded-b-full bg-gradient-to-r opacity-60 group-hover:opacity-100 transition-opacity', categoryColorMap[template.category] || 'from-slate-400 to-slate-500']" />
 
@@ -463,17 +467,17 @@ onMounted(() => {
                 <span v-if="template.versionNote" class="rounded-lg px-2 py-0.5 text-xs border border-border-light bg-background-secondary text-text-secondary">
                   {{ template.versionNote }}
                 </span>
-                <span class="text-xs text-text-tertiary">{{ template.results.length }} 个结果</span>
+                <span class="text-xs text-text-secondary font-medium">{{ template.results.length }} 个结果</span>
               </div>
             </div>
             <div class="flex items-center gap-1">
-              <button @click.stop="copyContent(template.content)" class="rounded-lg p-2 hover:bg-violet-50 hover:text-violet-500 transition-colors text-text-tertiary" title="一键复制">
+              <button @click.stop="copyContent(template.content)" class="rounded-lg p-2 hover:bg-violet-50 hover:text-violet-500 transition-colors text-text-secondary" title="一键复制">
                 <Copy :size="16" />
               </button>
-              <button @click.stop="openEdit(template)" class="rounded-lg p-2 hover:bg-blue-50 hover:text-blue-500 transition-colors text-text-tertiary" title="编辑">
+              <button @click.stop="openEdit(template)" class="rounded-lg p-2 hover:bg-blue-50 hover:text-blue-500 transition-colors text-text-secondary" title="编辑">
                 <Edit3 :size="16" />
               </button>
-              <button @click.stop="confirmDelete = template.id" class="rounded-lg p-2 hover:bg-red-50 hover:text-red-500 transition-colors text-text-tertiary" title="删除">
+              <button @click.stop="confirmDelete = template.id" class="rounded-lg p-2 hover:bg-red-50 hover:text-red-500 transition-colors text-text-secondary" title="删除">
                 <Trash2 :size="16" />
               </button>
             </div>
@@ -487,11 +491,20 @@ onMounted(() => {
           </div>
 
           <div class="relative rounded-xl border border-border-light bg-background-secondary p-3">
-            <pre class="whitespace-pre-wrap text-sm leading-relaxed font-sans text-text-secondary line-clamp-3">{{ template.content }}</pre>
+            <pre :class="['whitespace-pre-wrap text-sm leading-relaxed font-sans text-text-secondary', !isCardExpanded(template.id) && isContentLong(template.content) && 'line-clamp-3']">{{ template.content }}</pre>
+            <button
+              v-if="isContentLong(template.content)"
+              @click.stop="toggleCardExpand(template.id)"
+              class="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary transition-colors"
+            >
+              <ChevronUp v-if="isCardExpanded(template.id)" :size="12" />
+              <ChevronDown v-else :size="12" />
+              {{ isCardExpanded(template.id) ? '收起' : '展开全部' }}
+            </button>
           </div>
 
           <div class="mt-3 flex items-center justify-between">
-            <span class="flex items-center gap-1 text-xs text-text-tertiary">
+            <span class="flex items-center gap-1 text-xs text-text-secondary font-medium">
               <Clock :size="12" />
               {{ formatDate(template.createdAt) }}
             </span>
@@ -518,7 +531,7 @@ onMounted(() => {
       >
         <div
           v-if="showForm"
-          class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto backdrop-blur-sm py-8"
+          class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto backdrop-blur-sm"
           style="background-color: rgba(0, 0, 0, 0.4)"
           @click="showForm = false"
         >
@@ -526,7 +539,7 @@ onMounted(() => {
             class="w-full max-w-2xl rounded-2xl shadow-2xl mx-4 bg-background-secondary border border-border"
             @click.stop
           >
-            <div class="flex items-center justify-between border-b border-border px-6 py-4">
+            <div class="flex items-center justify-between border-t border-b border-border px-6 py-4">
               <div class="flex items-center gap-3">
                 <div class="flex h-10 w-10 items-center justify-center rounded-xl shadow-sm bg-primary">
                   <Edit3 v-if="editingTemplate" :size="20" class="text-white" />
@@ -629,7 +642,7 @@ onMounted(() => {
       >
         <div
           v-if="resultModalTemplate"
-          class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto backdrop-blur-sm py-8"
+          class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto backdrop-blur-sm"
           style="background-color: rgba(0, 0, 0, 0.4)"
           @click="resultModalTemplate = null"
         >

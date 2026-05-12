@@ -1,11 +1,17 @@
 import { defineStore } from 'pinia';
-import type { ModelConfig, ModelPreset } from '@/types';
+import type { ModelConfig, ModelPreset, LocalModelProvider, LocalServiceConfig } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import type { OllamaModel, LMStudioModel, LocalServiceStatus, OllamaStatus, LMStudioStatus } from '@/types/ollama';
 
 interface ModelState {
   models: ModelConfig[];
   activeModelId: string | null;
   loading: boolean;
+  ollamaStatus: OllamaStatus | null;
+  lmstudioStatus: LMStudioStatus | null;
+  ollamaModels: OllamaModel[];
+  lmstudioModels: LMStudioModel[];
+  localServices: Map<string, LocalServiceStatus>;
 }
 
 export const useModelStore = defineStore('model', {
@@ -13,6 +19,11 @@ export const useModelStore = defineStore('model', {
     models: [],
     activeModelId: null,
     loading: false,
+    ollamaStatus: null,
+    lmstudioStatus: null,
+    ollamaModels: [],
+    lmstudioModels: [],
+    localServices: new Map(),
   }),
 
   getters: {
@@ -32,6 +43,12 @@ export const useModelStore = defineStore('model', {
       });
       return groups;
     },
+
+    localModels: (state) => 
+      state.models.filter(m => m.type === 'local'),
+    
+    remoteModels: (state) => 
+      state.models.filter(m => m.type === 'remote'),
   },
 
   actions: {
@@ -112,6 +129,192 @@ export const useModelStore = defineStore('model', {
         await invoke('save_models', { models: this.models });
       } catch (error) {
         console.error('Failed to save models:', error);
+      }
+    },
+
+    async checkOllamaStatus(host: string = 'localhost', port: number = 11434) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const status = await invoke<OllamaStatus>('check_local_service', { 
+          provider: 'ollama', 
+          host, 
+          port 
+        });
+        
+        this.ollamaStatus = {
+          running: status.running,
+          version: status.version,
+          models: [],
+        };
+        
+        if (status.running) {
+          const models = await invoke<OllamaModel[]>('ollama_get_models');
+          this.ollamaModels = models;
+          this.ollamaStatus.models = models;
+        } else {
+          this.ollamaModels = [];
+        }
+        
+        return this.ollamaStatus;
+      } catch (error) {
+        console.error('Failed to check Ollama status:', error);
+        this.ollamaStatus = { running: false, version: undefined, models: [] };
+        this.ollamaModels = [];
+        return null;
+      }
+    },
+
+    async checkLMStudioStatus(host: string = 'localhost', port: number = 1234) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const status = await invoke<LMStudioStatus>('check_local_service', { 
+          provider: 'lmstudio', 
+          host, 
+          port 
+        });
+        
+        this.lmstudioStatus = {
+          running: status.running,
+          version: status.version,
+          models: [],
+        };
+        
+        if (status.running) {
+          const models = await invoke<LMStudioModel[]>('lmstudio_get_models');
+          this.lmstudioModels = models;
+          this.lmstudioStatus.models = models;
+        } else {
+          this.lmstudioModels = [];
+        }
+        
+        return this.lmstudioStatus;
+      } catch (error) {
+        console.error('Failed to check LM Studio status:', error);
+        this.lmstudioStatus = { running: false, version: undefined, models: [] };
+        this.lmstudioModels = [];
+        return null;
+      }
+    },
+
+    async pullOllamaModel(modelName: string) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('ollama_pull_model', { modelName });
+        await this.checkOllamaStatus();
+      } catch (error) {
+        console.error('Failed to pull Ollama model:', error);
+        throw error;
+      }
+    },
+
+    async deleteOllamaModel(modelName: string) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('ollama_delete_model', { modelName });
+        await this.checkOllamaStatus();
+      } catch (error) {
+        console.error('Failed to delete Ollama model:', error);
+        throw error;
+      }
+    },
+
+    createLocalModelConfig(
+      provider: LocalModelProvider,
+      modelId: string,
+      modelName: string,
+      host?: string,
+      port?: number
+    ): Omit<ModelConfig, 'id' | 'createdAt' | 'stats'> {
+      const defaultPorts: Record<LocalModelProvider, number> = {
+        lmstudio: 1234,
+        ollama: 11434,
+        custom: 8080,
+      };
+
+      const defaultHosts: Record<LocalModelProvider, string> = {
+        lmstudio: 'localhost',
+        ollama: 'localhost',
+        custom: 'localhost',
+      };
+
+      const finalHost = host || defaultHosts[provider];
+      const finalPort = port || defaultPorts[provider];
+      const baseUrl = `http://${finalHost}:${finalPort}`;
+
+      const apiUrls: Record<LocalModelProvider, string> = {
+        lmstudio: `${baseUrl}/v1/chat/completions`,
+        ollama: `${baseUrl}/api/chat`,
+        custom: `${baseUrl}/v1/chat/completions`,
+      };
+
+      const providerNames: Record<LocalModelProvider, string> = {
+        lmstudio: 'LM Studio',
+        ollama: 'Ollama',
+        custom: 'Custom Local',
+      };
+
+      return {
+        name: modelName,
+        provider: providerNames[provider],
+        type: 'local',
+        apiUrl: apiUrls[provider],
+        apiKey: '',
+        model: modelId,
+        maxTokens: 4096,
+        temperature: 0.7,
+        topP: 1.0,
+        group: '本地模型',
+        isFavorite: false,
+        isActive: true,
+        presets: [],
+        localProvider: provider,
+        localServiceConfig: {
+          provider,
+          host: finalHost,
+          port: finalPort,
+          baseUrl,
+        },
+        supportsVision: provider === 'ollama',
+        supportsStreaming: true,
+      };
+    },
+
+    async addLocalModelFromService(
+      provider: LocalModelProvider,
+      modelId: string,
+      modelName: string,
+      host?: string,
+      port?: number
+    ) {
+      const modelConfig = this.createLocalModelConfig(provider, modelId, modelName, host, port);
+      return await this.addModel(modelConfig);
+    },
+
+    setActiveModelByConfig(config: Omit<ModelConfig, 'id' | 'createdAt' | 'stats'>) {
+      const tempId = `temp-${Date.now()}`;
+      const tempModel: ModelConfig = {
+        ...config,
+        id: tempId,
+        createdAt: Date.now(),
+        stats: {
+          totalCalls: 0,
+          successCalls: 0,
+          avgResponseTime: 0,
+          lastUsed: null,
+        },
+      };
+      
+      const existingIndex = this.models.findIndex(m => 
+        m.type === 'local' && 
+        m.localProvider === config.localProvider && 
+        m.model === config.model
+      );
+      
+      if (existingIndex >= 0) {
+        this.activeModelId = this.models[existingIndex].id;
+      } else {
+        this.models.push(tempModel);
+        this.activeModelId = tempId;
       }
     },
   },

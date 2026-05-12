@@ -1,32 +1,68 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, nextTick, onUnmounted } from 'vue';
-import { useConversationStore, useWallpaperStore } from '@/stores';
-import { useToast } from '@/composables/useToast';
-import {
-  Send, Mic, Paperclip, Image, Smile, MoreHorizontal,
-  Bot, User, Copy, ThumbsUp, ThumbsDown, RotateCcw,
-  Sparkles, ChevronDown, X, Loader2, StopCircle, Settings, Pencil,
-  Check, Square, HardDrive, Globe, Brain, Database, Eye, EyeOff,
-  Sliders, RefreshCw, MessageSquare, Plus, Timer
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { 
+  Send, Paperclip, Image as ImageIcon, X, 
+  Menu, MoreVertical, Edit2, Trash2, 
+  MessageSquare, Settings, ChevronDown,
+  ChevronRight, PanelRightClose, ChevronLeft,
+  Pencil, Check, Square, Database, Brain,
+  Activity, EyeOff
 } from 'lucide-vue-next';
+import { useConversationStore } from '@/stores';
+import { useToast } from '@/composables/useToast';
+import { chatService, type CompletionStats } from '@/services/chatService';
+import ChatWelcome from '@/components/chat/ChatWelcome.vue';
+import ChatControlPanel from '@/components/chat/ChatControlPanel.vue';
+import MessageBubble from '@/components/chat/MessageBubble.vue';
+import PerformancePanel from '@/components/chat/PerformancePanel.vue';
+import ModelSelector from '@/components/chat/ModelSelector.vue';
+import ConversationList from '@/components/chat/ConversationList.vue';
+import ChatQuickNav from '@/components/chat/ChatQuickNav.vue';
+import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
+import ImageViewer from '@/components/common/ImageViewer.vue';
+import type { ChatMessage } from '@/stores';
 
 const conversationStore = useConversationStore();
-const wallpaperStore = useWallpaperStore();
 const toast = useToast();
 
-const messagesContainer = ref<HTMLElement | null>(null);
 const inputText = ref('');
+const selectedImages = ref<string[]>([]);
 const isStreaming = ref(false);
-const showModelSelector = ref(false);
-const showToolsMenu = ref(false);
-const compactMode = ref(false);
-const showWelcome = ref(true);
-const uploadedImages = ref<{ id: string; data: string; preview: string }[]>([]);
 const streamingContent = ref('');
+const streamingThinking = ref('');
+const showControlPanel = ref(false);
+const showPerformance = ref(false);
+const showConfirmDialog = ref(false);
+const messageToDelete = ref<string | null>(null);
+const editingTitle = ref(false);
+const titleInput = ref('');
+const headerVisible = ref(true);
+const inputVisible = ref(true);
+const isInputFocused = ref(false);
+let hideInputTimer: ReturnType<typeof setTimeout> | null = null;
 
-const activeConversation = computed(() => conversationStore.activeConversation);
-const activeModel = computed(() => conversationStore.activeModel);
-const messages = computed(() => activeConversation.value?.messages || []);
+const messagesContainer = ref<HTMLElement | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+
+const viewerImages = ref<string[]>([]);
+const viewerIndex = ref(0);
+const viewerOpen = ref(false);
+
+const performanceData = ref<CompletionStats>({
+  promptTokens: 0,
+  completionTokens: 0,
+  totalTokens: 0,
+  responseTime: 0,
+});
+
+const hasMessages = computed(() => {
+  return conversationStore.activeConversation && 
+         conversationStore.activeConversation.messages.length > 0;
+});
+
+const shouldShowWelcome = computed(() => {
+  return false;
+});
 
 const scrollToBottom = async () => {
   await nextTick();
@@ -35,892 +71,1076 @@ const scrollToBottom = async () => {
   }
 };
 
-watch(messages, () => {
-  scrollToBottom();
-}, { deep: true });
+const handleStartChat = async () => {
+  if (!conversationStore.activeConversation) {
+    const result = await conversationStore.createNewConversation();
+    if (!result) {
+      toast.error('创建会话失败');
+    }
+  }
+};
 
-const generateId = () => `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+const handleSuggestionClick = async (text: string) => {
+  await handleStartChat();
+  inputText.value = text;
+  await handleSend();
+};
+
+const handleImageSelect = () => {
+  fileInput.value?.click();
+};
+
+const handleFileChange = (event: Event) => {
+  const target = event.target as HTMLInputElement;
+  const files = target.files;
+  if (!files) return;
+
+  Array.from(files).forEach(file => {
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        if (result) {
+          selectedImages.value.push(result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+
+  target.value = '';
+};
+
+const removeImage = (index: number) => {
+  selectedImages.value.splice(index, 1);
+};
+
+const viewSelectedImage = (index: number) => {
+  viewerImages.value = selectedImages.value;
+  viewerIndex.value = index;
+  viewerOpen.value = true;
+};
 
 const handleSend = async () => {
-  if (!inputText.value.trim() || isStreaming.value) return;
-  if (!activeModel.value) {
-    toast.error('请先选择一个模型');
+  resetHideInputTimer();
+  console.log('handleSend called', {
+    inputText: inputText.value,
+    selectedImages: selectedImages.value.length,
+    activeConversation: conversationStore.activeConversation,
+    activeConversationId: conversationStore.activeConversationId,
+  });
+  
+  if (!inputText.value.trim() && selectedImages.value.length === 0) {
+    toast.warning('请输入消息或选择图片');
     return;
   }
-
-  const content = inputText.value.trim();
-  inputText.value = '';
-
-  if (!activeConversation.value) {
-    await conversationStore.createNewConversation();
+  
+  // 确保有会话
+  if (!conversationStore.activeConversation) {
+    console.log('No active conversation, creating one...');
+    await handleStartChat();
+    if (!conversationStore.activeConversation) {
+      console.error('Failed to create conversation');
+      toast.error('创建会话失败');
+      return;
+    }
   }
 
-  if (!conversationStore.activeConversationId) {
-    toast.error('创建对话失败');
-    return;
-  }
-
-  const userMessage = {
-    id: `msg_${Date.now()}`,
-    role: 'user' as const,
-    content,
+  const userMessage: ChatMessage = {
+    id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    role: 'user',
+    content: inputText.value.trim(),
     timestamp: Date.now(),
-    images: uploadedImages.value.length > 0 ? uploadedImages.value.map(img => img.data) : undefined,
+    images: selectedImages.value.length > 0 ? [...selectedImages.value] : undefined,
   };
 
-  await conversationStore.addMessage(conversationStore.activeConversationId, userMessage);
-  uploadedImages.value = [];
+  console.log('Adding user message:', userMessage);
+
+  const success = await conversationStore.addMessage(
+    conversationStore.activeConversationId!,
+    userMessage
+  );
+  
+  console.log('Add message result:', success);
+  
+  if (!success) {
+    toast.error('发送消息失败');
+    return;
+  }
+
+  const currentInput = inputText.value;
+  const currentImages = [...selectedImages.value];
+  inputText.value = '';
+  selectedImages.value = [];
+
+  await scrollToBottom();
+
+  // 如果没有模型，显示提示气泡
+  if (!conversationStore.activeModel) {
+    console.log('No active model, showing no model message');
+    await showNoModelMessage();
+    return;
+  }
+
+  await generateResponse(currentInput, currentImages);
+};
+
+const generateResponse = async (userInput: string, images: string[] = []) => {
+  if (!conversationStore.activeModel || !conversationStore.activeConversation) {
+    toast.error('模型或会话未初始化');
+    return;
+  }
 
   isStreaming.value = true;
+  streamingContent.value = '';
+  streamingThinking.value = '';
 
-  const assistantMessage = {
-    id: `msg_${Date.now() + 1}`,
-    role: 'assistant' as const,
+  const assistantMessage: ChatMessage = {
+    id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    role: 'assistant',
     content: '',
     timestamp: Date.now(),
-    model_id: activeModel.value.id,
-    model_name: activeModel.value.name,
+    model_id: conversationStore.activeModelId!,
+    model_name: conversationStore.activeModel.name,
     is_streaming: true,
   };
 
-  await conversationStore.addMessage(conversationStore.activeConversationId, assistantMessage);
+  await conversationStore.addMessage(
+    conversationStore.activeConversationId!,
+    assistantMessage
+  );
 
-  setTimeout(async () => {
-    const response = generateMockResponse(content);
-    await conversationStore.updateMessage(
+  const messages = buildMessageHistory();
+
+  try {
+    await chatService.streamChat(
+      {
+        model: conversationStore.activeModel,
+        messages,
+        thinkMode: conversationStore.ollamaThinkMode,
+        verbose: conversationStore.ollamaVerboseMode,
+        images: images.length > 0 ? images : undefined,
+      },
+      {
+        onToken: (token) => {
+          streamingContent.value += token;
+          scrollToBottom();
+        },
+        onThinking: (thinking) => {
+          streamingThinking.value = thinking;
+        },
+        onComplete: (stats) => {
+          performanceData.value = stats;
+          showPerformance.value = conversationStore.ollamaVerboseMode;
+          
+          conversationStore.updateMessage(
+            conversationStore.activeConversationId!,
+            assistantMessage.id,
+            {
+              content: streamingContent.value,
+              thinking: streamingThinking.value || undefined,
+              thinking_duration: stats.thinkingTime,
+              is_streaming: false,
+            }
+          );
+
+          isStreaming.value = false;
+          streamingContent.value = '';
+          streamingThinking.value = '';
+        },
+        onError: (error) => {
+          toast.error(`生成失败: ${error}`);
+          conversationStore.deleteMessage(
+            conversationStore.activeConversationId!,
+            assistantMessage.id
+          );
+          isStreaming.value = false;
+        },
+      }
+    );
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '未知错误';
+    toast.error(`请求失败: ${errorMessage}`);
+    conversationStore.deleteMessage(
       conversationStore.activeConversationId!,
-      assistantMessage.id,
-      { content: response, is_streaming: false }
+      assistantMessage.id
     );
     isStreaming.value = false;
-    scrollToBottom();
-  }, 1500);
+  }
 };
 
-const generateMockResponse = (input: string): string => {
-  const responses = [
-    `这是一个关于"${input.substring(0, 20)}..."的模拟回复。在实际应用中，这里会显示AI模型生成的真实回复内容。`,
-    `感谢您的提问！关于您提到的内容，我可以提供以下信息...\n\n1. 首先，让我们了解一下背景...\n2. 其次，需要考虑的因素包括...\n3. 最后，建议您可以...`,
-    `这是一个很好的问题！让我来为您详细解答。\n\n**核心要点：**\n- 第一点：相关背景知识\n- 第二点：具体实现方法\n- 第三点：注意事项和建议\n\n希望这个回答对您有帮助！`,
-  ];
-  return responses[Math.floor(Math.random() * responses.length)];
-};
+const showNoModelMessage = async () => {
+  if (!conversationStore.activeConversation) return;
 
-const handleStopStreaming = () => {
-  isStreaming.value = false;
-  toast.info('已停止生成');
-};
-
-const handleCopy = (content: string) => {
-  navigator.clipboard.writeText(content);
-  toast.success('已复制到剪贴板');
-};
-
-const handleRegenerate = () => {
-  toast.info('重新生成功能开发中');
-};
-
-const handleModelSelect = (modelId: string) => {
-  conversationStore.setActiveModel(modelId);
-  showModelSelector.value = false;
-  toast.success('已切换模型');
-};
-
-const handleImageUpload = () => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.multiple = true;
-  
-  input.onchange = (e: any) => {
-    const files = Array.from(e.target.files) as File[];
-    files.forEach(file => {
-      if (!file.type.startsWith('image/')) {
-        toast.error('只支持图片文件');
-        return;
-      }
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error('图片大小不能超过 10MB');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const data = ev.target?.result as string;
-        uploadedImages.value.push({
-          id: generateId(),
-          data,
-          preview: data,
-        });
-      };
-      reader.readAsDataURL(file);
-    });
+  const assistantMessage: ChatMessage = {
+    id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    role: 'assistant',
+    content: '💡 提示\n\n当前未配置模型，您的消息已保存。\n\n请前往"模型管理"页面添加模型配置，然后继续对话。\n\n✅ 聊天功能正常工作',
+    timestamp: Date.now(),
+    model_name: '系统提示',
   };
-  
-  input.click();
+
+  await conversationStore.addMessage(
+    conversationStore.activeConversationId!,
+    assistantMessage
+  );
+
+  await scrollToBottom();
 };
 
-const handleRemoveImage = (id: string) => {
-  uploadedImages.value = uploadedImages.value.filter(img => img.id !== id);
+const buildMessageHistory = (): ChatMessage[] => {
+  if (!conversationStore.activeConversation) return [];
+
+  if (conversationStore.ollamaChatMode === 'single') {
+    const lastUserMessage = [...conversationStore.activeConversation.messages]
+      .reverse()
+      .find(m => m.role === 'user');
+    return lastUserMessage ? [lastUserMessage] : [];
+  }
+
+  return conversationStore.activeConversation.messages.filter(m => !m.is_streaming);
 };
 
-const formatTime = (timestamp: number) => {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+const handleImageClick = (images: string[], index: number) => {
+  viewerImages.value = images;
+  viewerIndex.value = index;
+  viewerOpen.value = true;
 };
 
-const handleKeydown = (e: KeyboardEvent) => {
+const handleRegenerate = async (content: string, images?: string[]) => {
+  await generateResponse(content, images);
+};
+
+const handleDeleteRequest = (messageId: string) => {
+  if (conversationStore.deleteConfirmEnabled) {
+    messageToDelete.value = messageId;
+    showConfirmDialog.value = true;
+  } else {
+    handleDeleteConfirm();
+  }
+};
+
+const handleDeleteConfirm = async () => {
+  if (!messageToDelete.value || !conversationStore.activeConversationId) return;
+
+  const success = await conversationStore.deleteMessage(
+    conversationStore.activeConversationId,
+    messageToDelete.value
+  );
+
+  if (success) {
+    toast.success('消息已删除');
+  } else {
+    toast.error('删除失败');
+  }
+
+  showConfirmDialog.value = false;
+  messageToDelete.value = null;
+};
+
+const handleTitleEdit = () => {
+  if (!conversationStore.activeConversation) return;
+  editingTitle.value = true;
+  titleInput.value = conversationStore.activeConversation.title;
+};
+
+const handleTitleSave = async () => {
+  if (!conversationStore.activeConversationId || !titleInput.value.trim()) return;
+
+  const success = await conversationStore.updateConversation(
+    conversationStore.activeConversationId,
+    { title: titleInput.value.trim() }
+  );
+
+  if (success) {
+    toast.success('标题已更新');
+  } else {
+    toast.error('更新失败');
+  }
+
+  editingTitle.value = false;
+};
+
+const handleTitleCancel = () => {
+  editingTitle.value = false;
+  titleInput.value = '';
+};
+
+const formatTokens = (tokens: number): string => {
+  if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`;
+  if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}K`;
+  return tokens.toString();
+};
+
+const handleKeyDown = (e: KeyboardEvent) => {
+  resetHideInputTimer();
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
     handleSend();
   }
 };
 
-const startChat = () => {
-  showWelcome.value = false;
+const startHideInputTimer = () => {
+  if (!conversationStore.autoHideInputEnabled) return;
+  if (isInputFocused.value) return;
+  if (hideInputTimer) clearTimeout(hideInputTimer);
+  hideInputTimer = setTimeout(() => {
+    if (!isInputFocused.value) {
+      inputVisible.value = false;
+    }
+  }, 3000);
 };
 
-const suggestionClick = (text: string) => {
-  inputText.value = text;
-  showWelcome.value = false;
+const showInputManually = () => {
+  inputVisible.value = true;
+  if (conversationStore.autoHideInputEnabled) {
+    startHideInputTimer();
+  }
 };
+
+const resetHideInputTimer = (event?: MouseEvent) => {
+  if (!conversationStore.autoHideInputEnabled) return;
+  if (isInputFocused.value) return;
+  
+  if (!inputVisible.value) {
+    inputVisible.value = true;
+  }
+  
+  if (hideInputTimer) clearTimeout(hideInputTimer);
+  hideInputTimer = setTimeout(() => {
+    if (!isInputFocused.value && conversationStore.autoHideInputEnabled) {
+      inputVisible.value = false;
+    }
+  }, 3000);
+};
+
+const handleInputFocus = () => {
+  isInputFocused.value = true;
+  if (hideInputTimer) clearTimeout(hideInputTimer);
+  if (!inputVisible.value) {
+    inputVisible.value = true;
+  }
+};
+
+const handleInputBlur = () => {
+  isInputFocused.value = false;
+  if (conversationStore.autoHideInputEnabled) {
+    startHideInputTimer();
+  }
+};
+
+watch(() => conversationStore.activeConversation?.messages.length, () => {
+  scrollToBottom();
+});
+
+watch(() => conversationStore.autoHideInputEnabled, (enabled) => {
+  if (!enabled) {
+    if (hideInputTimer) clearTimeout(hideInputTimer);
+    inputVisible.value = true;
+  } else {
+    startHideInputTimer();
+  }
+});
 
 onMounted(async () => {
-  await scrollToBottom();
+  try {
+    await conversationStore.loadModels();
+    await conversationStore.loadConversations();
+    
+    if (conversationStore.conversations.length > 0) {
+      const latestConversation = conversationStore.conversations[0];
+      if (!conversationStore.activeConversationId) {
+        conversationStore.activeConversationId = latestConversation.id;
+      }
+    } else {
+      await conversationStore.createNewConversation();
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : '未知错误';
+    toast.error(`加载数据失败: ${errorMessage}`);
+  }
+  
+  if (conversationStore.autoHideInputEnabled) {
+    startHideInputTimer();
+  }
+});
+
+onUnmounted(() => {
+  if (hideInputTimer) clearTimeout(hideInputTimer);
 });
 </script>
 
 <template>
-  <div 
-    class="chat-view h-full flex flex-col" 
-    :class="{ 'compact-mode': compactMode }"
-  >
-    <!-- Welcome Screen -->
-    <div v-if="showWelcome" class="flex-1 flex items-center justify-center p-8">
-      <div class="text-center max-w-2xl">
-        <div class="w-20 h-20 mx-auto mb-6 rounded-2xl bg-primary-light flex items-center justify-center">
-          <Sparkles :size="36" class="text-primary" />
-        </div>
-        <h1 class="text-2xl font-bold text-text-primary mb-3">欢迎使用 AI 助手</h1>
-        <p class="text-text-secondary mb-8">
-          选择一个模型开始对话，或尝试以下建议
-        </p>
-        
-        <div class="grid grid-cols-2 gap-3 mb-8">
-          <button
-            v-for="suggestion in ['解释量子计算的原理', '用Python实现排序算法', '设计一个REST API', '推荐学习资源']"
-            :key="suggestion"
-            @click="suggestionClick(suggestion)"
-            class="p-4 rounded-xl border border-border bg-background-secondary text-left hover:border-primary hover:bg-primary-light/30 transition-all"
+  <div class="chat-view">
+    <div class="chat-content">
+      <ChatWelcome
+        v-if="shouldShowWelcome"
+        @start-chat="handleStartChat"
+        @suggestion-click="handleSuggestionClick"
+      />
+
+      <div v-else ref="messagesContainer" class="messages-wrapper">
+        <div class="messages-container">
+          <div
+            v-for="(message, index) in conversationStore.activeConversation?.messages"
+            :key="message.id"
+            :data-message-id="message.id"
           >
-            <span class="text-sm text-text-primary">{{ suggestion }}</span>
+            <MessageBubble
+              :message="message"
+              :is-last="index === (conversationStore.activeConversation?.messages.length || 0) - 1"
+              :compact-mode="conversationStore.compactMode"
+              :streaming-content="message.is_streaming ? streamingContent : undefined"
+              :streaming-thinking="message.is_streaming ? streamingThinking : undefined"
+              @image-click="handleImageClick"
+              @regenerate="handleRegenerate"
+              @delete="handleDeleteRequest"
+            />
+          </div>
+        </div>
+
+        <ChatQuickNav
+          :messages="conversationStore.activeConversation?.messages || []"
+          :container-ref="messagesContainer"
+        />
+      </div>
+
+      <PerformancePanel
+        v-if="showPerformance && hasMessages"
+        :data="performanceData"
+        :is-visible="showPerformance"
+      />
+    </div>
+
+    <div class="chat-header-area" :class="{ hidden: !headerVisible }">
+      <div class="chat-header">
+        <div class="header-left">
+          <div v-if="conversationStore.activeConversation" class="title-section">
+            <div v-if="editingTitle" class="title-edit-container">
+              <input
+                v-model="titleInput"
+                class="title-input"
+                placeholder="输入标题..."
+                autofocus
+              />
+              <button class="icon-btn-sm" title="确认" @click="handleTitleSave">
+                <Check :size="14" />
+              </button>
+              <button class="icon-btn-sm cancel" title="取消" @click="handleTitleCancel">
+                <Square :size="14" />
+              </button>
+            </div>
+            
+            <template v-else>
+              <button class="icon-btn edit-title-btn" title="编辑标题" @click="handleTitleEdit">
+                <Pencil :size="14" />
+              </button>
+              
+              <h2 class="title" @dblclick="handleTitleEdit">
+                {{ conversationStore.activeConversation.title }}
+              </h2>
+              
+              <span class="message-count">
+                {{ conversationStore.activeConversation.messages.length }} 条消息
+              </span>
+              
+              <span v-if="conversationStore.activeConversation.total_tokens > 0" class="tag token-tag">
+                <Database :size="11" />
+                <span>{{ formatTokens(conversationStore.activeConversation.total_tokens) }}</span>
+              </span>
+              
+              <span v-if="conversationStore.ollamaVerboseMode" class="tag verbose-tag">
+                <Activity :size="11" />
+                <span>详细</span>
+              </span>
+              
+              <span v-if="conversationStore.ollamaThinkMode" class="tag think-tag">
+                <Brain :size="11" />
+                <span>思考</span>
+              </span>
+              
+              <span v-if="conversationStore.autoHideInputEnabled" class="tag auto-hide-tag">
+                <EyeOff :size="11" />
+                <span>自动隐藏</span>
+              </span>
+              
+              <span class="tag mode-tag">
+                <MessageSquare :size="11" />
+                <span>{{ conversationStore.ollamaChatMode === 'multi' ? '多轮' : '单轮' }}</span>
+              </span>
+              
+              <span v-if="conversationStore.includeImagesInContext" class="tag image-tag">
+                <ImageIcon :size="11" />
+                <span>带图</span>
+              </span>
+            </template>
+          </div>
+        </div>
+
+        <div class="header-right">
+          <ModelSelector />
+
+          <ChatControlPanel
+            :is-open="showControlPanel"
+            @toggle="showControlPanel = !showControlPanel"
+            @close="showControlPanel = false"
+          />
+
+          <button class="icon-btn" @click="showPerformance = !showPerformance" title="性能监控">
+            <Settings :size="20" />
+          </button>
+
+          <button class="icon-btn toggle-header-btn" @click="headerVisible = !headerVisible" :title="headerVisible ? '隐藏标题栏' : '显示标题栏'">
+            <PanelRightClose v-if="headerVisible" :size="18" />
+            <ChevronRight v-else :size="18" />
           </button>
         </div>
-        
-        <button
-          @click="startChat"
-          class="px-6 py-3 rounded-xl bg-primary text-white font-medium hover:opacity-90 transition-all"
-        >
-          开始对话
-        </button>
       </div>
     </div>
 
-    <!-- Main Chat Interface -->
-    <template v-else>
-      <!-- Header -->
-      <div class="model-bar px-4 py-3 border-b border-border bg-background-secondary">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-3">
-            <h1 class="text-base font-semibold text-text-primary">
-              {{ activeConversation?.title || '新对话' }}
-            </h1>
-            <span v-if="activeConversation" class="text-xs text-text-tertiary">
-              {{ messages.length }} 条消息
-            </span>
-          </div>
-          
-          <div class="flex items-center gap-2">
-            <!-- Model Selector -->
-            <div class="relative">
-              <button
-                class="model-selector flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-background-primary text-sm"
-                @click="showModelSelector = !showModelSelector"
-              >
-                <Sparkles :size="14" class="text-primary" />
-                <span class="text-text-primary">{{ activeModel?.name || '选择模型' }}</span>
-                <ChevronDown :size="14" class="text-text-tertiary" />
-              </button>
+    <button 
+      v-if="!headerVisible" 
+      class="show-header-btn"
+      @click="headerVisible = true"
+      title="显示标题栏"
+    >
+      <ChevronLeft :size="18" />
+    </button>
 
-              <Transition
-                enter-active-class="animate-fade-in"
-                leave-active-class="animate-fade-out"
-              >
-                <div v-if="showModelSelector" class="model-dropdown">
-                  <div class="dropdown-header">
-                    <HardDrive :size="14" />
-                    <span>可用模型</span>
-                  </div>
-                  <div class="dropdown-list">
-                    <button
-                      v-for="model in conversationStore.models"
-                      :key="model.id"
-                      class="model-option"
-                      :class="{ active: model.id === conversationStore.activeModelId }"
-                      @click="handleModelSelect(model.id)"
-                    >
-                      <div class="model-info">
-                        <span class="model-name">{{ model.name }}</span>
-                        <span class="model-provider">{{ model.provider }}</span>
-                      </div>
-                      <Check v-if="model.id === conversationStore.activeModelId" :size="14" class="text-primary" />
-                    </button>
-                  </div>
-                </div>
-              </Transition>
-            </div>
-
-            <!-- Tools Menu -->
-            <div class="relative">
-              <button
-                class="tools-btn flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm"
-                :class="showToolsMenu ? 'bg-primary text-white border-primary' : 'bg-background-primary text-text-primary'"
-                @click="showToolsMenu = !showToolsMenu"
-              >
-                <Settings :size="14" />
-                <span>工具</span>
-                <ChevronDown :size="14" />
-              </button>
-
-              <Transition
-                enter-active-class="animate-fade-in"
-                leave-active-class="animate-fade-out"
-              >
-                <div v-if="showToolsMenu" class="tools-dropdown">
-                  <div class="p-2 grid grid-cols-2 gap-2">
-                    <button
-                      @click="compactMode = !compactMode"
-                      class="tool-option"
-                      :class="{ active: compactMode }"
-                    >
-                      <Square :size="18" />
-                      <span>简洁模式</span>
-                    </button>
-                    <button
-                      @click="showWelcome = true; showToolsMenu = false"
-                      class="tool-option"
-                    >
-                      <Eye :size="18" />
-                      <span>欢迎页</span>
-                    </button>
-                  </div>
-                </div>
-              </Transition>
-            </div>
-          </div>
+    <div class="chat-input-area" :class="{ hidden: !inputVisible }">
+      <div v-if="selectedImages.length > 0" class="selected-images">
+        <div
+          v-for="(img, index) in selectedImages"
+          :key="index"
+          class="image-preview"
+          @click="viewSelectedImage(index)"
+        >
+          <img :src="img" :alt="`图片 ${index + 1}`" />
+          <button class="remove-image" @click.stop="removeImage(index)">
+            <X :size="14" />
+          </button>
         </div>
       </div>
 
-      <!-- Messages Area -->
-      <div ref="messagesContainer" class="messages-area flex-1 overflow-y-auto">
-        <div v-if="messages.length === 0" class="empty-state">
-          <div class="empty-icon">
-            <Bot :size="48" />
-          </div>
-          <h2>开始对话</h2>
-          <p>选择一个模型，然后输入您的问题开始对话</p>
-          <div class="suggestions">
-            <button
-              v-for="s in ['解释量子计算的原理', '用Python实现排序算法', '设计一个REST API']"
-              :key="s"
-              @click="inputText = s"
-              class="suggestion-btn"
-            >
-              {{ s }}
-            </button>
-          </div>
-        </div>
+      <div class="input-container" @focusin="handleInputFocus" @focusout="handleInputBlur">
+        <button class="icon-btn" @click="handleImageSelect" title="添加图片">
+          <ImageIcon :size="20" />
+        </button>
 
-        <div v-else class="messages-list">
-          <div
-            v-for="message in messages"
-            :key="message.id"
-            class="message"
-            :class="message.role"
-          >
-            <div class="message-avatar">
-              <User v-if="message.role === 'user'" :size="20" />
-              <Bot v-else :size="20" />
-            </div>
-            
-            <div class="message-content">
-              <div class="message-header">
-                <span class="message-role">
-                  {{ message.role === 'user' ? '你' : (message.model_name || 'AI助手') }}
-                </span>
-                <span class="message-time">{{ formatTime(message.timestamp) }}</span>
-              </div>
-              
-              <!-- Images -->
-              <div v-if="message.images && message.images.length > 0" class="message-images">
-                <img
-                  v-for="(img, idx) in message.images"
-                  :key="idx"
-                  :src="img"
-                  class="message-image"
-                />
-              </div>
-              
-              <div class="message-text" v-html="message.content.replace(/\n/g, '<br>')"></div>
-              
-              <div v-if="message.role === 'assistant'" class="message-actions">
-                <button @click="handleCopy(message.content)" title="复制">
-                  <Copy :size="14" />
-                </button>
-                <button @click="handleRegenerate" title="重新生成">
-                  <RotateCcw :size="14" />
-                </button>
-                <button title="有用">
-                  <ThumbsUp :size="14" />
-                </button>
-                <button title="没用">
-                  <ThumbsDown :size="14" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
+        <textarea
+          v-model="inputText"
+          class="message-input"
+          placeholder="输入消息... (Shift+Enter 换行)"
+          @keydown="handleKeyDown"
+          @focus="handleInputFocus"
+          :disabled="isStreaming"
+          rows="1"
+        ></textarea>
+
+        <button
+          class="send-btn"
+          @click="handleSend"
+          :disabled="(!inputText.trim() && selectedImages.length === 0) || isStreaming"
+        >
+          <Send :size="20" />
+        </button>
       </div>
 
-      <!-- Input Area -->
-      <div class="input-area">
-        <div class="input-container">
-          <!-- Image Preview -->
-          <div v-if="uploadedImages.length > 0" class="image-preview">
-            <div v-for="img in uploadedImages" :key="img.id" class="preview-item">
-              <img :src="img.preview" class="preview-image" />
-              <button @click="handleRemoveImage(img.id)" class="remove-btn">
-                <X :size="12" />
-              </button>
-            </div>
-            <button @click="handleImageUpload" class="add-image-btn">
-              <Plus :size="14" />
-              添加
-            </button>
-          </div>
+      <input
+        ref="fileInput"
+        type="file"
+        accept="image/*"
+        multiple
+        style="display: none"
+        @change="handleFileChange"
+      />
+    </div>
 
-          <div class="input-row">
-            <button @click="handleImageUpload" class="upload-btn" title="上传图片">
-              <Image :size="18" :class="{ 'text-primary': uploadedImages.length > 0 }" />
-            </button>
-            
-            <textarea
-              v-model="inputText"
-              @keydown="handleKeydown"
-              :placeholder="uploadedImages.length > 0 ? '描述图片内容或输入问题...' : '输入消息... (Enter发送, Shift+Enter换行)'"
-              rows="1"
-              class="input-textarea"
-            ></textarea>
+    <button 
+      v-if="!inputVisible" 
+      class="show-input-btn"
+      @click="showInputManually"
+      title="显示输入框"
+    >
+      <Send :size="18" />
+    </button>
 
-            <button
-              v-if="isStreaming"
-              @click="handleStopStreaming"
-              class="stop-btn"
-              title="停止生成"
-            >
-              <Square :size="16" />
-            </button>
-            <button
-              v-else
-              @click="handleSend"
-              :disabled="!inputText.trim() && uploadedImages.length === 0"
-              class="send-btn"
-              title="发送"
-            >
-              <Send :size="16" />
-            </button>
-          </div>
-        </div>
+    <ConfirmDialog
+      :is-open="showConfirmDialog"
+      title="删除消息"
+      message="确定要删除这条消息吗？此操作无法撤销。"
+      confirm-text="删除"
+      type="danger"
+      @confirm="handleDeleteConfirm"
+      @cancel="showConfirmDialog = false"
+    />
 
-        <div class="input-footer">
-          <span v-if="!activeModel" class="warning">请先选择模型</span>
-          <span v-else class="info">{{ activeModel.name }} · 按 Enter 发送</span>
-        </div>
-      </div>
-    </template>
+    <ImageViewer
+      :images="viewerImages"
+      :current-index="viewerIndex"
+      :is-open="viewerOpen"
+      @close="viewerOpen = false"
+      @prev="viewerIndex = Math.max(0, viewerIndex - 1)"
+      @next="viewerIndex = Math.min(viewerImages.length - 1, viewerIndex + 1)"
+      @jump-to="viewerIndex = $event"
+    />
   </div>
 </template>
 
 <style scoped>
 .chat-view {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 40px);
+  max-height: 900px;
   background-color: transparent;
   position: relative;
+  margin: 0 auto 20px;
+  overflow: hidden;
 }
 
-.chat-view.compact-mode {
-  background-color: transparent;
+.chat-header-area {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 100;
+  pointer-events: none;
+  transition: all 0.3s ease;
 }
 
-.model-bar {
-  height: 56px;
+.chat-header-area.hidden {
+  transform: translateY(-110%);
+  opacity: 0;
 }
 
-.model-selector {
+.chat-header-area > * {
+  pointer-events: auto;
+}
+
+.show-header-btn {
+  position: absolute;
+  top: 12px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: rgba(var(--bg-primary-rgb, 255, 255, 255), 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(var(--border-color-rgb, 200, 200, 200), 0.3);
+  color: var(--text-secondary);
+  cursor: pointer;
+  z-index: 101;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   transition: all 0.2s ease;
 }
 
-.model-selector:hover {
+.show-header-btn:hover {
+  color: var(--text-primary);
   border-color: var(--primary-color);
+  transform: scale(1.05);
 }
 
-.model-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  width: 320px;
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  z-index: 100;
-}
-
-.dropdown-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-light);
-  color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.dropdown-list {
-  max-height: 300px;
-  overflow-y: auto;
-}
-
-.model-option {
+.chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 10px 24px;
+  background: rgba(var(--bg-primary-rgb, 255, 255, 255), 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  height: 60px;
   width: 100%;
-  padding: 12px 16px;
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  text-align: left;
+  box-shadow: none;
+  transition: all 0.3s ease;
 }
 
-.model-option:hover {
-  background-color: var(--bg-tertiary);
-}
-
-.model-option.active {
-  background-color: var(--primary-light);
-}
-
-.model-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.model-name {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.model-provider {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.tools-btn {
-  transition: all 0.2s ease;
-}
-
-.tools-dropdown {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 200px;
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-  z-index: 100;
-}
-
-.tool-option {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.tool-option:hover {
-  border-color: var(--primary-color);
-}
-
-.tool-option.active {
-  background-color: var(--primary-light);
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-}
-
-.messages-area {
-  padding: 16px;
-}
-
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  text-align: center;
-  color: var(--text-tertiary);
-}
-
-.empty-icon {
+.header-left,
+.header-right {
   display: flex;
   align-items: center;
-  justify-content: center;
-  width: 80px;
-  height: 80px;
-  border-radius: 50%;
-  background-color: var(--bg-tertiary);
-  margin-bottom: 16px;
-}
-
-.empty-state h2 {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-
-.empty-state p {
-  font-size: 14px;
-  margin-bottom: 24px;
-}
-
-.suggestions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-}
-
-.suggestion-btn {
-  padding: 8px 16px;
-  border-radius: 20px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.suggestion-btn:hover {
-  border-color: var(--primary-color);
-  color: var(--primary-color);
-}
-
-.messages-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.message {
-  display: flex;
   gap: 12px;
 }
 
-.message-avatar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
-  flex-shrink: 0;
-}
-
-.message.user .message-avatar {
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-}
-
-.message.assistant .message-avatar {
-  background-color: var(--bg-tertiary);
-  color: var(--text-secondary);
-}
-
-.message-content {
+.title-section {
+  margin-left: 12px;
   flex: 1;
   min-width: 0;
-}
-
-.message-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
-.message-role {
-  font-size: 13px;
+.title {
+  font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
-}
-
-.message-time {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.message-images {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.message-image {
-  max-width: 200px;
-  max-height: 200px;
-  border-radius: 8px;
   cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.message-text {
+.title-input {
   font-size: 14px;
-  line-height: 1.6;
-  color: var(--text-secondary);
-  word-break: break-word;
-}
-
-.message-actions {
-  display: flex;
-  gap: 4px;
-  margin-top: 8px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.message:hover .message-actions {
-  opacity: 1;
-}
-
-.message-actions button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px;
-  border-radius: 6px;
-  background: transparent;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.message-actions button:hover {
-  background-color: var(--bg-tertiary);
-  color: var(--text-secondary);
-}
-
-.input-area {
-  padding: 12px 16px 16px;
-  border-top: 1px solid var(--border-light);
-  background-color: var(--bg-secondary);
-}
-
-.input-container {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.image-preview {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding: 8px;
-  border-radius: 12px;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.preview-item {
-  position: relative;
-}
-
-.preview-image {
-  width: 64px;
-  height: 64px;
-  object-fit: cover;
-  border-radius: 8px;
-}
-
-.remove-btn {
-  position: absolute;
-  top: -4px;
-  right: -4px;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background-color: #ef4444;
-  color: white;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.preview-item:hover .remove-btn {
-  opacity: 1;
-}
-
-.add-image-btn {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0 12px;
-  height: 64px;
-  border-radius: 8px;
-  border: 1px solid var(--primary-color);
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.add-image-btn:hover {
-  opacity: 0.9;
-}
-
-.input-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 12px;
-  background-color: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  transition: border-color 0.2s ease;
-}
-
-.input-row:focus-within {
-  border-color: var(--primary-color);
-}
-
-.upload-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  border-radius: 8px;
-  background: transparent;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.upload-btn:hover {
-  background-color: var(--bg-tertiary);
-}
-
-.input-textarea {
-  flex: 1;
-  border: none;
-  background: transparent;
+  font-weight: 600;
   color: var(--text-primary);
-  font-size: 14px;
-  line-height: 1.5;
-  resize: none;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid var(--primary-color);
   outline: none;
-  max-height: 128px;
-  min-height: 24px;
+  padding: 4px 8px;
+  width: 200px;
 }
 
-.input-textarea::placeholder {
-  color: var(--text-tertiary);
+.title-edit-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.send-btn,
-.stop-btn {
+.icon-btn-sm {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
   border: none;
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
-.send-btn {
+.icon-btn-sm:hover {
   background-color: var(--primary-color);
   color: white;
 }
 
-.send-btn:hover:not(:disabled) {
-  opacity: 0.9;
-}
-
-.send-btn:disabled {
-  background-color: var(--bg-tertiary);
-  color: var(--text-tertiary);
-  cursor: not-allowed;
-}
-
-.stop-btn {
+.icon-btn-sm.cancel:hover {
   background-color: #ef4444;
-  color: white;
 }
 
-.stop-btn:hover {
-  opacity: 0.9;
+.edit-title-btn {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
 }
 
-.input-footer {
-  display: flex;
-  justify-content: center;
-  margin-top: 8px;
+.message-count {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-left: 8px;
+  white-space: nowrap;
 }
 
-.input-footer .warning {
-  font-size: 12px;
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.token-tag {
+  background-color: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.verbose-tag {
+  background-color: rgba(239, 68, 68, 0.1);
   color: #ef4444;
 }
 
-.input-footer .info {
-  font-size: 12px;
+.think-tag {
+  background-color: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
+
+.auto-hide-tag {
+  background-color: rgba(236, 72, 153, 0.1);
+  color: #ec4899;
+}
+
+.mode-tag {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.image-tag {
+  background-color: rgba(249, 115, 22, 0.1);
+  color: #f97316;
+}
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background-color: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.icon-btn:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.toggle-header-btn {
+  margin-left: 4px;
+}
+
+.toggle-header-btn:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.chat-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.messages-container {
+  flex: 0 0 auto;
+  padding: 96px 40px 140px;
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.chat-input-area {
+  position: absolute;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 100;
+  pointer-events: none;
+  transition: all 0.3s ease;
+}
+
+.chat-input-area.hidden {
+  transform: translateY(110%);
+  opacity: 0;
+}
+
+.chat-input-area > * {
+  pointer-events: auto;
+}
+
+.show-input-btn {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  border: none;
+  color: white;
+  cursor: pointer;
+  z-index: 101;
+  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4);
+  transition: all 0.2s ease;
+}
+
+.show-input-btn:hover {
+  transform: translateX(-50%) scale(1.1);
+  box-shadow: 0 6px 24px rgba(6, 182, 212, 0.5);
+}
+
+.selected-images {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  max-width: 1200px;
+  width: 100%;
+  padding: 0 20px;
+}
+
+.image-preview {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1.5px solid rgba(var(--border-color-rgb, 200, 200, 200), 0.3);
+  background: rgba(var(--bg-primary-rgb, 255, 255, 255), 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.image-preview:hover {
+  transform: scale(1.05);
+  border-color: var(--primary-color);
+  box-shadow: 0 4px 16px rgba(6, 182, 212, 0.25);
+}
+
+.image-preview:hover .remove-image {
+  opacity: 1;
+}
+
+.image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remove-image {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  opacity: 0.7;
+}
+
+.remove-image:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.input-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 20px;
+  background: rgba(var(--bg-primary-rgb, 255, 255, 255), 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-color);
+  max-width: 1200px;
+  width: calc(100% - 40px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.input-container:focus-within {
+  border-color: var(--primary-color);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 0 0 3px rgba(6, 182, 212, 0.1);
+}
+
+.input-container .icon-btn {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+}
+
+.message-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 15px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  min-height: 36px;
+  max-height: 120px;
+  font-family: inherit;
+  padding: 8px 0;
+}
+
+.message-input::placeholder {
   color: var(--text-tertiary);
+  opacity: 0.7;
+}
+
+.send-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background-color: var(--primary-color);
+  border: none;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.send-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: scale(1.05);
+}
+
+.send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 768px) {
+  .messages-container {
+    padding: 16px 20px;
+  }
+  
+  .chat-header {
+    padding: 10px 16px;
+  }
+  
+  .input-container {
+    width: calc(100% - 32px);
+    padding: 10px 12px;
+  }
+  
+  .selected-images {
+    padding: 0 16px;
+  }
 }
 </style>

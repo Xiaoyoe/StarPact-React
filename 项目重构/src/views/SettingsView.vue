@@ -59,6 +59,7 @@ const closeConfirm = ref(true);
 const galleryDefaultLayout = ref<'grid' | 'waterfall' | 'list'>('grid');
 const splashScreenEnabled = ref(true);
 const splashScreenType = ref<'full' | 'minimal' | 'fade'>('full');
+const splashScreenUseWallpaper = ref(true);
 const sendOnEnter = ref(true);
 
 const QUOTE_INTERVAL_OPTIONS = [
@@ -101,6 +102,11 @@ watch(splashScreenEnabled, async (newValue) => {
   toast.success(newValue ? '启动动画已启用' : '启动动画已禁用');
 });
 
+watch(splashScreenUseWallpaper, async (newValue) => {
+  await saveSettings('splash_screen_use_wallpaper', newValue);
+  toast.success(newValue ? '启动动画将使用壁纸背景' : '启动动画将使用默认背景');
+});
+
 watch(dailyQuoteEnabled, async (newValue) => {
   await saveSettings('daily_quote_enabled', newValue);
   toast.success(newValue ? '每日一言已启用' : '每日一言已禁用');
@@ -128,46 +134,24 @@ const handleDailyQuoteIntervalChange = async (value: 10 | 3600 | 86400) => {
 };
 
 const handleAddWallpaper = async () => {
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.multiple = true;
-  
-  input.onchange = async (e: any) => {
-    const files = Array.from(e.target.files) as File[];
-    if (files.length > 0) {
-      let successCount = 0;
-      let firstWallpaper: any = null;
-      for (const file of files) {
-        const wallpaper = await wallpaperStore.addBackground(file);
-        if (wallpaper) {
-          successCount++;
-          if (!firstWallpaper) firstWallpaper = wallpaper;
-        }
-      }
-      if (successCount > 0) {
-        toast.success(`已添加 ${successCount} 张壁纸`);
-        if (firstWallpaper && !wallpaperStore.hasWallpaper) {
-          await wallpaperStore.selectBackground(firstWallpaper);
-          toast.success('壁纸已应用');
-        }
-      } else {
-        toast.error('添加壁纸失败');
-      }
+  const wallpaper = await wallpaperStore.addWallpaperFromFile();
+  if (wallpaper) {
+    toast.success(`已添加壁纸: ${wallpaper.name}`);
+    if (!wallpaperStore.hasWallpaper) {
+      wallpaperStore.selectWallpaper(wallpaper);
+      toast.success('壁纸已应用');
     }
-  };
-  
-  input.click();
+  }
 };
 
 const handleDeleteBackground = async (id: string) => {
-  await wallpaperStore.deleteBackground(id);
+  await wallpaperStore.deleteWallpaper(id);
   toast.success('壁纸已删除');
 };
 
 const handleClearAllWallpapers = async () => {
   if (confirm('确定要清空所有壁纸吗？')) {
-    await wallpaperStore.clearAllBackgrounds();
+    await wallpaperStore.clearAllWallpapers();
     toast.success('已清空所有壁纸');
   }
 };
@@ -177,12 +161,12 @@ const handleClearWallpaper = async () => {
   toast.success('已清除当前壁纸');
 };
 
-const handleWallpaperSelect = async (bg: any) => {
-  await wallpaperStore.selectBackground(bg);
+const handleWallpaperSelect = (bg: any) => {
+  wallpaperStore.selectWallpaper(bg);
 };
 
-const handleWallpaperDoubleClick = async (bg: any) => {
-  await wallpaperStore.applyBackground(bg);
+const handleWallpaperDoubleClick = (bg: any) => {
+  wallpaperStore.applyWallpaper(bg);
   toast.success('壁纸已应用');
 };
 
@@ -275,6 +259,9 @@ const loadSettings = async () => {
       }
       if (config.ui.splash_screen_type) {
         splashScreenType.value = config.ui.splash_screen_type;
+      }
+      if (config.ui.splash_screen_use_wallpaper !== undefined) {
+        splashScreenUseWallpaper.value = config.ui.splash_screen_use_wallpaper;
       }
     }
   } catch (error) {
@@ -398,9 +385,6 @@ onMounted(async () => {
                   </div>
                   <div class="info-details">
                     <span class="info-name">{{ wallpaperStore.previewWallpaperInfo.name }}</span>
-                    <span class="info-size" v-if="wallpaperStore.previewWallpaperInfo.size">
-                      {{ formatFileSize(wallpaperStore.previewWallpaperInfo.size) }}
-                    </span>
                   </div>
                 </div>
               </template>
@@ -462,20 +446,32 @@ onMounted(async () => {
               <div class="wallpapers-grid">
                 <template v-if="wallpaperStore.wallpaperCount > 0">
                   <div
-                    v-for="(bg, index) in wallpaperStore.customBackgrounds"
+                    v-for="(bg, index) in wallpaperStore.wallpapers"
                     :key="bg.id"
                     class="wallpaper-card"
                     :class="{ 
-                      active: wallpaperStore.selectedBackgroundId === bg.id,
-                      using: bg.is_active 
+                      active: wallpaperStore.selectedWallpaperId === bg.id,
+                      using: wallpaperStore.isActive(bg.id) 
                     }"
                     @click="handleWallpaperSelect(bg)"
                     @dblclick="handleWallpaperDoubleClick(bg)"
                   >
                     <div class="card-preview">
-                      <img :src="bg.data" :alt="bg.name" />
+                      <img 
+                        :src="bg.thumbnailUrl || wallpaperStore.getThumbnailUrl(bg.path)" 
+                        :alt="bg.name"
+                        loading="lazy"
+                        decoding="async"
+                      />
                       <div class="card-overlay">
                         <span class="card-index">{{ index + 1 }}</span>
+                        <span 
+                          v-if="wallpaperStore.isActive(bg.id)" 
+                          class="card-status-badge using"
+                        >
+                          <Check :size="10" />
+                          使用中
+                        </span>
                         <button
                           @click.stop="handleDeleteBackground(bg.id)"
                           class="card-delete"
@@ -488,17 +484,10 @@ onMounted(async () => {
                       <p class="card-name">{{ bg.name }}</p>
                       <div class="card-badges">
                         <span 
-                          v-if="wallpaperStore.doubleClickToChange && wallpaperStore.selectedBackgroundId === bg.id && !bg.is_active" 
+                          v-if="wallpaperStore.doubleClickToChange && wallpaperStore.selectedWallpaperId === bg.id && !wallpaperStore.isActive(bg.id)" 
                           class="card-badge preview"
                         >
                           预览中
-                        </span>
-                        <span 
-                          v-if="bg.is_active" 
-                          class="card-badge using"
-                        >
-                          <Check :size="10" />
-                          使用中
                         </span>
                       </div>
                     </div>
@@ -512,6 +501,58 @@ onMounted(async () => {
                   <p class="empty-desc">点击上方按钮上传壁纸</p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="setting-card">
+          <div class="setting-header">
+            <Sparkles :size="16" class="setting-icon" />
+            <div class="setting-title">启动动画</div>
+          </div>
+          <p class="setting-desc">程序启动时显示动画效果</p>
+          <div class="toggle-row">
+            <button
+              class="toggle-button"
+              :class="{ active: splashScreenEnabled }"
+              @click="splashScreenEnabled = !splashScreenEnabled"
+            >
+              <div class="toggle-slider" :class="{ active: splashScreenEnabled }"></div>
+            </button>
+          </div>
+          <div v-if="splashScreenEnabled" class="splash-options">
+            <p class="splash-label">选择动画样式：</p>
+            <div class="setting-options-grid">
+              <button
+                v-for="option in [
+                  { value: 'full' as const, label: '完整动画', desc: '精美启动画面' },
+                  { value: 'minimal' as const, label: '简约动画', desc: '加载指示器' },
+                  { value: 'fade' as const, label: '淡入淡出', desc: '简单过渡' }
+                ]"
+                :key="option.value"
+                class="option-button-small"
+                :class="{ active: splashScreenType === option.value }"
+                @click="handleSplashScreenTypeChange(option.value)"
+              >
+                <div class="option-label">{{ option.label }}</div>
+                <div class="option-desc">{{ option.desc }}</div>
+              </button>
+            </div>
+            
+            <div class="wallpaper-options" style="margin-top: 16px;">
+              <div class="option-item">
+                <span class="option-label">使用壁纸作为动画背景</span>
+                <button
+                  class="toggle-button"
+                  :class="{ active: splashScreenUseWallpaper }"
+                  @click="splashScreenUseWallpaper = !splashScreenUseWallpaper"
+                >
+                  <div class="toggle-slider" :class="{ active: splashScreenUseWallpaper }"></div>
+                </button>
+              </div>
+              <p class="option-desc" style="margin-top: 8px; font-size: 12px; color: var(--text-tertiary);">
+                开启后，启动动画将使用当前设置的壁纸作为背景（如果已设置壁纸）
+              </p>
             </div>
           </div>
         </div>
@@ -675,42 +716,6 @@ onMounted(async () => {
             >
               <div class="toggle-slider" :class="{ active: sendOnEnter }"></div>
             </button>
-          </div>
-        </div>
-
-        <div class="setting-card">
-          <div class="setting-header">
-            <Sparkles :size="16" class="setting-icon" />
-            <div class="setting-title">启动动画</div>
-          </div>
-          <p class="setting-desc">程序启动时显示动画效果</p>
-          <div class="toggle-row">
-            <button
-              class="toggle-button"
-              :class="{ active: splashScreenEnabled }"
-              @click="splashScreenEnabled = !splashScreenEnabled"
-            >
-              <div class="toggle-slider" :class="{ active: splashScreenEnabled }"></div>
-            </button>
-          </div>
-          <div v-if="splashScreenEnabled" class="splash-options">
-            <p class="splash-label">选择动画样式：</p>
-            <div class="setting-options-grid">
-              <button
-                v-for="option in [
-                  { value: 'full' as const, label: '完整动画', desc: '精美启动画面' },
-                  { value: 'minimal' as const, label: '简约动画', desc: '加载指示器' },
-                  { value: 'fade' as const, label: '淡入淡出', desc: '简单过渡' }
-                ]"
-                :key="option.value"
-                class="option-button-small"
-                :class="{ active: splashScreenType === option.value }"
-                @click="handleSplashScreenTypeChange(option.value)"
-              >
-                <div class="option-label">{{ option.label }}</div>
-                <div class="option-desc">{{ option.desc }}</div>
-              </button>
-            </div>
           </div>
         </div>
       </div>
@@ -886,6 +891,26 @@ onMounted(async () => {
   flex: 1;
   overflow-y: auto;
   padding: 32px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.settings-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+.settings-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-content::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 3px;
+  transition: background-color 0.2s;
+}
+
+.settings-content::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-tertiary);
 }
 
 .tab-content {
@@ -895,20 +920,21 @@ onMounted(async () => {
 
 .tab-content.wallpaper-tab {
   max-width: 100%;
-  height: 100%;
+  height: auto;
   display: flex;
   flex-direction: column;
+  gap: 24px;
 }
 
 .section {
-  margin-bottom: 32px;
+  margin-bottom: 40px;
 }
 
 .section-title {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -917,7 +943,8 @@ onMounted(async () => {
 .section-desc {
   font-size: 14px;
   color: var(--text-tertiary);
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  line-height: 1.5;
 }
 
 .inline-icon {
@@ -925,42 +952,42 @@ onMounted(async () => {
 }
 
 .theme-category {
-  margin-bottom: 24px;
+  margin-bottom: 32px;
 }
 
 .category-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 16px;
 }
 
 .category-line {
-  width: 32px;
+  width: 36px;
   height: 4px;
   background-color: var(--primary-color);
   border-radius: 2px;
 }
 
 .category-name {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .category-desc {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-tertiary);
 }
 
 .theme-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  gap: 16px;
 }
 
 .theme-card {
-  padding: 16px;
+  padding: 18px;
   border-radius: 12px;
   border: 2px solid var(--border-color);
   background-color: var(--bg-secondary);
@@ -1057,8 +1084,8 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: 1fr 380px;
   gap: 24px;
-  height: 100%;
-  min-height: 0;
+  height: auto;
+  min-height: 600px;
 }
 
 .wallpaper-preview {
@@ -1068,15 +1095,15 @@ onMounted(async () => {
   border: 1px solid var(--border-color);
   border-radius: 16px;
   overflow: hidden;
-  min-height: 0;
+  min-height: 500px;
 }
 
 .preview-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 16px 20px;
+  gap: 12px;
+  padding: 18px 24px;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-tertiary);
 }
@@ -1084,8 +1111,8 @@ onMounted(async () => {
 .preview-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 10px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -1137,24 +1164,24 @@ onMounted(async () => {
 
 .preview-info {
   position: absolute;
-  bottom: 24px;
-  left: 24px;
+  bottom: 16px;
+  left: 16px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background-color: rgba(0, 0, 0, 0.75);
-  border-radius: 12px;
-  backdrop-filter: blur(12px);
+  gap: 8px;
+  padding: 8px 12px;
+  background-color: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  backdrop-filter: blur(8px);
 }
 
 .info-icon {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 6px;
   background-color: rgba(255, 255, 255, 0.1);
   color: white;
 }
@@ -1162,18 +1189,22 @@ onMounted(async () => {
 .info-details {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .info-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: white;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .info-size {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .preview-placeholder {
@@ -1217,7 +1248,7 @@ onMounted(async () => {
 }
 
 .list-header {
-  padding: 20px;
+  padding: 20px 24px;
   border-bottom: 1px solid var(--border-color);
   background-color: var(--bg-tertiary);
 }
@@ -1226,17 +1257,17 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .list-title {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
 }
 
 .list-header h3 {
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -1251,8 +1282,9 @@ onMounted(async () => {
 }
 
 .list-desc {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-tertiary);
+  line-height: 1.5;
 }
 
 .list-actions {
@@ -1293,7 +1325,7 @@ onMounted(async () => {
 }
 
 .wallpaper-options {
-  padding: 12px 20px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -1301,10 +1333,12 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
 }
 
 .option-label {
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text-secondary);
 }
 
@@ -1351,10 +1385,10 @@ onMounted(async () => {
 .wallpapers-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 16px 20px;
-  font-size: 13px;
-  font-weight: 500;
+  gap: 10px;
+  padding: 18px 24px;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-color);
 }
@@ -1362,11 +1396,31 @@ onMounted(async () => {
 .wallpapers-grid {
   flex: 1;
   overflow-y: auto;
-  padding: 16px;
+  padding: 20px;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
+  gap: 16px;
   align-content: start;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.wallpapers-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.wallpapers-grid::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.wallpapers-grid::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 3px;
+  transition: background-color 0.2s;
+}
+
+.wallpapers-grid::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-tertiary);
 }
 
 .wallpaper-card {
@@ -1408,13 +1462,19 @@ onMounted(async () => {
 .card-overlay {
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent);
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.4), transparent 40%);
   opacity: 0;
   transition: opacity 0.2s;
   display: flex;
+  flex-direction: column;
   align-items: flex-start;
   justify-content: space-between;
   padding: 8px;
+}
+
+.wallpaper-card.using .card-overlay {
+  opacity: 1;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent 50%);
 }
 
 .wallpaper-card:hover .card-overlay {
@@ -1430,6 +1490,21 @@ onMounted(async () => {
   font-weight: 600;
 }
 
+.card-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.card-status-badge.using {
+  background-color: rgba(16, 185, 129, 0.9);
+  color: white;
+}
+
 .card-delete {
   width: 24px;
   height: 24px;
@@ -1442,6 +1517,8 @@ onMounted(async () => {
   border: none;
   cursor: pointer;
   transition: all 0.2s;
+  align-self: flex-end;
+  margin-left: auto;
 }
 
 .card-delete:hover {
@@ -1451,6 +1528,10 @@ onMounted(async () => {
 
 .card-info {
   padding: 10px 12px;
+  min-height: 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .card-name {
@@ -1460,31 +1541,34 @@ onMounted(async () => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .card-badges {
   display: flex;
   gap: 6px;
+  min-height: 20px;
+  align-items: center;
 }
 
 .card-badge {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: 6px;
+  gap: 3px;
+  padding: 2px 6px;
+  border-radius: 4px;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .card-badge.preview {
-  background-color: rgba(59, 130, 246, 0.15);
+  background-color: rgba(59, 130, 246, 0.12);
   color: #60a5fa;
 }
 
 .card-badge.using {
-  background-color: rgba(16, 185, 129, 0.15);
+  background-color: rgba(16, 185, 129, 0.12);
   color: #34d399;
 }
 
@@ -1665,15 +1749,15 @@ onMounted(async () => {
   background-color: var(--bg-secondary);
   border: 1px solid var(--border-light);
   border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
 }
 
 .setting-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .setting-icon {
@@ -1681,15 +1765,16 @@ onMounted(async () => {
 }
 
 .setting-title {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 15px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .setting-desc {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-tertiary);
-  margin-bottom: 12px;
+  margin-bottom: 16px;
+  line-height: 1.5;
 }
 
 .setting-options {
@@ -1761,13 +1846,14 @@ onMounted(async () => {
 .toggle-row {
   display: flex;
   justify-content: flex-end;
+  padding-top: 4px;
 }
 
 .toggle-button {
   position: relative;
-  width: 44px;
-  height: 24px;
-  border-radius: 12px;
+  width: 48px;
+  height: 26px;
+  border-radius: 13px;
   background-color: var(--bg-tertiary);
   border: none;
   cursor: pointer;
@@ -1784,8 +1870,8 @@ onMounted(async () => {
 
 .toggle-slider {
   position: absolute;
-  top: 2px;
-  left: 2px;
+  top: 3px;
+  left: 3px;
   width: 20px;
   height: 20px;
   border-radius: 50%;
@@ -1795,7 +1881,7 @@ onMounted(async () => {
 }
 
 .toggle-slider.active {
-  left: 22px;
+  left: 25px;
 }
 
 .interval-options {
@@ -1838,13 +1924,16 @@ onMounted(async () => {
 }
 
 .splash-options {
-  margin-top: 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
 }
 
 .splash-label {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .section-header {

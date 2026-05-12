@@ -1,43 +1,58 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
-export interface Wallpaper {
+export interface WallpaperItem {
   id: string;
   name: string;
-  file_path: string;
-  size: number;
+  path: string;
   added_at: number;
-  is_active: boolean;
+  thumbnailUrl?: string;
 }
 
 export const useWallpaperStore = defineStore('wallpaper', () => {
-  const customBackgrounds = ref<Wallpaper[]>([]);
+  const wallpapers = ref<WallpaperItem[]>([]);
   const currentWallpaper = ref<string>('');
   const currentWallpaperId = ref<string | null>(null);
-  const selectedBackgroundId = ref<string | null>(null);
+  const selectedWallpaperId = ref<string | null>(null);
   const previewWallpaper = ref<string>('');
-  const previewWallpaperInfo = ref<{ name: string; size?: number; path?: string } | null>(null);
+  const previewWallpaperInfo = ref<{ name: string; path?: string } | null>(null);
   const doubleClickToChange = ref(false);
   const isLoading = ref(false);
+  const thumbnailCache = ref<Map<string, string>>(new Map());
 
   const hasWallpaper = computed(() => !!currentWallpaper.value);
-  const wallpaperCount = computed(() => customBackgrounds.value.length);
+  const wallpaperCount = computed(() => wallpapers.value.length);
 
-  const loadBackgrounds = async () => {
+  function getThumbnailUrl(path: string): string {
+    if (thumbnailCache.value.has(path)) {
+      return thumbnailCache.value.get(path)!;
+    }
+    
+    try {
+      const url = convertFileSrc(path);
+      thumbnailCache.value.set(path, url);
+      return url;
+    } catch {
+      return '';
+    }
+  }
+
+  async function loadBackgrounds(): Promise<void> {
     isLoading.value = true;
     try {
-      const wallpapers = await invoke<Wallpaper[]>('get_wallpapers');
-      customBackgrounds.value = wallpapers;
-      console.log('Loaded wallpapers:', wallpapers);
+      const items = await invoke<WallpaperItem[]>('get_wallpapers');
       
-      const active = await invoke<Wallpaper | null>('get_active_wallpaper');
-      console.log('Active wallpaper:', active);
+      wallpapers.value = items.map(item => ({
+        ...item,
+        thumbnailUrl: getThumbnailUrl(item.path),
+      }));
+      
+      const active = await invoke<WallpaperItem | null>('get_active_wallpaper');
       if (active) {
         currentWallpaperId.value = active.id;
-        const base64 = await invoke<string>('read_wallpaper_file', { id: active.id });
-        currentWallpaper.value = `data:image/png;base64,${base64}`;
-        console.log('Current wallpaper set:', currentWallpaper.value.substring(0, 50) + '...');
+        currentWallpaper.value = getThumbnailUrl(active.path);
       }
       
       const doubleClickSetting = await invoke<string | null>('get_wallpaper_setting', { key: 'doubleClickToChange' });
@@ -45,156 +60,178 @@ export const useWallpaperStore = defineStore('wallpaper', () => {
         doubleClickToChange.value = doubleClickSetting === 'true';
       }
     } catch (error) {
-      console.error('Failed to load backgrounds:', error);
+      console.error('Failed to load wallpapers:', error);
     } finally {
       isLoading.value = false;
     }
-  };
+  }
 
-  const setCurrentWallpaper = async (path: string, id: string | null = null) => {
-    console.log('Setting current wallpaper:', id, path ? path.substring(0, 50) + '...' : 'empty');
+  async function setCurrentWallpaper(path: string, id: string | null = null): Promise<void> {
     currentWallpaper.value = path;
     currentWallpaperId.value = id;
     
     try {
       if (id) {
         await invoke('set_active_wallpaper', { id });
-        console.log('Active wallpaper saved to database:', id);
       } else {
         await invoke('clear_active_wallpaper');
-        console.log('Active wallpaper cleared');
       }
     } catch (error) {
       console.error('Failed to save wallpaper setting:', error);
     }
-  };
+  }
 
-  const setDoubleClickToChange = async (value: boolean) => {
+  async function setDoubleClickToChange(value: boolean): Promise<void> {
     doubleClickToChange.value = value;
     try {
       await invoke('set_wallpaper_setting', { key: 'doubleClickToChange', value: String(value) });
     } catch (error) {
       console.error('Failed to save double click setting:', error);
     }
-  };
+  }
 
-  const addBackground = async (file: File): Promise<Wallpaper | null> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        const dataUrl = e.target?.result as string;
-        const base64 = dataUrl.split(',')[1];
+  async function addWallpaperFromFile(): Promise<WallpaperItem | null> {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: 'Image', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'] }],
+      });
+      
+      if (selected) {
+        const filePath = typeof selected === 'string' ? selected : (selected as any).path;
+        const fileName = filePath.split(/[/\\]/).pop() || 'wallpaper';
+        const name = fileName.replace(/\.[^/.]+$/, '');
         
-        try {
-          const name = file.name.replace(/\.[^/.]+$/, '');
-          const wallpaper = await invoke<Wallpaper>('add_wallpaper', { 
-            name, 
-            fileData: base64 
-          });
-          customBackgrounds.value.push(wallpaper);
-          resolve(wallpaper);
-        } catch (error) {
-          console.error('Failed to save background:', error);
-          resolve(null);
-        }
-      };
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(file);
-    });
-  };
+        const wallpaper = await invoke<WallpaperItem>('add_wallpaper_from_path', {
+          filePath,
+          name,
+        });
+        
+        const wallpaperWithUrl = {
+          ...wallpaper,
+          thumbnailUrl: getThumbnailUrl(wallpaper.path),
+        };
+        
+        wallpapers.value.push(wallpaperWithUrl);
+        return wallpaperWithUrl;
+      }
+    } catch (error) {
+      console.error('Failed to add wallpaper:', error);
+    }
+    return null;
+  }
 
-  const deleteBackground = async (id: string) => {
-    const index = customBackgrounds.value.findIndex(bg => bg.id === id);
+  async function addWallpaperFromUrl(url: string, name: string): Promise<WallpaperItem | null> {
+    try {
+      const wallpaper = await invoke<WallpaperItem>('add_wallpaper_from_url', { url, name });
+      const wallpaperWithUrl = {
+        ...wallpaper,
+        thumbnailUrl: url,
+      };
+      wallpapers.value.push(wallpaperWithUrl);
+      return wallpaperWithUrl;
+    } catch (error) {
+      console.error('Failed to add wallpaper from URL:', error);
+      return null;
+    }
+  }
+
+  async function deleteWallpaper(id: string): Promise<void> {
+    const index = wallpapers.value.findIndex(w => w.id === id);
     if (index >= 0) {
       try {
+        const wallpaper = wallpapers.value[index];
         await invoke('delete_wallpaper', { id });
-        customBackgrounds.value.splice(index, 1);
+        wallpapers.value.splice(index, 1);
         
-        if (selectedBackgroundId.value === id) {
-          selectedBackgroundId.value = null;
+        if (wallpaper.path) {
+          thumbnailCache.value.delete(wallpaper.path);
+        }
+        
+        if (selectedWallpaperId.value === id) {
+          selectedWallpaperId.value = null;
           if (currentWallpaperId.value === id) {
             await setCurrentWallpaper('', null);
           }
         }
       } catch (error) {
-        console.error('Failed to delete background:', error);
+        console.error('Failed to delete wallpaper:', error);
       }
     }
-  };
+  }
 
-  const clearAllBackgrounds = async () => {
+  async function clearAllWallpapers(): Promise<void> {
     try {
       await invoke('clear_all_wallpapers');
-      customBackgrounds.value = [];
+      wallpapers.value = [];
+      thumbnailCache.value.clear();
       await setCurrentWallpaper('', null);
-      selectedBackgroundId.value = null;
+      selectedWallpaperId.value = null;
       previewWallpaper.value = '';
       previewWallpaperInfo.value = null;
     } catch (error) {
-      console.error('Failed to clear backgrounds:', error);
+      console.error('Failed to clear wallpapers:', error);
     }
-  };
+  }
 
-  const selectBackground = async (bg: Wallpaper) => {
-    selectedBackgroundId.value = bg.id;
-    previewWallpaperInfo.value = { name: bg.name, size: bg.size, path: bg.file_path };
+  function selectWallpaper(wallpaper: WallpaperItem): void {
+    selectedWallpaperId.value = wallpaper.id;
+    previewWallpaperInfo.value = { name: wallpaper.name, path: wallpaper.path };
+    previewWallpaper.value = wallpaper.thumbnailUrl || getThumbnailUrl(wallpaper.path);
     
-    try {
-      const base64 = await invoke<string>('read_wallpaper_file', { id: bg.id });
-      previewWallpaper.value = `data:image/png;base64,${base64}`;
-      
-      if (!doubleClickToChange.value) {
-        await setCurrentWallpaper(previewWallpaper.value, bg.id);
-      }
-    } catch (error) {
-      console.error('Failed to read wallpaper:', error);
+    if (!doubleClickToChange.value) {
+      setCurrentWallpaper(previewWallpaper.value, wallpaper.id);
     }
-  };
+  }
 
-  const applyBackground = async (bg: Wallpaper) => {
-    selectedBackgroundId.value = bg.id;
-    previewWallpaperInfo.value = { name: bg.name, size: bg.size, path: bg.file_path };
-    
-    try {
-      const base64 = await invoke<string>('read_wallpaper_file', { id: bg.id });
-      previewWallpaper.value = `data:image/png;base64,${base64}`;
-      await setCurrentWallpaper(previewWallpaper.value, bg.id);
-    } catch (error) {
-      console.error('Failed to apply wallpaper:', error);
-    }
-  };
+  function applyWallpaper(wallpaper: WallpaperItem): void {
+    selectedWallpaperId.value = wallpaper.id;
+    previewWallpaperInfo.value = { name: wallpaper.name, path: wallpaper.path };
+    previewWallpaper.value = wallpaper.thumbnailUrl || getThumbnailUrl(wallpaper.path);
+    setCurrentWallpaper(previewWallpaper.value, wallpaper.id);
+  }
 
-  const clearWallpaper = async () => {
+  async function clearWallpaper(): Promise<void> {
     await setCurrentWallpaper('', null);
-    selectedBackgroundId.value = null;
+    selectedWallpaperId.value = null;
     previewWallpaper.value = '';
     previewWallpaperInfo.value = null;
-  };
+  }
 
-  const getBackgroundById = (id: string): Wallpaper | undefined => {
-    return customBackgrounds.value.find(bg => bg.id === id);
-  };
+  function getWallpaperById(id: string): WallpaperItem | undefined {
+    return wallpapers.value.find(w => w.id === id);
+  }
+
+  function isActive(id: string): boolean {
+    return currentWallpaperId.value === id;
+  }
 
   return {
-    customBackgrounds,
+    wallpapers,
     currentWallpaper,
     currentWallpaperId,
-    selectedBackgroundId,
+    selectedWallpaperId,
     previewWallpaper,
     previewWallpaperInfo,
     doubleClickToChange,
     isLoading,
     hasWallpaper,
     wallpaperCount,
+    thumbnailCache,
+    getThumbnailUrl,
     loadBackgrounds,
     setCurrentWallpaper,
     setDoubleClickToChange,
-    addBackground,
-    deleteBackground,
-    clearAllBackgrounds,
-    selectBackground,
-    applyBackground,
+    addWallpaperFromFile,
+    addWallpaperFromUrl,
+    deleteWallpaper,
+    clearAllWallpapers,
+    selectWallpaper,
+    applyWallpaper,
     clearWallpaper,
-    getBackgroundById,
+    getWallpaperById,
+    isActive,
   };
 });

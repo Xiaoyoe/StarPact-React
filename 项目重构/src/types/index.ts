@@ -13,6 +13,27 @@ export type ThemeType =
   | 'deep-sea-blue' 
   | 'amber-gold';
 
+export type LocalModelProvider = 'lmstudio' | 'ollama' | 'custom';
+
+export interface LocalServiceConfig {
+  provider: LocalModelProvider;
+  host: string;
+  port: number;
+  baseUrl: string;
+}
+
+export interface LMStudioModel {
+  id: string;
+  object: string;
+  owned_by?: string;
+}
+
+export interface LMStudioStatus {
+  running: boolean;
+  version?: string;
+  models: LMStudioModel[];
+}
+
 export interface ModelConfig {
   id: string;
   name: string;
@@ -30,6 +51,10 @@ export interface ModelConfig {
   createdAt: number;
   presets: ModelPreset[];
   stats: ModelStats;
+  localProvider?: LocalModelProvider;
+  localServiceConfig?: LocalServiceConfig;
+  supportsVision?: boolean;
+  supportsStreaming?: boolean;
 }
 
 export interface ModelPreset {

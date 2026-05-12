@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { Bot, Sparkles } from 'lucide-vue-next';
+import { useWallpaperStore } from '@/stores';
+import { invoke } from '@tauri-apps/api/core';
 
 interface Props {
   enabled: boolean;
@@ -16,6 +18,9 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'complete'): void;
 }>();
+
+const wallpaperStore = useWallpaperStore();
+const useWallpaper = ref(true);
 
 const quotes = [
   '每一次对话，都是思想的碰撞',
@@ -34,10 +39,33 @@ const displayProgress = computed(() => {
   return Math.max(props.progress, Math.round(progressRatio * 100));
 });
 
-onMounted(() => {
+const backgroundStyle = computed(() => {
+  if (useWallpaper.value && wallpaperStore.currentWallpaper) {
+    return {
+      backgroundImage: `url(${wallpaperStore.currentWallpaper})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+    };
+  }
+  return {
+    background: 'linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%)',
+  };
+});
+
+onMounted(async () => {
   if (!props.enabled) {
     emit('complete');
     return;
+  }
+  
+  try {
+    const config = await invoke<any>('storage_get_config');
+    if (config.ui?.splash_screen_use_wallpaper !== undefined) {
+      useWallpaper.value = config.ui.splash_screen_use_wallpaper;
+    }
+  } catch (error) {
+    console.error('Failed to load splash screen wallpaper setting:', error);
   }
   
   setTimeout(() => {
@@ -67,7 +95,7 @@ watch([() => props.progress, canClose], ([newProgress, newCanClose]) => {
     <div
       v-if="enabled"
       class="fixed inset-0 z-[9999] flex flex-col items-center justify-center"
-      style="background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-primary) 100%)"
+      :style="backgroundStyle"
     >
       <div class="absolute inset-0 overflow-hidden">
         <div
@@ -155,10 +183,6 @@ watch([() => props.progress, canClose], ([newProgress, newCanClose]) => {
         </p>
       </div>
 
-      <div
-        class="absolute inset-0 pointer-events-none animate-fade-in-delayed"
-        style="opacity: 0.1; background-image: radial-gradient(circle at center, var(--primary-color) 1px, transparent 1px); background-size: 30px 30px"
-      />
     </div>
   </Transition>
 </template>
