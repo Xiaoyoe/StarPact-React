@@ -134,16 +134,32 @@ pub async fn start_lan_server(port: u16) -> Result<LanServerInfo, String> {
                             }
                         }
                         
-                        match tokio::fs::read(path).await {
-                            Ok(bytes) => {
-                                let mut response = Response::new(Body::from(bytes));
-                                *response.status_mut() = StatusCode::OK;
-                                response.headers_mut().insert(header::CONTENT_TYPE, mime.parse().unwrap());
-                                response.headers_mut().insert(header::CONTENT_LENGTH, file_size.to_string().parse().unwrap());
-                                response.headers_mut().insert(header::ACCEPT_RANGES, "bytes".parse().unwrap());
-                                response.into_response()
+                        let transfer_mode = crate::services::storage::config::get_lan_transfer_mode();
+                        
+                        if transfer_mode == "streaming" {
+                            use tokio_util::io::ReaderStream;
+                            
+                            let stream = ReaderStream::new(file);
+                            let body = Body::from_stream(stream);
+                            
+                            let mut response = Response::new(body);
+                            *response.status_mut() = StatusCode::OK;
+                            response.headers_mut().insert(header::CONTENT_TYPE, mime.parse().unwrap());
+                            response.headers_mut().insert(header::CONTENT_LENGTH, file_size.to_string().parse().unwrap());
+                            response.headers_mut().insert(header::ACCEPT_RANGES, "bytes".parse().unwrap());
+                            response.into_response()
+                        } else {
+                            match tokio::fs::read(path).await {
+                                Ok(bytes) => {
+                                    let mut response = Response::new(Body::from(bytes));
+                                    *response.status_mut() = StatusCode::OK;
+                                    response.headers_mut().insert(header::CONTENT_TYPE, mime.parse().unwrap());
+                                    response.headers_mut().insert(header::CONTENT_LENGTH, file_size.to_string().parse().unwrap());
+                                    response.headers_mut().insert(header::ACCEPT_RANGES, "bytes".parse().unwrap());
+                                    response.into_response()
+                                }
+                                Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Read failed").into_response()
                             }
-                            Err(_) => (StatusCode::INTERNAL_SERVER_ERROR, "Read failed").into_response()
                         }
                     }
                     Err(_) => (StatusCode::NOT_FOUND, "Video not found").into_response(),

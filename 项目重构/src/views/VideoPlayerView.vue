@@ -1442,12 +1442,15 @@ watch(currentIndex, async () => {
     <Modal
       v-model:visible="jsonModalVisible"
       :title="`播放列表管理 (${jsonTotalCount} 条)`"
-      width="900px"
+      width="950px"
     >
       <div class="json-modal-wrapper">
         <div class="json-left-panel">
           <div class="panel-header">
-            <div class="panel-title">播放列表</div>
+            <div class="panel-title">
+              <List :size="16" />
+              <span>播放列表</span>
+            </div>
             <div class="panel-actions">
               <label class="select-all-checkbox">
                 <input
@@ -1459,37 +1462,41 @@ watch(currentIndex, async () => {
               </label>
             </div>
           </div>
-          <div class="playlist-list">
+          <div class="json-playlist-list">
             <div
               v-for="(item, index) in jsonAllData"
               :key="item.id || index"
-              class="playlist-item"
+              class="json-playlist-item"
               :class="{ selected: selectedPlaylists.has(item.id || item.name) }"
               @click="togglePlaylistSelection(item.id || item.name)"
             >
               <input
                 type="checkbox"
                 :checked="selectedPlaylists.has(item.id || item.name)"
-                class="item-checkbox"
+                class="json-item-checkbox"
                 @click.stop
               />
-              <div class="item-info">
-                <div class="item-name">{{ item.name || '未命名' }}</div>
-                <div class="item-meta">
-                  <span>{{ item.videos?.length || 0 }} 个视频</span>
-                  <span v-if="item.createdAt">{{ new Date(item.createdAt).toLocaleDateString() }}</span>
+              <div class="json-item-icon">
+                <List :size="14" />
+              </div>
+              <div class="json-item-info">
+                <div class="json-item-name">{{ item.name || '未命名' }}</div>
+                <div class="json-item-meta">
+                  <span class="meta-videos">{{ item.videos?.length || 0 }} 个视频</span>
+                  <span v-if="item.createdAt" class="meta-date">{{ new Date(item.createdAt).toLocaleDateString() }}</span>
                 </div>
               </div>
               <button
-                class="item-delete-btn"
+                class="json-item-delete-btn"
                 @click.stop="deletePlaylist(item.id || item.name, item.name || '未命名')"
                 title="删除"
               >
                 <Trash2 :size="14" />
               </button>
             </div>
-            <div v-if="jsonAllData.length === 0" class="empty-list">
-              暂无保存的播放列表
+            <div v-if="jsonAllData.length === 0" class="json-empty-list">
+              <FileJson :size="32" />
+              <p>暂无保存的播放列表</p>
             </div>
           </div>
         </div>
@@ -1501,6 +1508,7 @@ watch(currentIndex, async () => {
                 :class="{ active: jsonViewMode === 'list' }"
                 @click="jsonViewMode = 'list'"
               >
+                <List :size="14" />
                 详情
               </button>
               <button
@@ -1508,18 +1516,28 @@ watch(currentIndex, async () => {
                 :class="{ active: jsonViewMode === 'json' }"
                 @click="jsonViewMode = 'json'"
               >
+                <FileJson :size="14" />
                 JSON
               </button>
             </div>
           </div>
           <div v-if="jsonViewMode === 'list'" class="json-detail-panel">
             <div v-if="selectedPlaylists.size === 1" class="detail-content">
-              <div class="detail-title">
-                {{ (() => {
-                  const id = Array.from(selectedPlaylists)[0];
-                  const item = jsonAllData.find(p => (p.id || p.name) === id);
-                  return item?.name || '未命名';
-                })()}}
+              <div class="detail-header">
+                <div class="detail-title">
+                  {{ (() => {
+                    const id = Array.from(selectedPlaylists)[0];
+                    const item = jsonAllData.find(p => (p.id || p.name) === id);
+                    return item?.name || '未命名';
+                  })()}}
+                </div>
+                <div class="detail-stats">
+                  {{ (() => {
+                    const id = Array.from(selectedPlaylists)[0];
+                    const item = jsonAllData.find(p => (p.id || p.name) === id);
+                    return item?.videos?.length || 0;
+                  })() }} 个视频
+                </div>
               </div>
               <div class="detail-list">
                 <div
@@ -1531,16 +1549,29 @@ watch(currentIndex, async () => {
                   :key="idx"
                   class="detail-video-item"
                 >
-                  <div class="detail-video-name">{{ video.name }}</div>
+                  <div class="video-item-index">{{ idx + 1 }}</div>
+                  <div class="video-item-info">
+                    <div class="video-item-name">{{ video.name }}</div>
+                    <div class="video-item-meta">
+                      <span v-if="video.duration">{{ formatTime(video.duration) }}</span>
+                      <span v-if="video.size">{{ formatFileSize(video.size) }}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
             <div v-else class="detail-placeholder">
-              <FileJson :size="40" />
+              <FileJson :size="48" />
               <p>选择一个播放列表查看详情</p>
+              <span class="placeholder-hint">点击左侧列表项查看视频详情</span>
             </div>
           </div>
-          <pre v-else class="json-content">{{ jsonContent }}</pre>
+          <div v-else class="json-content-wrapper">
+            <div class="json-content-header">
+              <span class="json-count">显示 {{ Math.min(jsonDisplayCount, jsonTotalCount) }} / {{ jsonTotalCount }} 条</span>
+            </div>
+            <pre class="json-content">{{ jsonContent }}</pre>
+          </div>
         </div>
       </div>
       
@@ -2824,19 +2855,22 @@ watch(currentIndex, async () => {
 
 .json-modal-wrapper {
   display: flex;
-  gap: 1px;
-  background-color: var(--border-color);
+  gap: 0;
+  background-color: var(--bg-tertiary);
   border-radius: 12px;
   overflow: hidden;
-  max-height: 65vh;
+  max-height: 70vh;
+  min-height: 500px;
+  border: 1px solid var(--border-color);
 }
 
 .json-left-panel {
-  width: 360px;
-  background-color: var(--bg-tertiary);
+  width: 340px;
+  background-color: var(--bg-secondary);
   display: flex;
   flex-direction: column;
   border-right: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .json-right-panel {
@@ -2845,22 +2879,31 @@ watch(currentIndex, async () => {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  overflow: hidden;
 }
 
 .panel-header {
-  padding: 12px 16px;
-  background-color: var(--bg-secondary);
+  padding: 14px 16px;
+  background-color: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.panel-title svg {
+  color: var(--primary-color);
 }
 
 .panel-actions {
@@ -2876,66 +2919,109 @@ watch(currentIndex, async () => {
   cursor: pointer;
   font-size: 12px;
   color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.select-all-checkbox:hover {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
 }
 
 .select-all-checkbox input {
   cursor: pointer;
+  accent-color: var(--primary-color);
 }
 
-.playlist-list {
+.json-playlist-list {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: 12px;
 }
 
-.playlist-item {
+.json-playlist-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 12px;
+  border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s ease;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  background-color: var(--bg-tertiary);
+  border: 1px solid transparent;
 }
 
-.playlist-item:hover {
-  background-color: var(--bg-secondary);
+.json-playlist-item:hover {
+  background-color: var(--bg-primary);
+  border-color: var(--border-color);
+  transform: translateX(2px);
 }
 
-.playlist-item.selected {
-  background-color: rgba(var(--primary-color-rgb, 102, 126, 234), 0.15);
-  border: 1px solid rgba(var(--primary-color-rgb, 102, 126, 234), 0.3);
+.json-playlist-item.selected {
+  background-color: rgba(var(--primary-color-rgb, 102, 126, 234), 0.12);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 1px var(--primary-color);
 }
 
-.item-checkbox {
+.json-item-checkbox {
   cursor: pointer;
+  flex-shrink: 0;
+  accent-color: var(--primary-color);
+  width: 16px;
+  height: 16px;
+}
+
+.json-item-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary-color);
   flex-shrink: 0;
 }
 
-.item-info {
+.json-playlist-item.selected .json-item-icon {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.json-item-info {
   flex: 1;
   min-width: 0;
 }
 
-.item-name {
+.json-item-name {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  margin-bottom: 2px;
 }
 
-.item-meta {
+.json-item-meta {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   font-size: 11px;
   color: var(--text-tertiary);
-  margin-top: 2px;
 }
 
-.item-delete-btn {
+.meta-videos {
+  color: var(--primary-color);
+  font-weight: 500;
+}
+
+.meta-date {
+  opacity: 0.8;
+}
+
+.json-item-delete-btn {
   flex-shrink: 0;
   display: flex;
   align-items: center;
@@ -2948,31 +3034,47 @@ watch(currentIndex, async () => {
   color: var(--text-tertiary);
   cursor: pointer;
   transition: all 0.2s ease;
+  opacity: 0;
 }
 
-.item-delete-btn:hover {
+.json-playlist-item:hover .json-item-delete-btn {
+  opacity: 1;
+}
+
+.json-item-delete-btn:hover {
   background-color: rgba(239, 68, 68, 0.15);
   color: #ef4444;
 }
 
-.empty-list {
-  padding: 32px 16px;
-  text-align: center;
+.json-empty-list {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
   color: var(--text-tertiary);
+  gap: 12px;
+}
+
+.json-empty-list p {
+  margin: 0;
   font-size: 13px;
 }
 
 .view-mode-toggle {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   background-color: var(--bg-tertiary);
-  border-radius: 6px;
-  padding: 2px;
+  border-radius: 8px;
+  padding: 3px;
 }
 
 .mode-btn {
-  padding: 6px 16px;
-  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 6px;
   border: none;
   background-color: transparent;
   color: var(--text-secondary);
@@ -2984,17 +3086,20 @@ watch(currentIndex, async () => {
 
 .mode-btn:hover {
   background-color: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 .mode-btn.active {
   background-color: var(--bg-primary);
   color: var(--primary-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .json-detail-panel {
   flex: 1;
   overflow-y: auto;
   padding: 16px;
+  background-color: var(--bg-secondary);
 }
 
 .detail-content {
@@ -3003,28 +3108,88 @@ watch(currentIndex, async () => {
   flex-direction: column;
 }
 
+.detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--border-color);
+}
+
 .detail-title {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-color);
+}
+
+.detail-stats {
+  font-size: 12px;
+  color: var(--primary-color);
+  background-color: rgba(var(--primary-color-rgb, 102, 126, 234), 0.1);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: 500;
 }
 
 .detail-list {
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .detail-video-item {
-  padding: 8px 0;
-  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background-color: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
 }
 
-.detail-video-name {
+.detail-video-item:hover {
+  border-color: var(--primary-color);
+  background-color: var(--bg-primary);
+}
+
+.video-item-index {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.video-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.video-item-name {
   font-size: 13px;
   color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.video-item-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 .detail-placeholder {
@@ -3034,42 +3199,39 @@ watch(currentIndex, async () => {
   justify-content: center;
   height: 100%;
   color: var(--text-tertiary);
-  gap: 12px;
+  gap: 16px;
+  padding: 32px;
 }
 
 .detail-placeholder p {
   margin: 0;
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.placeholder-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .json-content-wrapper {
-  max-height: 60vh;
-  overflow-y: auto;
-  background-color: var(--bg-tertiary);
-  border-radius: 12px;
-  padding: 0;
-  border: 1px solid var(--border-color);
-}
-
-.json-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background-color: var(--bg-secondary);
-  position: sticky;
-  top: 0;
-  z-index: 1;
 }
 
-.json-stats {
-  display: flex;
-  gap: 16px;
+.json-content-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-primary);
+  flex-shrink: 0;
 }
 
-.stat-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
+.json-count {
+  font-size: 12px;
   color: var(--text-secondary);
   font-weight: 500;
 }
@@ -3079,12 +3241,13 @@ watch(currentIndex, async () => {
   padding: 16px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
-  line-height: 1.7;
+  line-height: 1.6;
   color: var(--text-primary);
   white-space: pre-wrap;
   word-wrap: break-word;
   flex: 1;
   overflow-y: auto;
+  background-color: var(--bg-tertiary);
 }
 
 .json-footer {
@@ -3093,6 +3256,7 @@ watch(currentIndex, async () => {
   justify-content: space-between;
   width: 100%;
   gap: 12px;
+  padding-top: 8px;
 }
 
 .footer-left {
@@ -3132,6 +3296,7 @@ watch(currentIndex, async () => {
   background-color: var(--bg-secondary);
   border-color: var(--primary-color);
   color: var(--primary-color);
+  transform: translateY(-1px);
 }
 
 .json-btn.primary {
@@ -3140,30 +3305,28 @@ watch(currentIndex, async () => {
   color: white;
 }
 
+.json-btn.primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(var(--primary-color-rgb, 102, 126, 234), 0.3);
+}
+
 .json-btn.danger {
-  background-color: rgba(239, 68, 68, 0.15);
+  background-color: rgba(239, 68, 68, 0.12);
   border-color: rgba(239, 68, 68, 0.3);
   color: #ef4444;
 }
 
 .json-btn.danger:hover {
-  background-color: rgba(239, 68, 68, 0.25);
+  background-color: rgba(239, 68, 68, 0.2);
   border-color: #ef4444;
-}
-
-.json-btn.danger:hover {
-  background-color: rgba(239, 68, 68, 0.25);
-  border-color: #ef4444;
+  transform: translateY(-1px);
 }
 
 .json-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.json-btn.primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
+  transform: none !important;
 }
 
 .confirm-modal {
