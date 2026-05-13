@@ -3,9 +3,11 @@ import { ref, computed, onMounted } from 'vue';
 import { Clapperboard, Zap, Stamp, ImageIcon, Camera, AlertCircle, Square, Play, Info, FileType, Upload, Sparkles, X, Maximize2, Eraser } from 'lucide-vue-next';
 import { useFFmpegStore } from '@/stores';
 import { ffmpegService } from '@/services';
+import { useToast } from '@/composables/useToast';
 import type { MediaInfo } from '@/types/ffmpeg';
 
 const ffmpegStore = useFFmpegStore();
+const toast = useToast();
 
 const tab = ref('compress');
 const inputFiles = ref<InputFile[]>([]);
@@ -213,12 +215,12 @@ const buildRemoveWatermarkArgs = (): string[] => {
 
 const handleStart = async () => {
   if (!ffmpegStore.isConfigured) {
-    alert('请先在配置中设置 FFmpeg bin 目录');
+    toast.error('请先在配置中设置 FFmpeg bin 目录');
     return;
   }
 
   if (inputFiles.value.length === 0 || !mainFile.value) {
-    alert('请先选择要处理的文件');
+    toast.warning('请先选择要处理的文件');
     return;
   }
 
@@ -247,7 +249,7 @@ const handleStart = async () => {
       outputPath = getOutputFilePath(rmWmOutputFormat.value === 'image' ? rmWmImageFormat.value : 'mp4', 'nowatermark');
       break;
     default:
-      alert('该功能暂未实现');
+      toast.info('该功能暂未实现');
       return;
   }
 

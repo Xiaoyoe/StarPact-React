@@ -130,14 +130,64 @@ const sortedResults = computed(() => {
   );
 });
 
+const DEFAULT_TEMPLATES: Template[] = [
+  {
+    id: 'tpl-001', title: '代码审查助手', category: '代码生成',
+    tags: ['代码', '审查', '优化'], versionNote: 'v1.0',
+    content: '你是一位专业的代码审查专家。请审查以下代码，并提供详细的改进建议：\n\n1. 代码质量分析\n2. 潜在问题识别\n3. 性能优化建议\n4. 最佳实践推荐',
+    results: [{ id: 'res-001', type: 'text', versionNote: 'v1.0', createdAt: '2024-01-15T10:30:00', content: '代码审查结果：\n1. 变量命名规范良好\n2. 建议添加更多注释\n3. 性能方面可以考虑使用缓存' }],
+    createdAt: '2024-01-10T08:00:00'
+  },
+  {
+    id: 'tpl-002', title: '翻译助手', category: '翻译润色',
+    tags: ['翻译', '多语言'], versionNote: 'v1.0',
+    content: '你是一位专业的翻译专家。请将以下内容翻译成目标语言，确保：\n\n1. 翻译准确\n2. 语言流畅\n3. 符合目标语言的表达习惯\n4. 保持原文的风格和语气',
+    results: [], createdAt: '2024-01-12T14:20:00'
+  },
+  {
+    id: 'tpl-003', title: 'AI绘画提示词生成器', category: 'AI绘画',
+    tags: ['AI绘画', 'Midjourney', 'Stable Diffusion'], versionNote: 'v2.0',
+    content: '你是一位AI绘画提示词专家。请根据用户描述生成高质量的AI绘画提示词。\n\n输出格式：\n1. 主体描述\n2. 风格设定\n3. 光影效果\n4. 构图建议\n5. 负面提示词',
+    results: [
+      { id: 'res-002', type: 'text', versionNote: 'v1.0', createdAt: '2024-01-18T16:45:00', content: 'A beautiful sunset over the ocean, golden hour lighting, cinematic composition, 8k resolution, highly detailed --ar 16:9 --v 5.2' },
+      { id: 'res-003', type: 'image', versionNote: 'v1.0', createdAt: '2024-01-18T17:00:00', content: 'https://example.com/images/sunset.png' }
+    ],
+    createdAt: '2024-01-15T09:30:00'
+  },
+  {
+    id: 'tpl-004', title: '文案创作助手', category: '文案创作',
+    tags: ['文案', '营销', '创意'], versionNote: 'v1.5',
+    content: '你是一位资深文案创作专家。请根据产品特点和目标受众，创作吸引人的营销文案。\n\n要求：\n1. 标题要有冲击力\n2. 内容要有说服力\n3. 结尾要有行动号召\n4. 符合品牌调性',
+    results: [], createdAt: '2024-01-20T11:00:00'
+  },
+  {
+    id: 'tpl-005', title: '数据分析报告生成', category: '数据分析',
+    tags: ['数据分析', '报告', '可视化'], versionNote: 'v1.0',
+    content: '你是一位数据分析专家。请分析提供的数据，并生成专业的分析报告。\n\n报告结构：\n1. 数据概览\n2. 关键指标分析\n3. 趋势分析\n4. 异常检测\n5. 建议与结论',
+    results: [], createdAt: '2024-01-22T13:15:00'
+  },
+  {
+    id: 'tpl-006', title: '角色扮演-面试官', category: '角色扮演',
+    tags: ['面试', '角色扮演', '求职'], versionNote: 'v1.0',
+    content: '你是一位经验丰富的面试官。请模拟真实的面试场景，对候选人进行专业面试。\n\n面试流程：\n1. 自我介绍环节\n2. 专业能力考察\n3. 项目经验询问\n4. 软技能评估\n5. 候选人提问环节',
+    results: [], createdAt: '2024-01-25T15:30:00'
+  },
+];
+
 const loadTemplates = async () => {
   isLoading.value = true;
   try {
     const loaded = await storageService.getPromptTemplates();
-    templates.value = loaded || [];
+    if (loaded && loaded.length > 0) {
+      templates.value = loaded;
+    } else {
+      templates.value = DEFAULT_TEMPLATES;
+      await saveTemplates();
+    }
   } catch (error) {
     console.error('加载提示词模板失败:', error);
-    templates.value = [];
+    templates.value = [...DEFAULT_TEMPLATES];
+    try { await saveTemplates(); } catch {}
   } finally {
     isLoading.value = false;
   }

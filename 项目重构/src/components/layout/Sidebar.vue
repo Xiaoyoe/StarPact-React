@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useThemeStore, useAppStore, useConversationStore } from '@/stores';
+import { useThemeStore, useAppStore, useConversationStore, useLanServerStore } from '@/stores';
 import { useToast } from '@/composables/useToast';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
   ChevronLeft, ChevronRight, Trash2,
   BookOpen, FileText, Settings2, Image, Play, Clapperboard, Globe, Cpu,
-  ChevronUp, ChevronDown, Sparkles, Timer, Database, Download
+  ChevronUp, ChevronDown, Sparkles, Timer, Database, Download, Wifi, WifiOff, Copy
 } from 'lucide-vue-next';
 
 const router = useRouter();
@@ -15,6 +15,7 @@ const route = useRoute();
 const themeStore = useThemeStore();
 const appStore = useAppStore();
 const conversationStore = useConversationStore();
+const lanServerStore = useLanServerStore();
 const toast = useToast();
 
 const appNameDisplay = ref<'chinese' | 'english'>('english');
@@ -100,9 +101,35 @@ const deleteConv = async (id: string) => {
   }
 };
 
+const toggleLanServer = async () => {
+  if (lanServerStore.running) {
+    try {
+      await lanServerStore.stop();
+      toast.success('局域网共享已停止');
+    } catch (error) {
+      toast.error('停止失败：' + String(error));
+    }
+  } else {
+    try {
+      const result = await lanServerStore.start();
+      toast.success(`局域网共享已启动：${result.address}`);
+    } catch (error) {
+      toast.error('启动失败：' + String(error));
+    }
+  }
+};
+
+const copyLanAddress = async () => {
+  if (lanServerStore.address) {
+    await navigator.clipboard.writeText(lanServerStore.address);
+    toast.success('地址已复制');
+  }
+};
+
 onMounted(async () => {
   await conversationStore.loadModels();
   await conversationStore.loadConversations();
+  await lanServerStore.syncStatus();
 });
 </script>
 
@@ -203,7 +230,7 @@ onMounted(async () => {
             <div class="conv-content">
               <div class="conv-title-row">
                 <Star 
-                  v-if="conv.is_favorite" 
+                  v-if="conv.isFavorite" 
                   :size="12" 
                   class="star-icon"
                   fill="var(--warning-color)"
@@ -211,13 +238,13 @@ onMounted(async () => {
                 <span class="conv-title">{{ conv.title }}</span>
               </div>
               <div class="conv-meta">
-                <span>{{ conversationStore.models.find(m => m.id === conv.model_id)?.name || '未知模型' }}</span>
+                <span>{{ conversationStore.models.find(m => m.id === conv.modelId)?.name || '未知模型' }}</span>
                 <span>·</span>
-                <span>{{ formatTime(conv.updated_at) }}</span>
-                <template v-if="conv.total_tokens && conv.total_tokens > 0">
+                <span>{{ formatTime(conv.updatedAt) }}</span>
+                <template v-if="conv.totalTokens && conv.totalTokens > 0">
                   <span>·</span>
                   <span class="token-count">
-                    {{ conv.total_tokens >= 1000 ? `${(conv.total_tokens / 1000).toFixed(1)}K` : conv.total_tokens }}
+                    {{ conv.totalTokens >= 1000 ? `${(conv.totalTokens / 1000).toFixed(1)}K` : conv.totalTokens }}
                   </span>
                 </template>
               </div>
@@ -245,6 +272,29 @@ onMounted(async () => {
 
     <!-- Bottom Panels -->
     <div v-if="!appStore.sidebarCollapsed && bottomPanelsVisible" class="bottom-panels">
+      <!-- 局域网共享 -->
+      <div class="lan-share-panel">
+        <div class="lan-share-header" @click="toggleLanServer">
+          <div class="lan-icon" :class="{ active: lanServerStore.running }">
+            <Wifi v-if="lanServerStore.running" :size="14" />
+            <WifiOff v-else :size="14" />
+          </div>
+          <div class="lan-info">
+            <div class="lan-title">局域网共享</div>
+            <div class="lan-status">{{ lanServerStore.running ? '运行中' : '已停止' }}</div>
+          </div>
+          <div class="lan-toggle" :class="{ active: lanServerStore.running }">
+            <div class="toggle-dot"></div>
+          </div>
+        </div>
+        <div v-if="lanServerStore.running" class="lan-address-row">
+          <span class="lan-address">{{ lanServerStore.address }}</span>
+          <button class="lan-copy-btn" @click="copyLanAddress" title="复制地址">
+            <Copy :size="12" />
+          </button>
+        </div>
+      </div>
+      
       <div
         v-for="panel in panelItems"
         :key="panel.id"
@@ -607,6 +657,124 @@ onMounted(async () => {
   padding: 8px 12px;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.lan-share-panel {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-light);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  overflow: hidden;
+}
+
+.lan-share-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.lan-share-header:hover {
+  background-color: var(--bg-tertiary);
+}
+
+.lan-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  transition: all 0.2s ease;
+}
+
+.lan-icon.active {
+  background-color: var(--primary-color);
+  color: white;
+}
+
+.lan-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.lan-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.lan-status {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.lan-toggle {
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background-color: var(--bg-tertiary);
+  position: relative;
+  transition: background 0.2s ease;
+}
+
+.lan-toggle.active {
+  background-color: var(--primary-color);
+}
+
+.toggle-dot {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: white;
+  transition: transform 0.2s ease;
+}
+
+.lan-toggle.active .toggle-dot {
+  transform: translateX(16px);
+}
+
+.lan-address-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-light);
+  background-color: var(--bg-tertiary);
+}
+
+.lan-address {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lan-copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lan-copy-btn:hover {
+  background-color: var(--bg-primary);
+  color: var(--primary-color);
 }
 
 .panel-item {

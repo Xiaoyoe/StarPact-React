@@ -9,6 +9,9 @@ export interface WallpaperItem {
   path: string;
   added_at: number;
   thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+  orientation?: 'landscape' | 'portrait' | 'square';
 }
 
 export const useWallpaperStore = defineStore('wallpaper', () => {
@@ -39,15 +42,49 @@ export const useWallpaperStore = defineStore('wallpaper', () => {
     }
   }
 
+  async function getImageDimensions(url: string): Promise<{ width: number; height: number }> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      };
+      img.onerror = () => {
+        resolve({ width: 0, height: 0 });
+      };
+      img.src = url;
+    });
+  }
+
+  function getOrientation(width: number, height: number): 'landscape' | 'portrait' | 'square' {
+    if (width === 0 || height === 0) return 'landscape';
+    const ratio = width / height;
+    if (ratio > 1.1) return 'landscape';
+    if (ratio < 0.9) return 'portrait';
+    return 'square';
+  }
+
   async function loadBackgrounds(): Promise<void> {
     isLoading.value = true;
     try {
       const items = await invoke<WallpaperItem[]>('get_wallpapers');
       
-      wallpapers.value = items.map(item => ({
-        ...item,
-        thumbnailUrl: getThumbnailUrl(item.path),
-      }));
+      const itemsWithDimensions = await Promise.all(
+        items.map(async (item) => {
+          const thumbnailUrl = getThumbnailUrl(item.path);
+          const dimensions = await getImageDimensions(thumbnailUrl);
+          const orientation = getOrientation(dimensions.width, dimensions.height);
+          
+          return {
+            ...item,
+            thumbnailUrl,
+            width: dimensions.width,
+            height: dimensions.height,
+            orientation,
+          };
+        })
+      );
+      
+      wallpapers.value = itemsWithDimensions;
       
       const active = await invoke<WallpaperItem | null>('get_active_wallpaper');
       if (active) {
@@ -186,6 +223,27 @@ export const useWallpaperStore = defineStore('wallpaper', () => {
     }
   }
 
+  async function selectWallpaperAsync(wallpaper: WallpaperItem): Promise<void> {
+    selectedWallpaperId.value = wallpaper.id;
+    previewWallpaperInfo.value = { name: wallpaper.name, path: wallpaper.path };
+    
+    const thumbnailUrl = wallpaper.thumbnailUrl || getThumbnailUrl(wallpaper.path);
+    
+    if (!wallpaper.width || !wallpaper.height) {
+      const dimensions = await getImageDimensions(thumbnailUrl);
+      const orientation = getOrientation(dimensions.width, dimensions.height);
+      wallpaper.width = dimensions.width;
+      wallpaper.height = dimensions.height;
+      wallpaper.orientation = orientation;
+    }
+    
+    previewWallpaper.value = thumbnailUrl;
+    
+    if (!doubleClickToChange.value) {
+      setCurrentWallpaper(previewWallpaper.value, wallpaper.id);
+    }
+  }
+
   function applyWallpaper(wallpaper: WallpaperItem): void {
     selectedWallpaperId.value = wallpaper.id;
     previewWallpaperInfo.value = { name: wallpaper.name, path: wallpaper.path };
@@ -221,6 +279,8 @@ export const useWallpaperStore = defineStore('wallpaper', () => {
     wallpaperCount,
     thumbnailCache,
     getThumbnailUrl,
+    getImageDimensions,
+    getOrientation,
     loadBackgrounds,
     setCurrentWallpaper,
     setDoubleClickToChange,
@@ -229,6 +289,7 @@ export const useWallpaperStore = defineStore('wallpaper', () => {
     deleteWallpaper,
     clearAllWallpapers,
     selectWallpaper,
+    selectWallpaperAsync,
     applyWallpaper,
     clearWallpaper,
     getWallpaperById,

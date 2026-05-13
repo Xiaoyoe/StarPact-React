@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelConfig {
     pub id: String,
     pub name: String,
@@ -30,6 +31,7 @@ pub struct ModelConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct LocalServiceConfig {
     pub provider: String,
     pub host: String,
@@ -38,6 +40,7 @@ pub struct LocalServiceConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelPreset {
     pub id: String,
     pub name: String,
@@ -47,6 +50,7 @@ pub struct ModelPreset {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ModelStats {
     pub total_calls: u32,
     pub success_calls: u32,
@@ -55,6 +59,7 @@ pub struct ModelStats {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ChatMessage {
     pub id: String,
     pub role: String,
@@ -71,6 +76,7 @@ pub struct ChatMessage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Conversation {
     pub id: String,
     pub title: String,
@@ -98,6 +104,7 @@ pub struct FfmpegResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[allow(dead_code)]
 pub struct FfmpegProgress {
     pub task_id: Option<String>,
     pub frame: Option<u32>,
@@ -226,6 +233,7 @@ pub struct ImageAlbum {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct Wallpaper {
     pub id: String,
     pub name: String,

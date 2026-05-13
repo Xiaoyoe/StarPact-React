@@ -54,6 +54,8 @@ pub struct UiConfig {
     pub splash_screen_enabled: bool,
     #[serde(default = "default_splash_screen_type")]
     pub splash_screen_type: String,
+    #[serde(default = "default_true")]
+    pub splash_screen_use_wallpaper: bool,
     #[serde(default)]
     pub app_name_display: String,
     #[serde(default)]
@@ -127,6 +129,7 @@ impl AppConfig {
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn update<F>(&mut self, f: F) -> Result<(), String>
     where
         F: FnOnce(&mut Self)

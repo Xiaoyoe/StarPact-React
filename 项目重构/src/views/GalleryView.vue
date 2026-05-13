@@ -2981,6 +2981,186 @@ const handleOutsideClick = (event: MouseEvent) => {
   color: white;
 }
 
+.lan-wrapper {
+  position: relative;
+}
+
+.lan-btn {
+  position: relative;
+}
+
+.lan-btn .wifi-active {
+  color: #10b981;
+  animation: pulse-wifi 2s ease-in-out infinite;
+}
+
+@keyframes pulse-wifi {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.lan-share-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 320px;
+  background: linear-gradient(180deg, 
+    rgba(var(--bg-primary-rgb, 255, 255, 255), 0.98) 0%,
+    rgba(var(--bg-primary-rgb, 255, 255, 255), 0.95) 100%
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.lan-share-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.lan-share-header svg {
+  color: #10b981;
+}
+
+.lan-share-content {
+  padding: 16px;
+}
+
+.lan-share-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin: 0 0 16px;
+  line-height: 1.5;
+}
+
+.lan-share-start {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.port-input {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.port-input label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.port-input input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.port-input input:focus {
+  border-color: var(--primary-color);
+}
+
+.start-btn, .stop-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.start-btn {
+  background: #10b981;
+  color: white;
+}
+
+.start-btn:hover {
+  background: #059669;
+}
+
+.stop-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.stop-btn:hover {
+  background: #dc2626;
+}
+
+.lan-share-active {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.address-display {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.address-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.address-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.address-text {
+  flex: 1;
+  font-size: 13px;
+  color: var(--primary-color);
+  font-weight: 500;
+  font-family: monospace;
+}
+
+.copy-btn {
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.copy-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 .dropdown-enter-active,
 .dropdown-leave-active {
   transition: all 0.2s ease;

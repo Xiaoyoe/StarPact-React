@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { Activity, Brain, MessageCircle, Image as ImageIcon, AlertTriangle, Settings2, X, EyeOff, Navigation } from 'lucide-vue-next';
-import { useConversationStore } from '@/stores';
+import { Activity, Brain, MessageCircle, Image as ImageIcon, AlertTriangle, Settings2, X, EyeOff, Navigation, PowerOff } from 'lucide-vue-next';
+import { useConversationStore, useModelStore } from '@/stores';
 import { useToast } from '@/composables/useToast';
 
 interface Props {
@@ -15,8 +15,36 @@ const emit = defineEmits<{
 }>();
 
 const conversationStore = useConversationStore();
+const modelStore = useModelStore();
 const toast = useToast();
 const containerRef = ref<HTMLElement | null>(null);
+
+const handleStopModel = async () => {
+  const activeModel = modelStore.activeModel;
+  if (!activeModel) {
+    toast.warning('没有活动的模型');
+    return;
+  }
+  
+  try {
+    if (activeModel.type === 'local') {
+      const provider = (activeModel.localProvider || activeModel.provider).toLowerCase();
+      
+      if (provider === 'ollama') {
+        const host = activeModel.localServiceConfig?.host || 'localhost';
+        const port = activeModel.localServiceConfig?.port || 11434;
+        await modelStore.stopOllamaModel(activeModel.model, host, port);
+        toast.success(`已停止模型 ${activeModel.name}`);
+      } else if (provider === 'lmstudio') {
+        toast.info('LM Studio 模型请在 LM Studio 中手动卸载');
+      }
+    } else {
+      toast.info('远程模型无需停止');
+    }
+  } catch (error) {
+    toast.error('停止模型失败');
+  }
+};
 
 const controls = computed(() => [
     {
@@ -149,6 +177,17 @@ onUnmounted(() => {
               <div class="toggle-thumb"></div>
             </div>
           </div>
+          
+          <div class="divider"></div>
+          
+          <button 
+            v-if="modelStore.activeModel?.type === 'local'"
+            class="stop-model-btn"
+            @click="handleStopModel"
+          >
+            <PowerOff :size="14" />
+            <span>停止当前模型</span>
+          </button>
         </div>
       </div>
     </Transition>
@@ -329,5 +368,32 @@ onUnmounted(() => {
 .panel-leave-to {
   opacity: 0;
   transform: translateY(10px) scale(0.95);
+}
+
+.divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 8px 12px;
+}
+
+.stop-model-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.stop-model-btn:hover {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 </style>

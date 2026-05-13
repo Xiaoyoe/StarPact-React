@@ -1,18 +1,19 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
+import type { ModelConfig } from '@/types';
 
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: number;
-  model_id?: string;
-  model_name?: string;
-  is_streaming?: boolean;
-  is_favorite?: boolean;
+  modelId?: string;
+  modelName?: string;
+  isStreaming?: boolean;
+  isFavorite?: boolean;
   thinking?: string;
-  thinking_duration?: number;
+  thinkingDuration?: number;
   images?: string[];
 }
 
@@ -20,25 +21,11 @@ export interface Conversation {
   id: string;
   title: string;
   messages: ChatMessage[];
-  model_id: string;
-  created_at: number;
-  updated_at: number;
-  is_favorite: boolean;
-  total_tokens?: number;
-}
-
-export interface ModelConfig {
-  id: string;
-  name: string;
-  provider: string;
-  type: string;
-  api_url: string;
-  api_key?: string;
-  model: string;
-  max_tokens: number;
-  temperature: number;
-  top_p: number;
-  is_active: boolean;
+  modelId: string;
+  createdAt: number;
+  updatedAt: number;
+  isFavorite: boolean;
+  totalTokens?: number;
 }
 
 export const useConversationStore = defineStore('conversation', () => {
@@ -89,7 +76,7 @@ export const useConversationStore = defineStore('conversation', () => {
     try {
       const result = await invoke<ModelConfig[]>('get_models');
       models.value = result || [];
-      const activeModel = result?.find(m => m.is_active);
+      const activeModel = result?.find(m => m.isActive);
       if (activeModel) {
         activeModelId.value = activeModel.id;
       }
@@ -120,10 +107,10 @@ export const useConversationStore = defineStore('conversation', () => {
       id: `conv_${generateId()}`,
       title: '新对话',
       messages: [],
-      model_id: activeModelId.value || 'default',
-      created_at: Date.now(),
-      updated_at: Date.now(),
-      is_favorite: false,
+      modelId: activeModelId.value || 'default',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      isFavorite: false,
     };
     
     conversations.value.unshift(conversation);
@@ -159,7 +146,7 @@ export const useConversationStore = defineStore('conversation', () => {
     if (!conversation) return false;
     
     conversation.messages.push(message);
-    conversation.updated_at = Date.now();
+    conversation.updatedAt = Date.now();
     
     if (conversation.messages.length === 1 && message.role === 'user') {
       conversation.title = message.content.substring(0, 20) + (message.content.length > 20 ? '...' : '');
@@ -182,7 +169,7 @@ export const useConversationStore = defineStore('conversation', () => {
     if (!message) return false;
     
     Object.assign(message, updates);
-    conversation.updated_at = Date.now();
+    conversation.updatedAt = Date.now();
     
     try {
       await invoke('save_conversations', { conversations: conversations.value });
@@ -198,7 +185,7 @@ export const useConversationStore = defineStore('conversation', () => {
     if (!conversation) return false;
     
     conversation.messages = conversation.messages.filter(m => m.id !== messageId);
-    conversation.updated_at = Date.now();
+    conversation.updatedAt = Date.now();
     
     try {
       await invoke('save_conversations', { conversations: conversations.value });
@@ -214,7 +201,7 @@ export const useConversationStore = defineStore('conversation', () => {
     if (!conversation) return false;
     
     Object.assign(conversation, updates);
-    conversation.updated_at = Date.now();
+    conversation.updatedAt = Date.now();
     
     try {
       await invoke('save_conversations', { conversations: conversations.value });
@@ -229,8 +216,8 @@ export const useConversationStore = defineStore('conversation', () => {
     const conversation = conversations.value.find(c => c.id === conversationId);
     if (!conversation) return false;
     
-    conversation.is_favorite = !conversation.is_favorite;
-    conversation.updated_at = Date.now();
+    conversation.isFavorite = !conversation.isFavorite;
+    conversation.updatedAt = Date.now();
     
     try {
       await invoke('save_conversations', { conversations: conversations.value });

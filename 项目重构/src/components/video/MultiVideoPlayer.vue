@@ -4,9 +4,10 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useToast } from '@/composables/useToast';
 import {
-  Play, Pause, Volume2, VolumeX, X, Plus, Grid3X3,
+  Play, Pause, Volume2, VolumeX, X, Plus, Minus, Grid3X3,
   Maximize2, Minimize2, Settings, PictureInPicture, LayoutGrid, List,
-  ChevronUp, ChevronDown, Maximize, Minimize, SkipBack, SkipForward, Repeat, Repeat1
+  ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Maximize, Minimize, SkipBack, SkipForward, Repeat, Repeat1,
+  Columns, Rows
 } from 'lucide-vue-next';
 
 const toast = useToast();
@@ -28,6 +29,9 @@ interface VideoItem {
   muted: boolean;
   isPlaying: boolean;
   aspectRatio: 'contain' | 'cover' | 'fill';
+  orientation: 'landscape' | 'portrait' | 'unknown';
+  videoWidth: number;
+  videoHeight: number;
 }
 
 const videos = ref<VideoItem[]>([]);
@@ -42,6 +46,16 @@ const globalPlaybackRate = ref(1);
 const playbackRates = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3, 4, 5];
 const loopMode = ref<'none' | 'all' | 'one'>('none');
 const columnsPerRow = ref(3);
+const layoutMode = ref<'normal' | 'separated'>('normal');
+const draggingVideoId = ref<string | null>(null);
+const confirmModalVisible = ref(false);
+const toolbarContentRef = ref<HTMLElement | null>(null);
+
+const scrollToolbar = (amount: number) => {
+  if (toolbarContentRef.value) {
+    toolbarContentRef.value.scrollBy({ left: amount, behavior: 'smooth' });
+  }
+};
 
 let longPressInterval: number | null = null;
 let isLongPress = false;
@@ -89,6 +103,62 @@ const videoRows = computed(() => {
   return rows;
 });
 
+const landscapeVideos = computed(() => {
+  return videos.value.filter(v => v.orientation === 'landscape');
+});
+
+const portraitVideos = computed(() => {
+  return videos.value.filter(v => v.orientation === 'portrait');
+});
+
+const unknownVideos = computed(() => {
+  return videos.value.filter(v => v.orientation === 'unknown');
+});
+
+const landscapeRows = computed(() => {
+  if (layoutMode.value !== 'separated') return [];
+  const videosPerRow = columnsPerRow.value;
+  const rows: VideoItem[][] = [];
+  const vids = landscapeVideos.value;
+  
+  for (let i = 0; i < vids.length; i += videosPerRow) {
+    rows.push(vids.slice(i, i + videosPerRow));
+  }
+  
+  return rows;
+});
+
+const portraitRows = computed(() => {
+  if (layoutMode.value !== 'separated') return [];
+  const videosPerRow = columnsPerRow.value;
+  const rows: VideoItem[][] = [];
+  const vids = portraitVideos.value;
+  
+  for (let i = 0; i < vids.length; i += videosPerRow) {
+    rows.push(vids.slice(i, i + videosPerRow));
+  }
+  
+  return rows;
+});
+
+const unknownRows = computed(() => {
+  if (layoutMode.value !== 'separated') return [];
+  const videosPerRow = columnsPerRow.value;
+  const rows: VideoItem[][] = [];
+  const vids = unknownVideos.value;
+  
+  for (let i = 0; i < vids.length; i += videosPerRow) {
+    rows.push(vids.slice(i, i + videosPerRow));
+  }
+  
+  return rows;
+});
+
+const toggleLayoutMode = () => {
+  layoutMode.value = layoutMode.value === 'normal' ? 'separated' : 'normal';
+  toast.info(layoutMode.value === 'normal' ? '切换到普通布局' : '切换到横竖屏分离布局');
+};
+
 const adjustColumns = (delta: number) => {
   columnsPerRow.value = Math.max(2, Math.min(6, columnsPerRow.value + delta));
 };
@@ -117,6 +187,9 @@ const addVideos = async () => {
           muted: globalMuted.value,
           isPlaying: false,
           aspectRatio: globalAspectRatio.value,
+          orientation: 'unknown',
+          videoWidth: 0,
+          videoHeight: 0,
         });
       }
       toast.success(`已添加 ${selected.length} 个视频`);
@@ -151,6 +224,9 @@ const addVideoFromPlaylist = (videoData: { name: string; path: string; url: stri
     muted: globalMuted.value,
     isPlaying: false,
     aspectRatio: globalAspectRatio.value,
+    orientation: 'unknown',
+    videoWidth: 0,
+    videoHeight: 0,
   });
   toast.success(`已添加: ${videoData.name}`);
 };
@@ -206,10 +282,19 @@ const removeVideo = (videoId: string) => {
 };
 
 const clearAll = () => {
+  confirmModalVisible.value = true;
+};
+
+const handleConfirmClear = () => {
   videoElements.value.forEach(element => element.pause());
   videoElements.value.clear();
   videos.value = [];
   toast.success('已清空所有视频');
+  confirmModalVisible.value = false;
+};
+
+const handleCancelClear = () => {
+  confirmModalVisible.value = false;
 };
 
 const togglePlay = (videoId?: string) => {
@@ -289,6 +374,15 @@ const handleVideoReady = (videoId: string, event: Event) => {
   const video = videos.value.find(v => v.id === videoId);
   if (video) {
     video.duration = element.duration;
+    video.videoWidth = element.videoWidth;
+    video.videoHeight = element.videoHeight;
+    
+    if (element.videoWidth > 0 && element.videoHeight > 0) {
+      video.orientation = element.videoWidth >= element.videoHeight ? 'landscape' : 'portrait';
+    } else {
+      video.orientation = 'unknown';
+    }
+    
     element.volume = video.volume;
     element.muted = video.muted;
   }
@@ -313,6 +407,23 @@ const handleSeek = (videoId: string, event: MouseEvent) => {
     element.currentTime = time;
     video.currentTime = time;
   }
+};
+
+const handleProgressMouseDown = (videoId: string, event: MouseEvent) => {
+  event.preventDefault();
+  event.stopPropagation();
+  draggingVideoId.value = videoId;
+  handleSeek(videoId, event);
+};
+
+const handleProgressMouseMove = (videoId: string, event: MouseEvent) => {
+  if (draggingVideoId.value === videoId) {
+    handleSeek(videoId, event);
+  }
+};
+
+const handleProgressMouseUp = () => {
+  draggingVideoId.value = null;
 };
 
 const setAspectRatio = (videoId: string, ratio: 'contain' | 'cover' | 'fill') => {
@@ -480,10 +591,12 @@ const handleKeyDown = (e: KeyboardEvent) => {
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('mouseup', handleProgressMouseUp);
 });
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeyDown);
+  window.removeEventListener('mouseup', handleProgressMouseUp);
   videoElements.value.forEach(element => element.pause());
 });
 </script>
@@ -497,87 +610,372 @@ onUnmounted(() => {
     @drop="handleDrop"
   >
     <div class="video-grid" :style="gridStyle">
-      <div 
-        v-for="(row, rowIndex) in videoRows" 
-        :key="rowIndex"
-        class="video-row"
-        :style="rowStyle"
-      >
-        <div
-          v-for="(video, index) in row"
-          :key="video.id"
-          class="video-cell"
+      <template v-if="layoutMode === 'normal'">
+        <div 
+          v-for="(row, rowIndex) in videoRows" 
+          :key="rowIndex"
+          class="video-row"
+          :style="rowStyle"
         >
-          <div class="progress-indicator" :style="{ backgroundColor: getProgressColor(video) }"></div>
-          
-          <video
-            :src="video.url"
-            class="video-element"
-            :style="{ objectFit: video.aspectRatio }"
-            @loadedmetadata="handleVideoReady(video.id, $event)"
-            @timeupdate="handleTimeUpdate(video.id, $event)"
-            @ended="handleVideoEnded(video.id)"
-            @click="handleVideoClick($event, video.id)"
-            preload="metadata"
-          ></video>
-
-          <div class="video-controls">
-            <div class="video-header">
-              <span class="video-index">#{{ videos.indexOf(video) + 1 }}</span>
-              <div class="video-title">{{ video.name }}</div>
-              <button class="action-btn remove" @click.stop="removeVideo(video.id)">
-                <X :size="14" />
-              </button>
-            </div>
+          <div
+            v-for="(video, index) in row"
+            :key="video.id"
+            class="video-cell"
+          >
+            <div class="progress-indicator" :style="{ backgroundColor: getProgressColor(video) }"></div>
             
-            <div class="video-actions">
-              <button class="action-btn" @click.stop="togglePlay(video.id)">
-                <Pause v-if="video.isPlaying" :size="14" />
-                <Play v-else :size="14" />
-              </button>
-              
-              <div class="volume-control">
-                <button 
-                  class="action-btn" 
-                  @click.stop="showVolumeSlider = !showVolumeSlider"
-                  @dblclick.stop="toggleMute(video.id)"
-                >
-                  <VolumeX v-if="video.muted" :size="14" />
-                  <Volume2 v-else :size="14" />
+            <video
+              :src="video.url"
+              class="video-element"
+              :style="{ objectFit: video.aspectRatio }"
+              @loadedmetadata="handleVideoReady(video.id, $event)"
+              @timeupdate="handleTimeUpdate(video.id, $event)"
+              @ended="handleVideoEnded(video.id)"
+              @click="handleVideoClick($event, video.id)"
+              preload="metadata"
+            ></video>
+
+            <div class="video-controls">
+              <div class="video-header">
+                <span class="video-index">#{{ videos.indexOf(video) + 1 }}</span>
+                <div class="video-title">{{ video.name }}</div>
+                <button class="action-btn remove" @click.stop="removeVideo(video.id)">
+                  <X :size="14" />
                 </button>
-                <input
-                  v-if="showVolumeSlider"
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.01"
-                  :value="video.volume"
-                  @input.stop="setVolume(video.id, ($event.target as HTMLInputElement).valueAsNumber)"
-                  class="volume-mini-slider"
-                />
+              </div>
+              
+              <div class="video-actions">
+                <button class="action-btn" @click.stop="togglePlay(video.id)">
+                  <Pause v-if="video.isPlaying" :size="14" />
+                  <Play v-else :size="14" />
+                </button>
+                
+                <div class="volume-control">
+                  <button 
+                    class="action-btn" 
+                    @click.stop="showVolumeSlider = !showVolumeSlider"
+                    @dblclick.stop="toggleMute(video.id)"
+                  >
+                    <VolumeX v-if="video.muted" :size="14" />
+                    <Volume2 v-else :size="14" />
+                  </button>
+                  <input
+                    v-if="showVolumeSlider"
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.01"
+                    :value="video.volume"
+                    @input.stop="setVolume(video.id, ($event.target as HTMLInputElement).valueAsNumber)"
+                    class="volume-mini-slider"
+                  />
+                </div>
+
+                <div class="time-display">
+                  {{ formatTime(video.currentTime) }} / {{ formatTime(video.duration) }}
+                </div>
+
+                <button 
+                  class="action-btn aspect-btn" 
+                  @click.stop="setAspectRatio(video.id, video.aspectRatio === 'contain' ? 'cover' : video.aspectRatio === 'cover' ? 'fill' : 'contain')"
+                  :title="video.aspectRatio === 'contain' ? '适应' : video.aspectRatio === 'cover' ? '填充' : '拉伸'"
+                >
+                  <Maximize v-if="video.aspectRatio === 'contain'" :size="12" />
+                  <Minimize v-else-if="video.aspectRatio === 'cover'" :size="12" />
+                  <Maximize2 v-else :size="12" />
+                </button>
               </div>
 
-              <div class="time-display">
-                {{ formatTime(video.currentTime) }} / {{ formatTime(video.duration) }}
-              </div>
-
-              <button 
-                class="action-btn aspect-btn" 
-                @click.stop="setAspectRatio(video.id, video.aspectRatio === 'contain' ? 'cover' : video.aspectRatio === 'cover' ? 'fill' : 'contain')"
-                :title="video.aspectRatio === 'contain' ? '适应' : video.aspectRatio === 'cover' ? '填充' : '拉伸'"
+              <div 
+                class="progress-bar" 
+                :class="{ dragging: draggingVideoId === video.id }"
+                @mousedown="handleProgressMouseDown(video.id, $event)"
+                @mousemove="handleProgressMouseMove(video.id, $event)"
               >
-                <Maximize v-if="video.aspectRatio === 'contain'" :size="12" />
-                <Minimize v-else-if="video.aspectRatio === 'cover'" :size="12" />
-                <Maximize2 v-else :size="12" />
-              </button>
-            </div>
-
-            <div class="progress-bar" @click.stop="handleSeek(video.id, $event)">
-              <div class="progress-fill" :style="{ width: `${(video.currentTime / video.duration) * 100}%` }"></div>
+                <div class="progress-fill" :style="{ width: `${(video.currentTime / video.duration) * 100}%` }"></div>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </template>
+
+      <template v-else>
+        <div v-if="landscapeVideos.length > 0" class="orientation-section">
+          <div class="section-header">
+            <span class="section-label">横屏视频 ({{ landscapeVideos.length }})</span>
+          </div>
+          <div 
+            v-for="(row, rowIndex) in landscapeRows" 
+            :key="'landscape-' + rowIndex"
+            class="video-row"
+            :style="rowStyle"
+          >
+            <div
+              v-for="(video, index) in row"
+              :key="video.id"
+              class="video-cell landscape"
+            >
+              <div class="progress-indicator" :style="{ backgroundColor: getProgressColor(video) }"></div>
+              
+              <video
+                :src="video.url"
+                class="video-element"
+                :style="{ objectFit: video.aspectRatio }"
+                @loadedmetadata="handleVideoReady(video.id, $event)"
+                @timeupdate="handleTimeUpdate(video.id, $event)"
+                @ended="handleVideoEnded(video.id)"
+                @click="handleVideoClick($event, video.id)"
+                preload="metadata"
+              ></video>
+
+              <div class="video-controls">
+                <div class="video-header">
+                  <span class="video-index">#{{ videos.indexOf(video) + 1 }}</span>
+                  <div class="video-title">{{ video.name }}</div>
+                  <button class="action-btn remove" @click.stop="removeVideo(video.id)">
+                    <X :size="14" />
+                  </button>
+                </div>
+                
+                <div class="video-actions">
+                  <button class="action-btn" @click.stop="togglePlay(video.id)">
+                    <Pause v-if="video.isPlaying" :size="14" />
+                    <Play v-else :size="14" />
+                  </button>
+                  
+                  <div class="volume-control">
+                    <button 
+                      class="action-btn" 
+                      @click.stop="showVolumeSlider = !showVolumeSlider"
+                      @dblclick.stop="toggleMute(video.id)"
+                    >
+                      <VolumeX v-if="video.muted" :size="14" />
+                      <Volume2 v-else :size="14" />
+                    </button>
+                    <input
+                      v-if="showVolumeSlider"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      :value="video.volume"
+                      @input.stop="setVolume(video.id, ($event.target as HTMLInputElement).valueAsNumber)"
+                      class="volume-mini-slider"
+                    />
+                  </div>
+
+                  <div class="time-display">
+                    {{ formatTime(video.currentTime) }} / {{ formatTime(video.duration) }}
+                  </div>
+
+                  <button 
+                    class="action-btn aspect-btn" 
+                    @click.stop="setAspectRatio(video.id, video.aspectRatio === 'contain' ? 'cover' : video.aspectRatio === 'cover' ? 'fill' : 'contain')"
+                    :title="video.aspectRatio === 'contain' ? '适应' : video.aspectRatio === 'cover' ? '填充' : '拉伸'"
+                  >
+                    <Maximize v-if="video.aspectRatio === 'contain'" :size="12" />
+                    <Minimize v-else-if="video.aspectRatio === 'cover'" :size="12" />
+                    <Maximize2 v-else :size="12" />
+                  </button>
+                </div>
+
+                <div 
+                  class="progress-bar" 
+                  :class="{ dragging: draggingVideoId === video.id }"
+                  @mousedown="handleProgressMouseDown(video.id, $event)"
+                  @mousemove="handleProgressMouseMove(video.id, $event)"
+                >
+                  <div class="progress-fill" :style="{ width: `${(video.currentTime / video.duration) * 100}%` }"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="portraitVideos.length > 0" class="orientation-section">
+          <div class="section-header">
+            <span class="section-label">竖屏视频 ({{ portraitVideos.length }})</span>
+          </div>
+          <div 
+            v-for="(row, rowIndex) in portraitRows" 
+            :key="'portrait-' + rowIndex"
+            class="video-row portrait-row"
+            :style="{ ...rowStyle, gridTemplateColumns: `repeat(${Math.min(columnsPerRow, portraitVideos.length)}, 1fr)` }"
+          >
+            <div
+              v-for="(video, index) in row"
+              :key="video.id"
+              class="video-cell portrait"
+            >
+              <div class="progress-indicator" :style="{ backgroundColor: getProgressColor(video) }"></div>
+              
+              <video
+                :src="video.url"
+                class="video-element"
+                :style="{ objectFit: video.aspectRatio }"
+                @loadedmetadata="handleVideoReady(video.id, $event)"
+                @timeupdate="handleTimeUpdate(video.id, $event)"
+                @ended="handleVideoEnded(video.id)"
+                @click="handleVideoClick($event, video.id)"
+                preload="metadata"
+              ></video>
+
+              <div class="video-controls">
+                <div class="video-header">
+                  <span class="video-index">#{{ videos.indexOf(video) + 1 }}</span>
+                  <div class="video-title">{{ video.name }}</div>
+                  <button class="action-btn remove" @click.stop="removeVideo(video.id)">
+                    <X :size="14" />
+                  </button>
+                </div>
+                
+                <div class="video-actions">
+                  <button class="action-btn" @click.stop="togglePlay(video.id)">
+                    <Pause v-if="video.isPlaying" :size="14" />
+                    <Play v-else :size="14" />
+                  </button>
+                  
+                  <div class="volume-control">
+                    <button 
+                      class="action-btn" 
+                      @click.stop="showVolumeSlider = !showVolumeSlider"
+                      @dblclick.stop="toggleMute(video.id)"
+                    >
+                      <VolumeX v-if="video.muted" :size="14" />
+                      <Volume2 v-else :size="14" />
+                    </button>
+                    <input
+                      v-if="showVolumeSlider"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      :value="video.volume"
+                      @input.stop="setVolume(video.id, ($event.target as HTMLInputElement).valueAsNumber)"
+                      class="volume-mini-slider"
+                    />
+                  </div>
+
+                  <div class="time-display">
+                    {{ formatTime(video.currentTime) }} / {{ formatTime(video.duration) }}
+                  </div>
+
+                  <button 
+                    class="action-btn aspect-btn" 
+                    @click.stop="setAspectRatio(video.id, video.aspectRatio === 'contain' ? 'cover' : video.aspectRatio === 'cover' ? 'fill' : 'contain')"
+                    :title="video.aspectRatio === 'contain' ? '适应' : video.aspectRatio === 'cover' ? '填充' : '拉伸'"
+                  >
+                    <Maximize v-if="video.aspectRatio === 'contain'" :size="12" />
+                    <Minimize v-else-if="video.aspectRatio === 'cover'" :size="12" />
+                    <Maximize2 v-else :size="12" />
+                  </button>
+                </div>
+
+                <div 
+                  class="progress-bar" 
+                  :class="{ dragging: draggingVideoId === video.id }"
+                  @mousedown="handleProgressMouseDown(video.id, $event)"
+                  @mousemove="handleProgressMouseMove(video.id, $event)"
+                >
+                  <div class="progress-fill" :style="{ width: `${(video.currentTime / video.duration) * 100}%` }"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="unknownVideos.length > 0" class="orientation-section">
+          <div class="section-header">
+            <span class="section-label">未知方向 ({{ unknownVideos.length }})</span>
+          </div>
+          <div 
+            v-for="(row, rowIndex) in unknownRows" 
+            :key="'unknown-' + rowIndex"
+            class="video-row"
+            :style="rowStyle"
+          >
+            <div
+              v-for="(video, index) in row"
+              :key="video.id"
+              class="video-cell"
+            >
+              <div class="progress-indicator" :style="{ backgroundColor: getProgressColor(video) }"></div>
+              
+              <video
+                :src="video.url"
+                class="video-element"
+                :style="{ objectFit: video.aspectRatio }"
+                @loadedmetadata="handleVideoReady(video.id, $event)"
+                @timeupdate="handleTimeUpdate(video.id, $event)"
+                @ended="handleVideoEnded(video.id)"
+                @click="handleVideoClick($event, video.id)"
+                preload="metadata"
+              ></video>
+
+              <div class="video-controls">
+                <div class="video-header">
+                  <span class="video-index">#{{ videos.indexOf(video) + 1 }}</span>
+                  <div class="video-title">{{ video.name }}</div>
+                  <button class="action-btn remove" @click.stop="removeVideo(video.id)">
+                    <X :size="14" />
+                  </button>
+                </div>
+                
+                <div class="video-actions">
+                  <button class="action-btn" @click.stop="togglePlay(video.id)">
+                    <Pause v-if="video.isPlaying" :size="14" />
+                    <Play v-else :size="14" />
+                  </button>
+                  
+                  <div class="volume-control">
+                    <button 
+                      class="action-btn" 
+                      @click.stop="showVolumeSlider = !showVolumeSlider"
+                      @dblclick.stop="toggleMute(video.id)"
+                    >
+                      <VolumeX v-if="video.muted" :size="14" />
+                      <Volume2 v-else :size="14" />
+                    </button>
+                    <input
+                      v-if="showVolumeSlider"
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      :value="video.volume"
+                      @input.stop="setVolume(video.id, ($event.target as HTMLInputElement).valueAsNumber)"
+                      class="volume-mini-slider"
+                    />
+                  </div>
+
+                  <div class="time-display">
+                    {{ formatTime(video.currentTime) }} / {{ formatTime(video.duration) }}
+                  </div>
+
+                  <button 
+                    class="action-btn aspect-btn" 
+                    @click.stop="setAspectRatio(video.id, video.aspectRatio === 'contain' ? 'cover' : video.aspectRatio === 'cover' ? 'fill' : 'contain')"
+                    :title="video.aspectRatio === 'contain' ? '适应' : video.aspectRatio === 'cover' ? '填充' : '拉伸'"
+                  >
+                    <Maximize v-if="video.aspectRatio === 'contain'" :size="12" />
+                    <Minimize v-else-if="video.aspectRatio === 'cover'" :size="12" />
+                    <Maximize2 v-else :size="12" />
+                  </button>
+                </div>
+
+                <div 
+                  class="progress-bar" 
+                  :class="{ dragging: draggingVideoId === video.id }"
+                  @mousedown="handleProgressMouseDown(video.id, $event)"
+                  @mousemove="handleProgressMouseMove(video.id, $event)"
+                >
+                  <div class="progress-fill" :style="{ width: `${(video.currentTime / video.duration) * 100}%` }"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
 
       <div v-if="videos.length === 0" class="empty-state">
         <div class="empty-icon">
@@ -597,7 +995,10 @@ onUnmounted(() => {
     </div>
 
     <div class="floating-toolbar bottom-toolbar" :class="{ hidden: !showBottomToolbar }">
-      <div class="toolbar-content">
+      <button class="toolbar-scroll-btn left" @click="scrollToolbar(-150)" title="向左滚动">
+        <ChevronLeft :size="16" />
+      </button>
+      <div class="toolbar-content" ref="toolbarContentRef">
         <div class="toolbar-section section-left">
           <button 
             class="toolbar-btn icon-only" 
@@ -610,22 +1011,29 @@ onUnmounted(() => {
           </button>
           <button 
             class="toolbar-btn icon-only" 
+            :class="{ active: layoutMode === 'separated' }"
+            @click="toggleLayoutMode"
+            :title="layoutMode === 'normal' ? '横竖屏分离布局' : '普通布局'"
+          >
+            <Grid3X3 v-if="layoutMode === 'normal'" :size="14" />
+            <Columns v-else :size="14" />
+          </button>
+          <button 
+            class="toolbar-btn icon-only" 
             @click="adjustColumns(-1)" 
             :disabled="columnsPerRow <= 2"
             title="减少每行视频数量"
           >
-            <Minimize2 :size="14" />
+            <Minus :size="14" />
           </button>
-          <button class="toolbar-btn icon-only active" title="网格视图">
-            <Grid3X3 :size="14" />
-          </button>
+          <div class="columns-display">{{ columnsPerRow }}</div>
           <button 
             class="toolbar-btn icon-only" 
             @click="adjustColumns(1)" 
             :disabled="columnsPerRow >= 6"
             title="增加每行视频数量"
           >
-            <Maximize2 :size="14" />
+            <Plus :size="14" />
           </button>
         </div>
 
@@ -714,9 +1122,6 @@ onUnmounted(() => {
           <button class="toolbar-btn danger icon-only" @click="clearAll()" v-if="videos.length > 0" title="清空所有视频">
             <X :size="14" />
           </button>
-          <button class="toolbar-btn primary" @click="emit('add-selected')" title="添加选中的视频">
-            <Plus :size="14" />
-          </button>
           <button class="toolbar-btn with-text" @click="emit('add-all')" title="添加全部视频">
             <LayoutGrid :size="14" />
             <span>添加全部</span>
@@ -728,15 +1133,13 @@ onUnmounted(() => {
             {{ videos.length }} 个视频
           </div>
         </div>
-
-        <div class="toolbar-divider"></div>
-
-        <div class="toolbar-section section-hide">
-          <button class="toolbar-toggle-center" @click="showBottomToolbar = false" title="隐藏工具栏">
-            <ChevronDown :size="14" />
-          </button>
-        </div>
       </div>
+      <button class="toolbar-scroll-btn right" @click="scrollToolbar(150)" title="向右滚动">
+        <ChevronRight :size="16" />
+      </button>
+      <button class="toolbar-hide-btn" @click="showBottomToolbar = false" title="隐藏工具栏">
+        <ChevronDown :size="14" />
+      </button>
     </div>
 
     <button 
@@ -746,6 +1149,24 @@ onUnmounted(() => {
     >
       <ChevronUp :size="14" />
     </button>
+
+    <Teleport to="body">
+      <Transition name="confirm-pop">
+        <div v-if="confirmModalVisible" class="confirm-modal">
+          <div class="confirm-header">
+            <div class="confirm-icon">
+              <X :size="20" />
+            </div>
+            <span class="confirm-title">清空所有视频</span>
+          </div>
+          <p class="confirm-message">确定要清空所有视频吗？当前有 {{ videos.length }} 个视频。</p>
+          <div class="confirm-actions">
+            <button class="confirm-btn cancel" @click="handleCancelClear">取消</button>
+            <button class="confirm-btn danger" @click="handleConfirmClear">确定清空</button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
@@ -936,6 +1357,11 @@ onUnmounted(() => {
   height: 6px;
 }
 
+.progress-bar.dragging {
+  height: 8px;
+  cursor: grabbing;
+}
+
 .progress-fill {
   height: 100%;
   background-color: var(--primary-color);
@@ -1044,6 +1470,49 @@ onUnmounted(() => {
 
 .bottom-toolbar {
   bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbar-scroll-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toolbar-scroll-btn:hover {
+  background-color: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.toolbar-hide-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toolbar-hide-btn:hover {
+  background-color: rgba(239, 68, 68, 0.6);
+  border-color: rgba(239, 68, 68, 0.5);
 }
 
 .toolbar-content {
@@ -1056,8 +1525,8 @@ onUnmounted(() => {
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
-  min-width: 1100px;
-  max-width: 98vw;
+  min-width: 1200px;
+  max-width: calc(98vw - 80px);
   overflow-x: auto;
   overflow-y: hidden;
 }
@@ -1097,10 +1566,6 @@ onUnmounted(() => {
 }
 
 .toolbar-section.section-right {
-  background-color: #2a2a2a;
-}
-
-.toolbar-section.section-hide {
   background-color: #2a2a2a;
 }
 
@@ -1182,25 +1647,6 @@ onUnmounted(() => {
   background-color: rgba(255, 255, 255, 0.25);
 }
 
-.toolbar-toggle-center {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 80px;
-  height: 32px;
-  border-radius: 6px;
-  background-color: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: white;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.toolbar-toggle-center:hover {
-  background-color: rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
-}
-
 .toolbar-volume {
   width: 80px;
   height: 4px;
@@ -1235,6 +1681,20 @@ onUnmounted(() => {
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
+}
+
+.columns-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.15);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .toolbar-show-btn {
@@ -1293,6 +1753,152 @@ onUnmounted(() => {
     order: -1;
     width: 100%;
     justify-content: center;
+  }
+}
+
+.orientation-section {
+  margin-bottom: 16px;
+}
+
+.section-header {
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.section-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary-color);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.video-cell.landscape {
+  min-height: 280px;
+}
+
+.video-cell.portrait {
+  min-height: 400px;
+}
+
+.portrait-row {
+  justify-content: center;
+}
+
+.confirm-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3000;
+  background-color: rgba(25, 25, 25, 0.98);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4);
+  padding: 20px 24px;
+  min-width: 320px;
+  max-width: 400px;
+}
+
+.confirm-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.confirm-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: rgba(239, 68, 68, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+}
+
+.confirm-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: white;
+}
+
+.confirm-message {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.confirm-btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.confirm-btn.cancel {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.confirm-btn.cancel:hover {
+  background-color: rgba(255, 255, 255, 0.12);
+  color: white;
+}
+
+.confirm-btn.danger {
+  background-color: #ef4444;
+  color: white;
+}
+
+.confirm-btn.danger:hover {
+  background-color: #dc2626;
+}
+
+.confirm-pop-enter-active {
+  animation: confirmPopIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.confirm-pop-leave-active {
+  animation: confirmPopOut 0.2s ease-in;
+}
+
+@keyframes confirmPopIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes confirmPopOut {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.92);
   }
 }
 </style>

@@ -123,7 +123,7 @@ if (typeof window !== 'undefined') {
               <div class="conv-info">
                 <div class="conv-title">{{ conv.title }}</div>
                 <div class="conv-meta">
-                  <span class="conv-date">{{ formatDate(conv.updated_at) }}</span>
+                  <span class="conv-date">{{ formatDate(conv.updatedAt) }}</span>
                   <span class="conv-messages">{{ conv.messages.length }} 条消息</span>
                 </div>
               </div>
@@ -131,11 +131,11 @@ if (typeof window !== 'undefined') {
               <div class="conv-actions">
                 <button
                   class="action-btn"
-                  :class="{ favorited: conv.is_favorite }"
+                  :class="{ favorited: conv.isFavorite }"
                   @click="handleToggleFavorite(conv.id, $event)"
                   title="收藏"
                 >
-                  <Star :size="14" :fill="conv.is_favorite ? 'currentColor' : 'none'" />
+                  <Star :size="14" :fill="conv.isFavorite ? 'currentColor' : 'none'" />
                 </button>
                 <button
                   class="action-btn delete"

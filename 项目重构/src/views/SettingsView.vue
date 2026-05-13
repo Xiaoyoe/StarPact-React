@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { useThemeStore, useWallpaperStore } from '@/stores';
 import { useToast } from '@/composables/useToast';
 import type { ThemeType } from '@/types';
-import { Palette, Monitor, Database, Info, Type, Bell, LogOut, MessageSquareQuote, LayoutGrid, Sparkles, Image, Upload, Trash2, X, Check, Code } from 'lucide-vue-next';
+import { Palette, Monitor, Database, Info, Type, Bell, LogOut, MessageSquareQuote, LayoutGrid, Sparkles, Image, Upload, Trash2, X, Check, Code, FolderOpen, Download, File, Folder, ChevronRight, ChevronDown, RefreshCw } from 'lucide-vue-next';
 import { invoke } from '@tauri-apps/api/core';
 import { confirm } from '@tauri-apps/plugin-dialog';
 
@@ -13,6 +13,19 @@ const toast = useToast();
 
 const activeTab = ref<'appearance' | 'wallpaper' | 'general' | 'data-management' | 'about'>('appearance');
 const isResetting = ref(false);
+
+interface FileNode {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size?: number;
+  children?: FileNode[];
+  expanded?: boolean;
+}
+
+const folderStructure = ref<FileNode[]>([]);
+const isLoadingFolder = ref(false);
+const expandedFolders = ref<Set<string>>(new Set());
 
 const tabs = [
   { id: 'appearance' as const, label: '外观', icon: Palette },
@@ -170,12 +183,27 @@ const handleWallpaperDoubleClick = (bg: any) => {
   toast.success('壁纸已应用');
 };
 
+const getCurrentWallpaperOrientation = computed(() => {
+  const currentId = wallpaperStore.currentWallpaperId;
+  if (!currentId) return 'landscape';
+  const wallpaper = wallpaperStore.getWallpaperById(currentId);
+  return wallpaper?.orientation || 'landscape';
+});
+
+const getPreviewWallpaperOrientation = computed(() => {
+  const selectedId = wallpaperStore.selectedWallpaperId;
+  if (!selectedId) return null;
+  const wallpaper = wallpaperStore.getWallpaperById(selectedId);
+  return wallpaper?.orientation || null;
+});
+
 const handleDoubleClickToggle = async () => {
   await wallpaperStore.setDoubleClickToChange(!wallpaperStore.doubleClickToChange);
 };
 
 const formatFileSize = (bytes?: number): string => {
-  if (!bytes) return '';
+  if (bytes === undefined || bytes === null) return '0 B';
+  if (bytes === 0) return '0 B';
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -223,6 +251,124 @@ const handleResetToFactory = async () => {
   } finally {
     isResetting.value = false;
   }
+};
+
+const loadFolderStructure = async () => {
+  isLoadingFolder.value = true;
+  try {
+    const structure = await invoke<FileNode[]>('get_data_folder_structure');
+    folderStructure.value = structure;
+  } catch (error) {
+    console.error('Failed to load folder structure:', error);
+    toast.error('加载文件夹结构失败');
+  } finally {
+    isLoadingFolder.value = false;
+  }
+};
+
+const toggleFolder = (path: string) => {
+  if (expandedFolders.value.has(path)) {
+    expandedFolders.value.delete(path);
+  } else {
+    expandedFolders.value.add(path);
+  }
+  expandedFolders.value = new Set(expandedFolders.value);
+};
+
+const handleExportData = async () => {
+  try {
+    const { save } = await import('@tauri-apps/plugin-dialog');
+    const filePath = await save({
+      defaultPath: `starpact-backup-${new Date().toISOString().split('T')[0]}`,
+      filters: [{ name: 'ZIP', extensions: ['zip'] }],
+    });
+    
+    if (filePath) {
+      toast.info('正在导出数据...');
+      await invoke('export_data', { outputPath: filePath });
+      toast.success('数据导出成功！');
+    }
+  } catch (error) {
+    console.error('Failed to export data:', error);
+    toast.error('导出失败：' + String(error));
+  }
+};
+
+const handleImportData = async () => {
+  try {
+    const { open } = await import('@tauri-apps/plugin-dialog');
+    const selected = await open({
+      multiple: false,
+      filters: [{ name: 'ZIP', extensions: ['zip'] }],
+    });
+    
+    if (selected) {
+      const filePath = typeof selected === 'string' ? selected : (selected as any).path;
+      
+      const confirmed = await confirm(
+        '导入数据将覆盖当前的所有数据，包括：\n' +
+        '• 对话记录和模型配置\n' +
+        '• 图片、视频、壁纸等媒体文件\n' +
+        '• 缓存和临时文件\n' +
+        '• 自定义设置和配置\n\n' +
+        '此操作不可撤销！',
+        {
+          title: '确认导入数据？',
+          kind: 'warning',
+        }
+      );
+      
+      if (confirmed) {
+        toast.info('正在导入数据...');
+        await invoke('import_data', { inputPath: filePath });
+        toast.success('数据导入成功！应用将重新加载');
+        
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      }
+    }
+  } catch (error) {
+    console.error('Failed to import data:', error);
+    toast.error('导入失败：' + String(error));
+  }
+};
+
+const handleOpenDataFolder = async () => {
+  try {
+    await invoke('open_data_folder');
+    toast.success('已打开数据文件夹');
+  } catch (error) {
+    console.error('Failed to open data folder:', error);
+    toast.error('打开文件夹失败：' + String(error));
+  }
+};
+
+const getFolderDescription = (name: string): string => {
+  const descriptions: Record<string, string> = {
+    'images': '存储图片文件',
+    'videos': '存储视频文件',
+    'wallpapers': '存储壁纸文件',
+    'cache': '临时缓存文件',
+    'exports': '导出文件目录',
+    'backups': '备份文件目录',
+    'starpact.db': 'SQLite数据库文件',
+    'config.json': '应用配置文件',
+    'thumbnails': '图片缩略图',
+    'ini': 'INI配置导出',
+    'prompts': '提示词模板导出',
+  };
+  return descriptions[name] || '';
+};
+
+const calculateFolderSize = (node: FileNode): number => {
+  if (node.size !== undefined && node.size !== null) {
+    return node.size;
+  }
+  if (node.children) {
+    return node.children.reduce((total, child) => total + calculateFolderSize(child), 0);
+  }
+  return 0;
 };
 
 const loadSettings = async () => {
@@ -286,6 +432,7 @@ const saveSettings = async (key: string, value: any) => {
 onMounted(async () => {
   await wallpaperStore.loadBackgrounds();
   await loadSettings();
+  await loadFolderStructure();
 });
 </script>
 
@@ -360,199 +507,167 @@ onMounted(async () => {
       </div>
 
       <div v-else-if="activeTab === 'wallpaper'" class="tab-content wallpaper-tab">
-        <div class="wallpaper-section">
-          <div class="wallpaper-preview">
-            <div class="preview-header">
-              <Monitor :size="16" class="inline-icon" />
-              <span class="preview-title">当前壁纸预览</span>
-              <div class="preview-actions">
-                <button v-if="wallpaperStore.hasWallpaper" @click="handleClearWallpaper" class="preview-action-btn">
+        <!-- 两栏布局容器 -->
+        <div class="wp-two-column-layout">
+          <!-- 左栏：壁纸预览 -->
+          <div class="wp-left-column">
+            <div class="wp-preview-card">
+              <div class="wp-preview-header">
+                <div class="wp-preview-title-group">
+                  <Monitor :size="18" class="inline-icon" />
+                  <span class="wp-preview-title">当前壁纸</span>
+                  <span v-if="wallpaperStore.currentWallpaper" class="wp-badge using">使用中</span>
+                  <span v-else class="wp-badge none">未设置</span>
+                </div>
+              </div>
+              <div class="wp-preview-body">
+                <template v-if="wallpaperStore.doubleClickToChange && wallpaperStore.previewWallpaper">
+                  <img 
+                    :src="wallpaperStore.previewWallpaper" 
+                    class="wp-preview-img" 
+                    :class="{
+                      'wp-portrait': getPreviewWallpaperOrientation === 'portrait',
+                      'wp-landscape': getPreviewWallpaperOrientation === 'landscape'
+                    }"
+                    alt="预览壁纸" 
+                  />
+                  <div v-if="getPreviewWallpaperOrientation === 'portrait'" class="wp-portrait-bg">
+                    <img :src="wallpaperStore.previewWallpaper" class="wp-portrait-bg-img" alt="背景" />
+                  </div>
+                  <div class="wp-preview-overlay">
+                    <span class="wp-preview-hint">预览模式 - 双击应用</span>
+                  </div>
+                </template>
+                <template v-else-if="wallpaperStore.currentWallpaper">
+                  <img 
+                    :src="wallpaperStore.currentWallpaper" 
+                    class="wp-preview-img" 
+                    :class="{
+                      'wp-portrait': getCurrentWallpaperOrientation === 'portrait',
+                      'wp-landscape': getCurrentWallpaperOrientation === 'landscape'
+                    }"
+                    alt="当前壁纸" 
+                  />
+                  <div v-if="getCurrentWallpaperOrientation === 'portrait'" class="wp-portrait-bg">
+                    <img :src="wallpaperStore.currentWallpaper" class="wp-portrait-bg-img" alt="背景" />
+                  </div>
+                </template>
+                <div v-else class="wp-preview-empty">
+                  <Palette :size="40" class="wp-preview-empty-icon" />
+                  <p>未设置壁纸，使用默认背景色</p>
+                </div>
+              </div>
+              <div class="wp-preview-footer">
+                <button v-if="wallpaperStore.hasWallpaper" @click="handleClearWallpaper" class="wp-action-btn danger-ghost">
                   <Trash2 :size="14" />
                   清除壁纸
                 </button>
               </div>
             </div>
-            <div class="preview-content">
-              <template v-if="wallpaperStore.currentWallpaper">
-                <img 
-                  :src="wallpaperStore.currentWallpaper" 
-                  class="preview-image"
-                  alt="当前壁纸"
-                />
-                <div class="preview-info" v-if="wallpaperStore.previewWallpaperInfo">
-                  <div class="info-icon">
-                    <Image :size="16" />
-                  </div>
-                  <div class="info-details">
-                    <span class="info-name">{{ wallpaperStore.previewWallpaperInfo.name }}</span>
-                  </div>
-                </div>
-              </template>
-              <div v-else class="preview-placeholder">
-                <div class="placeholder-icon">
-                  <Palette :size="48" />
-                </div>
-                <span class="placeholder-title">未设置壁纸</span>
-                <span class="placeholder-desc">使用默认背景色</span>
-              </div>
-            </div>
           </div>
-          
-          <div class="wallpaper-list">
-            <div class="list-header">
-              <div class="list-header-top">
-                <div class="list-title">
-                  <LayoutGrid :size="18" class="text-primary" />
-                  <h3>壁纸列表</h3>
-                  <span class="wallpaper-count-badge">{{ wallpaperStore.wallpaperCount }}</span>
+
+          <!-- 右栏：壁纸库和启动动画 -->
+          <div class="wp-right-column">
+            <!-- 壁纸库卡片 -->
+            <div class="wp-library-card">
+              <div class="wp-library-header">
+                <div class="wp-toolbar-left">
+                  <Image :size="16" class="text-primary" />
+                  <span class="wp-toolbar-label">壁纸库</span>
+                  <span class="wp-count-badge">{{ wallpaperStore.wallpaperCount }}</span>
                 </div>
-                <div class="list-actions">
-                  <button @click="handleAddWallpaper" class="action-btn primary" title="添加壁纸">
+                <div class="wp-toolbar-right">
+                  <div class="wp-option-inline">
+                    <span class="wp-option-label">双击切换</span>
+                    <button @click="handleDoubleClickToggle" class="toggle-button" :class="{ active: wallpaperStore.doubleClickToChange }">
+                      <div class="toggle-slider" :class="{ active: wallpaperStore.doubleClickToChange }"></div>
+                    </button>
+                  </div>
+                  <button @click="handleAddWallpaper" class="wp-action-btn primary">
                     <Upload :size="14" />
-                    <span>上传壁纸</span>
+                    上传壁纸
                   </button>
-                  <button 
-                    v-if="wallpaperStore.wallpaperCount > 0" 
-                    @click="handleClearAllWallpapers" 
-                    class="action-btn danger" 
-                    title="清空所有壁纸"
-                  >
+                  <button v-if="wallpaperStore.wallpaperCount > 0" @click="handleClearAllWallpapers" class="wp-action-btn danger-ghost" title="清空所有壁纸">
                     <Trash2 :size="14" />
+                    清空
                   </button>
                 </div>
               </div>
-              <p class="list-desc">选择壁纸预览，双击应用为背景</p>
-            </div>
-            
-            <div class="wallpaper-options">
-              <div class="option-item">
-                <span class="option-label">双击切换</span>
-                <button
-                  @click="handleDoubleClickToggle"
-                  class="toggle-button"
-                  :class="{ active: wallpaperStore.doubleClickToChange }"
-                >
-                  <div class="toggle-slider" :class="{ active: wallpaperStore.doubleClickToChange }"></div>
-                </button>
-              </div>
-            </div>
-            
-            <div class="wallpapers-container">
-              <div class="wallpapers-header">
-                <Image :size="16" class="text-primary" />
-                <span>我的壁纸</span>
-              </div>
-              
-              <div class="wallpapers-grid">
-                <template v-if="wallpaperStore.wallpaperCount > 0">
+              <div class="wp-library-body">
+                <div class="wp-grid" v-if="wallpaperStore.wallpaperCount > 0">
                   <div
                     v-for="(bg, index) in wallpaperStore.wallpapers"
                     :key="bg.id"
-                    class="wallpaper-card"
-                    :class="{ 
-                      active: wallpaperStore.selectedWallpaperId === bg.id,
-                      using: wallpaperStore.isActive(bg.id) 
-                    }"
+                    class="wp-card"
+                    :class="{ selected: wallpaperStore.selectedWallpaperId === bg.id, using: wallpaperStore.isActive(bg.id) }"
                     @click="handleWallpaperSelect(bg)"
                     @dblclick="handleWallpaperDoubleClick(bg)"
                   >
-                    <div class="card-preview">
-                      <img 
-                        :src="bg.thumbnailUrl || wallpaperStore.getThumbnailUrl(bg.path)" 
-                        :alt="bg.name"
-                        loading="lazy"
-                        decoding="async"
-                      />
-                      <div class="card-overlay">
-                        <span class="card-index">{{ index + 1 }}</span>
-                        <span 
-                          v-if="wallpaperStore.isActive(bg.id)" 
-                          class="card-status-badge using"
-                        >
-                          <Check :size="10" />
-                          使用中
-                        </span>
-                        <button
-                          @click.stop="handleDeleteBackground(bg.id)"
-                          class="card-delete"
-                        >
-                          <X :size="12" />
-                        </button>
+                    <div class="wp-card-img">
+                      <img :src="bg.thumbnailUrl || wallpaperStore.getThumbnailUrl(bg.path)" :alt="bg.name" loading="lazy" decoding="async" />
+                      <div class="wp-card-overlay">
+                        <span class="wp-card-num">{{ index + 1 }}</span>
+                        <span v-if="bg.orientation === 'portrait'" class="wp-card-orientation">竖屏</span>
+                        <span v-else-if="bg.orientation === 'landscape'" class="wp-card-orientation">横屏</span>
+                        <span v-else-if="bg.orientation === 'square'" class="wp-card-orientation">方形</span>
+                        <span v-if="wallpaperStore.isActive(bg.id)" class="wp-card-using"><Check :size="10" /> 使用中</span>
+                        <button @click.stop="handleDeleteBackground(bg.id)" class="wp-card-del"><X :size="12" /></button>
                       </div>
                     </div>
-                    <div class="card-info">
-                      <p class="card-name">{{ bg.name }}</p>
-                      <div class="card-badges">
-                        <span 
-                          v-if="wallpaperStore.doubleClickToChange && wallpaperStore.selectedWallpaperId === bg.id && !wallpaperStore.isActive(bg.id)" 
-                          class="card-badge preview"
-                        >
-                          预览中
-                        </span>
-                      </div>
+                    <div class="wp-card-name">
+                      <span>{{ bg.name }}</span>
+                      <span v-if="wallpaperStore.doubleClickToChange && wallpaperStore.selectedWallpaperId === bg.id && !wallpaperStore.isActive(bg.id)" class="wp-badge preview">预览</span>
                     </div>
                   </div>
-                </template>
-                <div v-else class="empty-wallpapers">
-                  <div class="empty-icon">
-                    <Image :size="32" />
-                  </div>
-                  <p class="empty-title">暂无自定义壁纸</p>
-                  <p class="empty-desc">点击上方按钮上传壁纸</p>
+                </div>
+                <div v-else class="wp-empty">
+                  <Image :size="36" class="wp-empty-icon" />
+                  <p>暂无壁纸</p>
+                  <span>点击左栏「上传壁纸」按钮添加</span>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <div class="setting-card">
-          <div class="setting-header">
-            <Sparkles :size="16" class="setting-icon" />
-            <div class="setting-title">启动动画</div>
-          </div>
-          <p class="setting-desc">程序启动时显示动画效果</p>
-          <div class="toggle-row">
-            <button
-              class="toggle-button"
-              :class="{ active: splashScreenEnabled }"
-              @click="splashScreenEnabled = !splashScreenEnabled"
-            >
-              <div class="toggle-slider" :class="{ active: splashScreenEnabled }"></div>
-            </button>
-          </div>
-          <div v-if="splashScreenEnabled" class="splash-options">
-            <p class="splash-label">选择动画样式：</p>
-            <div class="setting-options-grid">
-              <button
-                v-for="option in [
-                  { value: 'full' as const, label: '完整动画', desc: '精美启动画面' },
-                  { value: 'minimal' as const, label: '简约动画', desc: '加载指示器' },
-                  { value: 'fade' as const, label: '淡入淡出', desc: '简单过渡' }
-                ]"
-                :key="option.value"
-                class="option-button-small"
-                :class="{ active: splashScreenType === option.value }"
-                @click="handleSplashScreenTypeChange(option.value)"
-              >
-                <div class="option-label">{{ option.label }}</div>
-                <div class="option-desc">{{ option.desc }}</div>
-              </button>
-            </div>
-            
-            <div class="wallpaper-options" style="margin-top: 16px;">
-              <div class="option-item">
-                <span class="option-label">使用壁纸作为动画背景</span>
-                <button
-                  class="toggle-button"
-                  :class="{ active: splashScreenUseWallpaper }"
-                  @click="splashScreenUseWallpaper = !splashScreenUseWallpaper"
-                >
-                  <div class="toggle-slider" :class="{ active: splashScreenUseWallpaper }"></div>
+            <!-- 启动动画卡片（独立） -->
+            <div class="wp-splash-card">
+              <div class="wp-splash-header">
+                <Sparkles :size="18" class="inline-icon" />
+                <span class="wp-splash-title">启动动画</span>
+                <button class="toggle-button" :class="{ active: splashScreenEnabled }" @click="splashScreenEnabled = !splashScreenEnabled">
+                  <div class="toggle-slider" :class="{ active: splashScreenEnabled }"></div>
                 </button>
               </div>
-              <p class="option-desc" style="margin-top: 8px; font-size: 12px; color: var(--text-tertiary);">
-                开启后，启动动画将使用当前设置的壁纸作为背景（如果已设置壁纸）
-              </p>
+              <div class="wp-splash-body" v-if="splashScreenEnabled">
+                <p class="wp-splash-desc">选择动画样式</p>
+                <div class="wp-splash-options">
+                  <button
+                    v-for="option in [
+                      { value: 'full' as const, label: '完整动画', desc: '精美启动画面' },
+                      { value: 'minimal' as const, label: '简约动画', desc: '加载指示器' },
+                      { value: 'fade' as const, label: '淡入淡出', desc: '简单过渡' }
+                    ]"
+                    :key="option.value"
+                    class="option-button-small"
+                    :class="{ active: splashScreenType === option.value }"
+                    @click="handleSplashScreenTypeChange(option.value)"
+                  >
+                    <div class="option-label">{{ option.label }}</div>
+                    <div class="option-desc">{{ option.desc }}</div>
+                  </button>
+                </div>
+                <div class="wp-splash-wallpaper-option">
+                  <div class="wp-splash-wallpaper-text">
+                    <span class="wp-option-label">使用壁纸作为动画背景</span>
+                    <p class="wp-splash-wallpaper-hint">开启后，启动动画将使用当前壁纸作为背景</p>
+                  </div>
+                  <button class="toggle-button" :class="{ active: splashScreenUseWallpaper }" @click="splashScreenUseWallpaper = !splashScreenUseWallpaper">
+                    <div class="toggle-slider" :class="{ active: splashScreenUseWallpaper }"></div>
+                  </button>
+                </div>
+              </div>
+              <div class="wp-splash-disabled" v-else>
+                <p>启动动画已禁用，程序将直接显示主界面</p>
+              </div>
             </div>
           </div>
         </div>
@@ -749,33 +864,140 @@ onMounted(async () => {
           </div>
         </div>
         
+        <!-- 文件夹结构区域 -->
         <div class="section">
           <div class="section-header">
-            <Trash2 :size="16" class="inline-icon" />
-            <h3 class="section-title">恢复出厂设置</h3>
+            <FolderOpen :size="16" class="inline-icon" />
+            <h3 class="section-title">数据文件夹</h3>
+            <button @click="loadFolderStructure" class="refresh-btn" :disabled="isLoadingFolder">
+              <RefreshCw :size="14" :class="{ 'spinning': isLoadingFolder }" />
+            </button>
           </div>
-          <p class="section-desc">清空所有数据和缓存，恢复应用到初始状态</p>
-          <div class="danger-zone">
-            <div class="danger-warning">
-              <span class="warning-icon">⚠️</span>
-              <div class="warning-content">
-                <div class="warning-title">危险操作</div>
-                <div class="warning-desc">此操作将清空所有数据，包括：</div>
-                <ul class="warning-list">
-                  <li>所有对话记录和模型配置</li>
-                  <li>所有图片、视频、壁纸等媒体文件</li>
-                  <li>所有缓存和临时文件</li>
-                  <li>所有自定义设置和配置</li>
-                </ul>
+          <p class="section-desc">查看当前项目的文件夹结构和数据存储情况</p>
+          
+          <div class="folder-structure-card">
+            <!-- 总占用空间统计 -->
+            <div class="folder-stats">
+              <div class="stat-item">
+                <span class="stat-label">总占用空间</span>
+                <span class="stat-value">{{ formatFileSize(folderStructure.reduce((total, node) => total + calculateFolderSize(node), 0)) }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">文件夹数</span>
+                <span class="stat-value">{{ folderStructure.filter(n => n.is_dir).length }}</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">文件数</span>
+                <span class="stat-value">{{ folderStructure.filter(n => !n.is_dir).length }}</span>
               </div>
             </div>
-            <button
-              @click="handleResetToFactory"
-              class="reset-button"
-              :disabled="isResetting"
-            >
-              <Trash2 :size="16" />
-              {{ isResetting ? '正在清空...' : '恢复出厂设置' }}
+            
+            <div class="folder-tree" v-if="folderStructure.length > 0">
+              <div v-for="node in folderStructure" :key="node.path" class="folder-node">
+                <div 
+                  class="folder-item" 
+                  :class="{ 'is-dir': node.is_dir }"
+                  @click="node.is_dir && toggleFolder(node.path)"
+                >
+                  <ChevronRight 
+                    v-if="node.is_dir && !expandedFolders.has(node.path)" 
+                    :size="14" 
+                    class="folder-chevron"
+                  />
+                  <ChevronDown 
+                    v-else-if="node.is_dir && expandedFolders.has(node.path)" 
+                    :size="14" 
+                    class="folder-chevron"
+                  />
+                  <span v-else class="folder-chevron-placeholder"></span>
+                  <Folder v-if="node.is_dir" :size="14" class="folder-icon" />
+                  <File v-else :size="14" class="file-icon" />
+                  <span class="folder-name">{{ node.name }}</span>
+                  <span v-if="getFolderDescription(node.name)" class="folder-desc">{{ getFolderDescription(node.name) }}</span>
+                  <span class="folder-size">{{ formatFileSize(node.is_dir ? calculateFolderSize(node) : (node.size || 0)) }}</span>
+                </div>
+                <div 
+                  v-if="node.is_dir && node.children && expandedFolders.has(node.path)" 
+                  class="folder-children"
+                >
+                  <div v-for="child in node.children" :key="child.path" class="folder-node">
+                    <div class="folder-item" :class="{ 'is-dir': child.is_dir }">
+                      <span class="folder-chevron-placeholder"></span>
+                      <Folder v-if="child.is_dir" :size="14" class="folder-icon" />
+                      <File v-else :size="14" class="file-icon" />
+                      <span class="folder-name">{{ child.name }}</span>
+                      <span v-if="getFolderDescription(child.name)" class="folder-desc">{{ getFolderDescription(child.name) }}</span>
+                      <span class="folder-size">{{ formatFileSize(child.is_dir ? calculateFolderSize(child) : (child.size || 0)) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="folder-empty">
+              <FolderOpen :size="32" class="folder-empty-icon" />
+              <p>暂无数据</p>
+            </div>
+            
+            <div class="folder-actions">
+              <button @click="handleOpenDataFolder" class="folder-action-btn">
+                <FolderOpen :size="14" />
+                打开文件夹
+              </button>
+            </div>
+            
+            <!-- 恢复出厂设置区域 -->
+            <div class="factory-reset-section">
+              <div class="factory-reset-header">
+                <Trash2 :size="16" class="danger-icon" />
+                <span class="factory-reset-title">清空所有数据</span>
+              </div>
+              <p class="factory-reset-desc">
+                此操作将永久删除所有数据，包括对话记录、媒体文件、配置等。建议先导出数据备份。
+              </p>
+              <div class="factory-reset-items">
+                <div class="reset-item">
+                  <span class="reset-item-icon">💬</span>
+                  <span>对话记录和模型配置</span>
+                </div>
+                <div class="reset-item">
+                  <span class="reset-item-icon">🖼️</span>
+                  <span>图片、视频、壁纸</span>
+                </div>
+                <div class="reset-item">
+                  <span class="reset-item-icon">⚙️</span>
+                  <span>缓存和配置文件</span>
+                </div>
+              </div>
+              <button
+                @click="handleResetToFactory"
+                class="factory-reset-btn"
+                :disabled="isResetting"
+              >
+                <Trash2 :size="14" />
+                {{ isResetting ? '正在清空...' : '恢复出厂设置' }}
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- 数据导入导出区域 -->
+        <div class="section">
+          <div class="section-header">
+            <Download :size="16" class="inline-icon" />
+            <h3 class="section-title">数据管理</h3>
+          </div>
+          <p class="section-desc">导出当前数据用于备份或分享，或从备份文件恢复数据</p>
+          
+          <div class="data-actions">
+            <button @click="handleExportData" class="data-action-btn export">
+              <Download :size="16" />
+              <span>导出数据</span>
+              <small>将所有数据打包为ZIP文件</small>
+            </button>
+            <button @click="handleImportData" class="data-action-btn import">
+              <Upload :size="16" />
+              <span>导入数据</span>
+              <small>从ZIP备份文件恢复数据</small>
             </button>
           </div>
         </div>
@@ -920,10 +1142,534 @@ onMounted(async () => {
 
 .tab-content.wallpaper-tab {
   max-width: 100%;
-  height: auto;
+}
+
+/* 两栏布局 */
+.wp-two-column-layout {
+  display: grid;
+  grid-template-columns: 6fr 4fr;
+  gap: 24px;
+  min-height: 600px;
+}
+
+.wp-left-column {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+}
+
+.wp-right-column {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* 壁纸预览卡片 */
+.wp-preview-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.wp-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.wp-preview-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wp-preview-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.wp-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wp-badge.using {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.wp-badge.none {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.wp-badge.preview {
+  background: rgba(59, 130, 246, 0.12);
+  color: #60a5fa;
+}
+
+.wp-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.wp-action-btn.primary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.wp-action-btn.primary:hover {
+  opacity: 0.9;
+}
+
+.wp-action-btn.danger-ghost {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.wp-action-btn.danger-ghost:hover {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.wp-preview-body {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+  min-height: 300px;
+  position: relative;
+}
+
+.wp-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  position: relative;
+  z-index: 2;
+}
+
+.wp-preview-img.wp-portrait {
+  object-fit: contain;
+  object-position: center center;
+  background: transparent;
+}
+
+.wp-preview-img.wp-landscape {
+  object-fit: cover;
+}
+
+.wp-portrait-bg {
+  position: absolute;
+  inset: -30px;
+  z-index: 1;
+  overflow: hidden;
+  background-color: var(--bg-primary);
+}
+
+.wp-portrait-bg-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  filter: blur(50px) brightness(0.7);
+  transform: scale(1.3);
+}
+
+.wp-preview-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 12px 16px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wp-preview-hint {
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  background: rgba(59, 130, 246, 0.9);
+  border-radius: 6px;
+}
+
+.wp-preview-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-tertiary);
+}
+
+.wp-preview-empty-icon {
+  opacity: 0.3;
+}
+
+.wp-preview-empty p {
+  font-size: 14px;
+  margin: 0;
+}
+
+.wp-preview-footer {
+  display: flex;
+  gap: 8px;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+/* 壁纸库卡片 */
+.wp-library-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.wp-library-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.wp-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wp-toolbar-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.wp-count-badge {
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: var(--primary-color);
+  color: white;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wp-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.wp-option-inline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wp-option-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.wp-library-body {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.wp-library-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.wp-library-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.wp-library-body::-webkit-scrollbar-thumb {
+  background-color: var(--border-color);
+  border-radius: 3px;
+}
+
+.wp-library-body::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-tertiary);
+}
+
+/* 壁纸网格 */
+.wp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 12px;
+}
+
+.wp-card {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid transparent;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.wp-card:hover {
+  border-color: var(--border-color);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.wp-card.selected {
+  border-color: var(--primary-color);
+}
+
+.wp-card.using {
+  border-color: #10b981;
+}
+
+.wp-card-img {
+  position: relative;
+  aspect-ratio: 16/10;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+}
+
+.wp-card-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s;
+}
+
+.wp-card:hover .wp-card-img img {
+  transform: scale(1.05);
+}
+
+.wp-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, transparent 40%, transparent 60%, rgba(0,0,0,0.5) 100%);
+  opacity: 0;
+  transition: opacity 0.2s;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 8px;
+}
+
+.wp-card.using .wp-card-overlay {
+  opacity: 1;
+}
+
+.wp-card:hover .wp-card-overlay {
+  opacity: 1;
+}
+
+.wp-card-num {
+  align-self: flex-start;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(0,0,0,0.6);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.wp-card-orientation {
+  align-self: flex-start;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(59, 130, 246, 0.9);
+  color: white;
+  font-size: 10px;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+.wp-card-using {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  background: rgba(16, 185, 129, 0.9);
+  color: white;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.wp-card-del {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.wp-card-del:hover {
+  background: #ef4444;
+  transform: scale(1.1);
+}
+
+.wp-card-name {
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wp-card-name span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+/* 壁纸空状态 */
+.wp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 8px;
+  background: var(--bg-tertiary);
+  border: 1px dashed var(--border-color);
+  border-radius: 12px;
+  color: var(--text-tertiary);
+}
+
+.wp-empty-icon {
+  opacity: 0.3;
+  margin-bottom: 8px;
+}
+
+.wp-empty p {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.wp-empty span {
+  font-size: 12px;
+}
+
+/* 启动动画卡片 */
+.wp-splash-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.wp-splash-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+}
+
+.wp-splash-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.wp-splash-body {
+  padding: 20px;
+}
+
+.wp-splash-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  font-weight: 500;
+}
+
+.wp-splash-options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.wp-splash-wallpaper-option {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+.wp-splash-wallpaper-text {
+  flex: 1;
+}
+
+.wp-splash-wallpaper-hint {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.wp-splash-disabled {
+  padding: 20px;
+  text-align: center;
+}
+
+.wp-splash-disabled p {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin: 0;
 }
 
 .section {
@@ -1080,267 +1826,7 @@ onMounted(async () => {
   color: var(--text-tertiary);
 }
 
-.wallpaper-section {
-  display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 24px;
-  height: auto;
-  min-height: 600px;
-}
 
-.wallpaper-preview {
-  display: flex;
-  flex-direction: column;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  overflow: hidden;
-  min-height: 500px;
-}
-
-.preview-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 18px 24px;
-  border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-tertiary);
-}
-
-.preview-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.preview-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.preview-action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid rgba(239, 68, 68, 0.2);
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.preview-action-btn:hover {
-  background-color: rgba(239, 68, 68, 0.2);
-  transform: scale(1.02);
-}
-
-.preview-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--bg-tertiary);
-  position: relative;
-  padding: 24px;
-  min-height: 0;
-}
-
-.preview-image {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-  border-radius: 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-}
-
-.preview-info {
-  position: absolute;
-  bottom: 16px;
-  left: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background-color: rgba(0, 0, 0, 0.5);
-  border-radius: 8px;
-  backdrop-filter: blur(8px);
-}
-
-.info-icon {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background-color: rgba(255, 255, 255, 0.1);
-  color: white;
-}
-
-.info-details {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.info-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: white;
-  max-width: 120px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.info-size {
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.6);
-}
-
-.preview-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  padding: 48px;
-}
-
-.placeholder-icon {
-  width: 80px;
-  height: 80px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 20px;
-  background-color: var(--bg-secondary);
-  color: var(--text-tertiary);
-}
-
-.placeholder-title {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.placeholder-desc {
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
-.wallpaper-list {
-  display: flex;
-  flex-direction: column;
-  background-color: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  overflow: hidden;
-  min-height: 0;
-}
-
-.list-header {
-  padding: 20px 24px;
-  border-bottom: 1px solid var(--border-color);
-  background-color: var(--bg-tertiary);
-}
-
-.list-header-top {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.list-title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.list-header h3 {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.wallpaper-count-badge {
-  padding: 2px 8px;
-  border-radius: 12px;
-  background-color: var(--primary-color);
-  color: white;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.list-desc {
-  font-size: 13px;
-  color: var(--text-tertiary);
-  line-height: 1.5;
-}
-
-.list-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-.action-btn.primary {
-  background-color: var(--primary-color);
-  color: white;
-}
-
-.action-btn.primary:hover {
-  opacity: 0.9;
-  transform: scale(1.02);
-}
-
-.action-btn.danger {
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
-
-.action-btn.danger:hover {
-  background-color: rgba(239, 68, 68, 0.2);
-}
-
-.wallpaper-options {
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.option-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.option-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
 
 .toggle-button {
   position: relative;
@@ -1374,376 +1860,13 @@ onMounted(async () => {
   left: 22px;
 }
 
-.wallpapers-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  min-height: 0;
-}
 
-.wallpapers-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 18px 24px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  border-bottom: 1px solid var(--border-color);
-}
 
-.wallpapers-grid {
-  flex: 1;
-  overflow-y: auto;
-  padding: 20px;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  align-content: start;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
 
-.wallpapers-grid::-webkit-scrollbar {
-  width: 6px;
-}
 
-.wallpapers-grid::-webkit-scrollbar-track {
-  background: transparent;
-}
 
-.wallpapers-grid::-webkit-scrollbar-thumb {
-  background-color: var(--border-color);
-  border-radius: 3px;
-  transition: background-color 0.2s;
-}
 
-.wallpapers-grid::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-tertiary);
-}
 
-.wallpaper-card {
-  position: relative;
-  border-radius: 12px;
-  overflow: hidden;
-  background-color: var(--bg-tertiary);
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.wallpaper-card:hover {
-  transform: scale(1.02);
-  border-color: var(--border-color);
-}
-
-.wallpaper-card.active {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(var(--bg-primary-rgb), 0.1);
-}
-
-.wallpaper-card.using {
-  border-color: #10b981;
-}
-
-.card-preview {
-  position: relative;
-  aspect-ratio: 16/10;
-  overflow: hidden;
-}
-
-.card-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.card-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.4), transparent 40%);
-  opacity: 0;
-  transition: opacity 0.2s;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 8px;
-}
-
-.wallpaper-card.using .card-overlay {
-  opacity: 1;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent 50%);
-}
-
-.wallpaper-card:hover .card-overlay {
-  opacity: 1;
-}
-
-.card-index {
-  padding: 4px 8px;
-  border-radius: 6px;
-  background-color: rgba(0, 0, 0, 0.6);
-  color: white;
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.card-status-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-size: 10px;
-  font-weight: 500;
-}
-
-.card-status-badge.using {
-  background-color: rgba(16, 185, 129, 0.9);
-  color: white;
-}
-
-.card-delete {
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  background-color: rgba(239, 68, 68, 0.9);
-  color: white;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s;
-  align-self: flex-end;
-  margin-left: auto;
-}
-
-.card-delete:hover {
-  background-color: #ef4444;
-  transform: scale(1.1);
-}
-
-.card-info {
-  padding: 10px 12px;
-  min-height: 52px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
-.card-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-bottom: 4px;
-}
-
-.card-badges {
-  display: flex;
-  gap: 6px;
-  min-height: 20px;
-  align-items: center;
-}
-
-.card-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1;
-}
-
-.card-badge.preview {
-  background-color: rgba(59, 130, 246, 0.12);
-  color: #60a5fa;
-}
-
-.card-badge.using {
-  background-color: rgba(16, 185, 129, 0.12);
-  color: #34d399;
-}
-
-.empty-wallpapers {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 24px;
-  gap: 12px;
-}
-
-.empty-icon {
-  width: 64px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 16px;
-  background-color: var(--bg-tertiary);
-  color: var(--text-tertiary);
-}
-
-.empty-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.empty-desc {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.wallpapers-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.wallpapers-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background-color: var(--bg-tertiary);
-}
-
-.wallpapers-header span {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.wallpaper-count {
-  margin-left: auto;
-  padding: 2px 6px;
-  border-radius: 10px;
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-  font-size: 10px;
-}
-
-.wallpapers-list {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.wallpaper-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  border-left: 3px solid transparent;
-}
-
-.wallpaper-item:hover {
-  background-color: var(--bg-tertiary);
-}
-
-.wallpaper-item.active {
-  background-color: var(--primary-light);
-  border-left-color: var(--primary-color);
-}
-
-.item-index {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 500;
-  background-color: var(--bg-tertiary);
-  color: var(--text-tertiary);
-  flex-shrink: 0;
-}
-
-.wallpaper-item.active .item-index {
-  background-color: var(--primary-color);
-  color: white;
-}
-
-.item-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.item-name {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wallpaper-item.active .item-name {
-  color: var(--primary-color);
-}
-
-.item-badge {
-  font-size: 10px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  flex-shrink: 0;
-}
-
-.item-badge.preview {
-  background-color: rgba(59, 130, 246, 0.15);
-  color: var(--primary-color);
-}
-
-.item-badge.using {
-  background-color: var(--primary-color);
-  color: white;
-}
-
-.item-delete {
-  padding: 4px;
-  border-radius: 4px;
-  background-color: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-  border: none;
-  cursor: pointer;
-  opacity: 0;
-  transition: all 0.15s ease;
-}
-
-.wallpaper-item:hover .item-delete {
-  opacity: 1;
-}
-
-.item-delete:hover {
-  background-color: rgba(239, 68, 68, 0.2);
-}
-
-.empty-wallpapers {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  color: var(--text-tertiary);
-}
-
-.empty-wallpapers p {
-  font-size: 10px;
-  margin-top: 8px;
-}
 
 .setting-card {
   background-color: var(--bg-secondary);
@@ -2305,75 +2428,511 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-.danger-zone {
+/* 文件夹结构样式 */
+.refresh-btn {
+  margin-left: auto;
+  padding: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.refresh-btn:disabled {
+  cursor: not-allowed;
+}
+
+.refresh-btn .spinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.folder-structure-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px;
+  overflow-y: auto;
+  position: relative;
+}
+
+.folder-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.stat-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.folder-tree {
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.folder-node {
+  user-select: none;
+}
+
+.folder-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  cursor: default;
+  transition: background 0.15s;
+}
+
+.folder-item.is-dir {
+  cursor: pointer;
+}
+
+.folder-item.is-dir:hover {
+  background: var(--bg-tertiary);
+}
+
+.folder-chevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.folder-chevron-placeholder {
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.folder-icon {
+  flex-shrink: 0;
+  color: #f59e0b;
+}
+
+.file-icon {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.folder-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.folder-desc {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin: 0 8px;
+  font-style: italic;
+}
+
+.folder-size {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.folder-children {
+  margin-left: 20px;
+  border-left: 1px solid var(--border-light);
+  padding-left: 8px;
+}
+
+.folder-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  gap: 12px;
+  color: var(--text-tertiary);
+}
+
+.folder-empty-icon {
+  opacity: 0.3;
+}
+
+.folder-empty p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.folder-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+}
+
+.folder-action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.folder-action-btn:hover {
+  background: var(--primary-light);
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+.factory-reset-section {
   margin-top: 16px;
-  padding: 20px;
-  background-color: rgba(239, 68, 68, 0.05);
+  padding: 16px;
+  background: rgba(239, 68, 68, 0.05);
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 12px;
 }
 
-.danger-warning {
+.factory-reset-header {
   display: flex;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.warning-icon {
-  font-size: 24px;
-  flex-shrink: 0;
-}
-
-.warning-content {
-  flex: 1;
-}
-
-.warning-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: #EF4444;
-  margin-bottom: 8px;
-}
-
-.warning-desc {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-bottom: 8px;
-}
-
-.warning-list {
-  margin: 0;
-  padding-left: 20px;
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
-.warning-list li {
-  margin-bottom: 4px;
-}
-
-.reset-button {
-  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 12px 24px;
-  background-color: #EF4444;
+  margin-bottom: 8px;
+}
+
+.danger-icon {
+  color: #ef4444;
+}
+
+.factory-reset-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ef4444;
+}
+
+.factory-reset-desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  line-height: 1.5;
+}
+
+.factory-reset-items {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.reset-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.reset-item-icon {
+  font-size: 14px;
+}
+
+.factory-reset-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 20px;
+  background: #ef4444;
   color: white;
   border: none;
   border-radius: 8px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 }
 
-.reset-button:hover:not(:disabled) {
-  background-color: #DC2626;
-  transform: translateY(-2px);
+.factory-reset-btn:hover:not(:disabled) {
+  background: #dc2626;
+  transform: translateY(-1px);
 }
 
-.reset-button:disabled {
+.factory-reset-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* 数据导入导出样式 */
+.data-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.data-action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 2px solid var(--border-color);
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.data-action-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.data-action-btn.export {
+  border-color: #10b981;
+}
+
+.data-action-btn.export:hover {
+  background: rgba(16, 185, 129, 0.05);
+}
+
+.data-action-btn.import {
+  border-color: #3b82f6;
+}
+
+.data-action-btn.import:hover {
+  background: rgba(59, 130, 246, 0.05);
+}
+
+.data-action-btn span {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.data-action-btn small {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.4;
+}
+
+/* 局域网共享样式 */
+.lan-share-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.lan-share-start {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lan-share-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.lan-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.lan-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.lan-input:focus {
+  border-color: var(--primary-color);
+}
+
+.lan-start-btn, .lan-stop-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lan-start-btn {
+  background: #10b981;
+  color: white;
+}
+
+.lan-start-btn:hover {
+  background: #059669;
+}
+
+.lan-stop-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.lan-stop-btn:hover {
+  background: #dc2626;
+}
+
+.lan-share-active {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.lan-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lan-status-icon {
+  width: 24px;
+  height: 24px;
+  background: #10b981;
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.lan-status-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #10b981;
+}
+
+.lan-address {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.lan-address-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.lan-address-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.lan-address-text {
+  flex: 1;
+  font-size: 14px;
+  color: var(--primary-color);
+  font-weight: 500;
+  font-family: monospace;
+}
+
+.lan-copy-btn {
+  padding: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.lan-copy-btn:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+/* 响应式布局 */
+@media (max-width: 1200px) {
+  .wp-two-column-layout {
+    grid-template-columns: 1fr;
+    min-height: auto;
+  }
+  
+  .wp-preview-card {
+    height: auto;
+  }
+  
+  .wp-preview-body {
+    min-height: 250px;
+  }
+  
+  .wp-library-card {
+    min-height: 400px;
+  }
+}
+
+@media (max-width: 768px) {
+  .wp-splash-options {
+    grid-template-columns: 1fr;
+  }
+  
+  .wp-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
 }
 </style>

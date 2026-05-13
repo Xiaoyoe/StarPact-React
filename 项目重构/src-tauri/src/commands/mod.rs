@@ -5,3 +5,4 @@ pub mod storage;
 pub mod gallery;
 pub mod wallpaper;
 pub mod video;
+pub mod lan_server;

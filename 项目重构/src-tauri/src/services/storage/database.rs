@@ -594,6 +594,7 @@ impl Database {
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn get_wallpapers(&self) -> Result<Vec<Wallpaper>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
@@ -618,6 +619,7 @@ impl Database {
         Ok(wallpapers)
     }
     
+    #[allow(dead_code)]
     pub fn save_wallpapers(&self, wallpapers: Vec<Wallpaper>) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
@@ -642,6 +644,7 @@ impl Database {
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn get_active_wallpaper(&self) -> Result<Option<Wallpaper>, String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
@@ -666,6 +669,7 @@ impl Database {
         Ok(result)
     }
     
+    #[allow(dead_code)]
     pub fn set_active_wallpaper(&self, id: &str) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
@@ -678,6 +682,7 @@ impl Database {
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn add_wallpaper(&self, wallpaper: Wallpaper) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
@@ -697,6 +702,7 @@ impl Database {
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn delete_wallpaper(&self, id: &str) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
@@ -706,6 +712,7 @@ impl Database {
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn clear_all_wallpapers(&self) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
@@ -715,6 +722,7 @@ impl Database {
         Ok(())
     }
     
+    #[allow(dead_code)]
     pub fn clear_active_wallpaper(&self) -> Result<(), String> {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
@@ -832,6 +840,35 @@ impl Database {
         .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
         
         Ok(images)
+    }
+    
+    #[allow(dead_code)]
+    pub fn get_all_videos(&self) -> Result<Vec<crate::models::VideoFile>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        
+        let mut stmt = conn.prepare(r#"
+            SELECT path, name, size, duration
+            FROM video_items
+            ORDER BY name
+        "#).map_err(|e| e.to_string())?;
+        
+        let videos = stmt.query_map([], |row| {
+            Ok(crate::models::VideoFile {
+                path: row.get::<_, String>(0)?,
+                name: row.get::<_, String>(1)?,
+                size: row.get::<_, i64>(2)? as u64,
+                duration: row.get::<_, i64>(3)? as f64,
+                width: 0,
+                height: 0,
+                codec: String::new(),
+                fps: 0.0,
+                bitrate: 0,
+            })
+        })
+        .map_err(|e| e.to_string())?
+        .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
+        
+        Ok(videos)
     }
     
     pub fn get_all_images(&self) -> Result<Vec<ImageMetadata>, String> {

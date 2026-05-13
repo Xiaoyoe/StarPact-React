@@ -2,8 +2,10 @@
 import { ref, computed } from 'vue';
 import { Image as ImageIcon, Upload, Download, Settings2, Info, Trash2, Plus, Check } from 'lucide-vue-next';
 import { useFFmpegStore } from '@/stores';
+import { useToast } from '@/composables/useToast';
 
 const ffmpegStore = useFFmpegStore();
+const toast = useToast();
 
 interface ImageFile {
   id: string;
@@ -93,7 +95,7 @@ const formatFileSize = (bytes: number): string => {
 
 const convertImages = async () => {
   if (images.value.length === 0) {
-    alert('请先添加图片');
+    toast.warning('请先添加图片');
     return;
   }
 
@@ -138,17 +140,17 @@ const convertImages = async () => {
     if (failCount === 0) {
       ffmpegStore.addTaskLog(taskId, `[done] ✅ 全部 ${successCount} 张图片转换完成`);
       ffmpegStore.updateTask(taskId, { status: 'completed' });
-      alert(`成功转换 ${successCount} 张图片`);
+      toast.success(`成功转换 ${successCount} 张图片`);
     } else {
       ffmpegStore.addTaskLog(taskId, `[info] 完成: ${successCount} 成功, ${failCount} 失败`);
       ffmpegStore.updateTask(taskId, { status: failCount < images.value.length ? 'completed' : 'error', error: `${failCount} 张图片转换失败` });
-      alert(`${successCount} 张成功, ${failCount} 张失败`);
+      toast.warning(`${successCount} 张成功, ${failCount} 张失败`);
     }
   } catch (error) {
     console.error('转换失败:', error);
     ffmpegStore.addTaskLog(taskId, `[error] ❌ 转换失败: ${error}`);
     ffmpegStore.updateTask(taskId, { status: 'error', error: String(error) });
-    alert('转换失败');
+    toast.error('转换失败');
   } finally {
     isProcessing.value = false;
   }

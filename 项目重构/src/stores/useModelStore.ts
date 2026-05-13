@@ -12,6 +12,7 @@ interface ModelState {
   ollamaModels: OllamaModel[];
   lmstudioModels: LMStudioModel[];
   localServices: Map<string, LocalServiceStatus>;
+  runningModels: Map<string, boolean>;
 }
 
 export const useModelStore = defineStore('model', {
@@ -24,6 +25,7 @@ export const useModelStore = defineStore('model', {
     ollamaModels: [],
     lmstudioModels: [],
     localServices: new Map(),
+    runningModels: new Map(),
   }),
 
   getters: {
@@ -135,7 +137,8 @@ export const useModelStore = defineStore('model', {
     async checkOllamaStatus(host: string = 'localhost', port: number = 11434) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const status = await invoke<OllamaStatus>('check_local_service', { 
+        
+        const status = await invoke<LocalServiceStatus>('check_local_service', { 
           provider: 'ollama', 
           host, 
           port 
@@ -148,9 +151,16 @@ export const useModelStore = defineStore('model', {
         };
         
         if (status.running) {
-          const models = await invoke<OllamaModel[]>('ollama_get_models');
+          const models = await invoke<OllamaModel[]>('ollama_get_models_with_addr', { host, port });
           this.ollamaModels = models;
           this.ollamaStatus.models = models;
+          
+          const psResult = await invoke<{ models: Array<{ name: string }> }>('ollama_ps', { host, port });
+          if (psResult?.models) {
+            psResult.models.forEach((m: { name: string }) => {
+              this.runningModels.set(`ollama-${m.name}`, true);
+            });
+          }
         } else {
           this.ollamaModels = [];
         }
@@ -167,7 +177,8 @@ export const useModelStore = defineStore('model', {
     async checkLMStudioStatus(host: string = 'localhost', port: number = 1234) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        const status = await invoke<LMStudioStatus>('check_local_service', { 
+        
+        const status = await invoke<LocalServiceStatus>('check_local_service', { 
           provider: 'lmstudio', 
           host, 
           port 
@@ -180,9 +191,13 @@ export const useModelStore = defineStore('model', {
         };
         
         if (status.running) {
-          const models = await invoke<LMStudioModel[]>('lmstudio_get_models');
+          const models = await invoke<LMStudioModel[]>('lmstudio_get_models_with_addr', { host, port });
           this.lmstudioModels = models;
           this.lmstudioStatus.models = models;
+          
+          models.forEach(m => {
+            this.runningModels.set(`lmstudio-${m.id}`, true);
+          });
         } else {
           this.lmstudioModels = [];
         }
@@ -196,26 +211,76 @@ export const useModelStore = defineStore('model', {
       }
     },
 
-    async pullOllamaModel(modelName: string) {
+    async pullOllamaModel(modelName: string, host: string = 'localhost', port: number = 11434) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('ollama_pull_model', { modelName });
-        await this.checkOllamaStatus();
+        await invoke('ollama_pull_model_with_addr', { host, port, modelName });
+        await this.checkOllamaStatus(host, port);
       } catch (error) {
         console.error('Failed to pull Ollama model:', error);
         throw error;
       }
     },
 
-    async deleteOllamaModel(modelName: string) {
+    async deleteOllamaModel(modelName: string, host: string = 'localhost', port: number = 11434) {
       try {
         const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('ollama_delete_model', { modelName });
-        await this.checkOllamaStatus();
+        await invoke('ollama_delete_model_with_addr', { host, port, modelName });
+        await this.checkOllamaStatus(host, port);
       } catch (error) {
         console.error('Failed to delete Ollama model:', error);
         throw error;
       }
+    },
+
+    async showOllamaModel(modelName: string, host: string = 'localhost', port: number = 11434) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const info = await invoke('ollama_show_model_with_addr', { host, port, modelName });
+        return info;
+      } catch (error) {
+        console.error('Failed to show Ollama model:', error);
+        throw error;
+      }
+    },
+
+    async runOllamaModel(modelName: string, host: string = 'localhost', port: number = 11434) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('ollama_run_model_with_addr', { host, port, modelName });
+        this.runningModels.set(`ollama-${modelName}`, true);
+        await this.checkOllamaStatus(host, port);
+      } catch (error) {
+        console.error('Failed to run Ollama model:', error);
+        throw error;
+      }
+    },
+
+    async stopOllamaModel(modelName: string, host: string = 'localhost', port: number = 11434) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('ollama_stop_model_with_addr', { host, port, modelName });
+        this.runningModels.delete(`ollama-${modelName}`);
+        await this.checkOllamaStatus(host, port);
+      } catch (error) {
+        console.error('Failed to stop Ollama model:', error);
+        throw error;
+      }
+    },
+
+    async getOllamaRunningModels(host: string = 'localhost', port: number = 11434) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        const result = await invoke<{ models: Array<{ name: string }> }>('ollama_ps', { host, port });
+        return result?.models || [];
+      } catch (error) {
+        console.error('Failed to get running models:', error);
+        return [];
+      }
+    },
+
+    isModelRunning(provider: string, modelName: string): boolean {
+      return this.runningModels.get(`${provider}-${modelName}`) || false;
     },
 
     createLocalModelConfig(

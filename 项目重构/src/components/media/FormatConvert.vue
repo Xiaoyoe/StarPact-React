@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { FileType, Settings, Gauge, Film, Music2, MonitorPlay, Upload, ChevronDown, ChevronRight, Sparkles, Info, AlertCircle, Square, Play, Zap, Image as ImageIcon, Maximize2, X } from 'lucide-vue-next';
 import { useFFmpegStore } from '@/stores';
 import { ffmpegService } from '@/services';
+import { useToast } from '@/composables/useToast';
 import type { MediaInfo } from '@/types/ffmpeg';
 
 const videoFormats = ['MP4', 'AVI', 'MKV', 'MOV', 'WebM', 'FLV', 'WMV', 'MPEG', 'TS', '3GP', 'OGV'];
@@ -14,6 +15,7 @@ const pixFmts = ['yuv420p', 'yuv422p', 'yuv444p', 'yuv420p10le', 'rgb24', 'auto'
 const resolutions = ['原始', '3840x2160 (4K)', '2560x1440 (2K)', '1920x1080 (1080p)', '1280x720 (720p)', '854x480 (480p)', '640x360 (360p)', '自定义'];
 
 const ffmpegStore = useFFmpegStore();
+const toast = useToast();
 
 const mode = ref('video');
 const targetFormat = ref('MP4');
@@ -204,12 +206,12 @@ const buildConvertArgs = (): string[] => {
 
 const handleStart = async () => {
   if (!ffmpegStore.isConfigured) {
-    alert('请先在配置中设置 FFmpeg bin 目录');
+    toast.error('请先在配置中设置 FFmpeg bin 目录');
     return;
   }
 
   if (inputFiles.value.length === 0 || !mainFile.value) {
-    alert('请先选择要转换的文件');
+    toast.warning('请先选择要转换的文件');
     return;
   }
 

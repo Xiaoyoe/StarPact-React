@@ -3,9 +3,11 @@ import { ref, computed, onMounted } from 'vue';
 import { Music, Volume2, AudioLines, FileAudio, Disc3, Upload, ChevronDown, ChevronRight, Sparkles, Info, Play, AlertCircle, Square, FileType, X, Maximize2 } from 'lucide-vue-next';
 import { useFFmpegStore } from '@/stores';
 import { ffmpegService } from '@/services';
+import { useToast } from '@/composables/useToast';
 import type { MediaInfo } from '@/types/ffmpeg';
 
 const ffmpegStore = useFFmpegStore();
+const toast = useToast();
 
 const tab = ref('extract');
 const audioFormat = ref('MP3');
@@ -180,12 +182,12 @@ const buildAudioArgs = (): string[] => {
 
 const handleStart = async () => {
   if (!ffmpegStore.isConfigured) {
-    alert('请先在配置中设置 FFmpeg bin 目录');
+    toast.error('请先在配置中设置 FFmpeg bin 目录');
     return;
   }
 
   if (inputFiles.value.length === 0 || !mainFile.value) {
-    alert('请先选择要处理的文件');
+    toast.warning('请先选择要处理的文件');
     return;
   }
 

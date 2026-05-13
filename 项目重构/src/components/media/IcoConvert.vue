@@ -2,8 +2,10 @@
 import { ref, computed } from 'vue';
 import { Image as ImageIcon, Upload, Circle, Square, RectangleHorizontal, Download, RotateCcw, ZoomIn, ZoomOut, Check, Info, X } from 'lucide-vue-next';
 import { useFFmpegStore } from '@/stores';
+import { useToast } from '@/composables/useToast';
 
 const ffmpegStore = useFFmpegStore();
+const toast = useToast();
 
 const image = ref<HTMLImageElement | null>(null);
 const imageSrc = ref<string | null>(null);
@@ -34,7 +36,7 @@ const handleFileSelect = (e: Event) => {
   if (!file) return;
 
   if (!file.type.startsWith('image/')) {
-    alert('请选择图片文件');
+    toast.warning('请选择图片文件');
     return;
   }
 
@@ -93,13 +95,13 @@ const resetCrop = () => {
 
 const generatePreview = async () => {
   if (!image.value) {
-    alert('请先选择图片');
+    toast.warning('请先选择图片');
     return;
   }
 
   const sizes = selectedSizes.value.filter(s => s.selected).map(s => s.size);
   if (sizes.length === 0) {
-    alert('请至少选择一个输出尺寸');
+    toast.warning('请至少选择一个输出尺寸');
     return;
   }
 
@@ -176,10 +178,10 @@ const generateIco = async () => {
     });
     ffmpegStore.addTaskLog(taskId, '[done] ICO 文件已生成并下载');
     
-    alert('ICO 文件已生成');
+    toast.success('ICO 文件已生成');
   } catch (error) {
     console.error('生成 ICO 失败:', error);
-    alert('生成 ICO 失败');
+    toast.error('生成 ICO 失败');
   } finally {
     setIsProcessing(false);
   }

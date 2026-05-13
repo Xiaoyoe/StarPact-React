@@ -2,6 +2,7 @@
 import { ref, onMounted } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { useFFmpegStore } from '@/stores';
+import { useToast } from '@/composables/useToast';
 import FolderProcess from '@/components/media/FolderProcess.vue';
 import FormatConvert from '@/components/media/FormatConvert.vue';
 import AudioProcess from '@/components/media/AudioProcess.vue';
@@ -16,6 +17,7 @@ import {
 } from 'lucide-vue-next';
 
 const ffmpegStore = useFFmpegStore();
+const toast = useToast();
 
 const activeTab = ref('folder');
 const showTaskList = ref(false);
@@ -71,7 +73,7 @@ async function handleModeChange(mode: 'global' | 'folder') {
       });
       ffmpegStore.saveConfig();
     } else {
-      alert('全局 FFmpeg 未安装或未添加到系统 PATH');
+      toast.error('全局 FFmpeg 未安装或未添加到系统 PATH');
     }
   }
 }
@@ -94,7 +96,7 @@ async function selectFFmpegPath() {
       });
       ffmpegStore.saveConfig();
     } else {
-      alert(result.error || '无效的 FFmpeg 目录');
+      toast.error(result.error || '无效的 FFmpeg 目录');
     }
   }
 }

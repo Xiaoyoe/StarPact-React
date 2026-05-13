@@ -10,7 +10,7 @@ import {
   Play, Pause, Volume2, VolumeX, Maximize, Minimize,
   SkipBack, SkipForward, Camera, ChevronLeft, ChevronRight,
   PictureInPicture2, PictureInPicture, Plus, Trash2, Repeat, Repeat1,
-  List, X, Maximize2, Grid3X3, Save, FileJson, FolderOpen
+  List, X, Maximize2, Grid3X3, Save, FileJson, FolderOpen, Info
 } from 'lucide-vue-next';
 import MultiVideoPlayer from '@/components/video/MultiVideoPlayer.vue';
 import Modal from '@/components/common/Modal.vue';
@@ -27,12 +27,39 @@ interface VideoItem {
   addedAt: number;
 }
 
+const VIDEO_PLAYER_CONFIG_KEY = 'video-player-config';
+
+const loadPlayerConfig = () => {
+  try {
+    const saved = localStorage.getItem(VIDEO_PLAYER_CONFIG_KEY);
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('Failed to load video player config:', e);
+  }
+  return { autoPlay: false, autoLoad: false };
+};
+
+const savePlayerConfig = () => {
+  try {
+    localStorage.setItem(VIDEO_PLAYER_CONFIG_KEY, JSON.stringify({
+      autoPlay: autoPlay.value,
+      autoLoad: autoLoad.value,
+    }));
+  } catch (e) {
+    console.error('Failed to save video player config:', e);
+  }
+};
+
+const initialConfig = loadPlayerConfig();
+
 const playlist = ref<VideoItem[]>([]);
 const currentIndex = ref(-1);
 const sidebarOpen = ref(true);
 const repeatMode = ref<'none' | 'one' | 'all'>('none');
-const autoPlay = ref(false);
-const autoLoad = ref(false);
+const autoPlay = ref(initialConfig.autoPlay);
+const autoLoad = ref(initialConfig.autoLoad);
 const multiVideoMode = ref(false);
 const currentPlaylistId = ref<string | null>(null);
 
@@ -41,6 +68,18 @@ const jsonContent = ref<string>('');
 const jsonTotalCount = ref(0);
 const jsonDisplayCount = ref(100);
 const jsonAllData = ref<any[]>([]);
+const selectedPlaylists = ref<Set<string>>(new Set());
+const jsonViewMode = ref<'list' | 'json'>('list');
+
+const confirmModalVisible = ref(false);
+const confirmModalTitle = ref('确认');
+const confirmModalMessage = ref('');
+const confirmModalCallback = ref<(() => void) | null>(null);
+
+const videoInfoVisible = ref(false);
+const videoInfoPosition = ref({ x: 0, y: 20 });
+const videoInfoDragging = ref(false);
+const videoInfoDragStart = ref({ x: 0, y: 0 });
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 const containerRef = ref<HTMLDivElement | null>(null);
@@ -67,6 +106,8 @@ const isLoading = ref(false);
 const hideTimer = ref<ReturnType<typeof setTimeout> | null>(null);
 const isDragging = ref(false);
 const dragCount = ref(0);
+const isSidebarDragOver = ref(false);
+const isDraggingProgress = ref(false);
 
 const currentVideo = computed(() => {
   return currentIndex.value >= 0 && currentIndex.value < playlist.value.length
@@ -158,6 +199,24 @@ const handleSeek = (event: MouseEvent) => {
   video.currentTime = ratio * video.duration;
 };
 
+const handleProgressMouseDown = (event: MouseEvent) => {
+  event.preventDefault();
+  isDraggingProgress.value = true;
+  handleSeek(event);
+  showControls.value = true;
+};
+
+const handleProgressMouseMove = (event: MouseEvent) => {
+  if (isDraggingProgress.value) {
+    handleProgressHover(event);
+    handleSeek(event);
+  }
+};
+
+const handleProgressMouseUp = () => {
+  isDraggingProgress.value = false;
+};
+
 const handleProgressHover = (event: MouseEvent) => {
   const bar = progressRef.value;
   if (!bar || !duration.value) return;
@@ -166,6 +225,30 @@ const handleProgressHover = (event: MouseEvent) => {
   const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
   hoverTime.value = ratio * duration.value;
   hoverX.value = event.clientX - rect.left;
+};
+
+const handleVideoInfoMouseDown = (event: MouseEvent) => {
+  const target = event.target as HTMLElement;
+  if (target.closest('.info-close-btn')) return;
+  
+  videoInfoDragging.value = true;
+  videoInfoDragStart.value = {
+    x: event.clientX - videoInfoPosition.value.x,
+    y: event.clientY - videoInfoPosition.value.y,
+  };
+};
+
+const handleVideoInfoMouseMove = (event: MouseEvent) => {
+  if (!videoInfoDragging.value) return;
+  
+  videoInfoPosition.value = {
+    x: event.clientX - videoInfoDragStart.value.x,
+    y: event.clientY - videoInfoDragStart.value.y,
+  };
+};
+
+const handleVideoInfoMouseUp = () => {
+  videoInfoDragging.value = false;
 };
 
 const toggleFullscreen = async () => {
@@ -341,16 +424,27 @@ const playNext = () => {
 };
 
 const clearPlaylist = async () => {
-  const confirmed = await confirm('确定要清空播放列表吗？', {
-    title: '确认',
-    kind: 'warning',
-  });
-  
-  if (!confirmed) return;
-  
-  playlist.value = [];
-  currentIndex.value = -1;
-  toast.success('播放列表已清空');
+  confirmModalTitle.value = '清空播放列表';
+  confirmModalMessage.value = `确定要清空播放列表吗？当前有 ${playlist.value.length} 个视频。`;
+  confirmModalCallback.value = () => {
+    playlist.value = [];
+    currentIndex.value = -1;
+    toast.success('播放列表已清空');
+  };
+  confirmModalVisible.value = true;
+};
+
+const handleConfirmOk = () => {
+  if (confirmModalCallback.value) {
+    confirmModalCallback.value();
+  }
+  confirmModalVisible.value = false;
+  confirmModalCallback.value = null;
+};
+
+const handleConfirmCancel = () => {
+  confirmModalVisible.value = false;
+  confirmModalCallback.value = null;
 };
 
 const savePlaylist = async () => {
@@ -417,12 +511,6 @@ const loadPlaylist = async () => {
 const toggleMultiVideoMode = () => {
   multiVideoMode.value = !multiVideoMode.value;
   toast.info(multiVideoMode.value ? '已切换到多视频播放模式' : '已切换到单视频播放模式');
-  
-  if (multiVideoMode.value && autoLoad.value && playlist.value.length > 0) {
-    nextTick(() => {
-      handleAddAllVideos();
-    });
-  }
 };
 
 const handleVideoDragStart = (e: DragEvent, video: VideoItem) => {
@@ -494,6 +582,19 @@ const isVideoInMultiPlayer = (video: VideoItem) => {
   return multiVideoPlayerRef.value.videos.some(v => v.path === video.path || v.path === video.url);
 };
 
+const addVideoToMultiPlayer = (video: VideoItem) => {
+  if (!multiVideoPlayerRef.value) {
+    toast.warning('请先进入多视频播放模式');
+    return;
+  }
+  
+  multiVideoPlayerRef.value.addVideoFromPlaylist({
+    name: video.name,
+    path: video.path || video.url,
+    url: video.url,
+  });
+};
+
 const toggleRepeatMode = () => {
   const modes: Array<'none' | 'one' | 'all'> = ['none', 'one', 'all'];
   const currentModeIndex = modes.indexOf(repeatMode.value);
@@ -546,6 +647,65 @@ const openJsonFolder = async () => {
     console.error('Failed to open folder:', error);
     toast.error('打开文件夹失败');
   }
+};
+
+const togglePlaylistSelection = (id: string) => {
+  if (selectedPlaylists.value.has(id)) {
+    selectedPlaylists.value.delete(id);
+  } else {
+    selectedPlaylists.value.add(id);
+  }
+  selectedPlaylists.value = new Set(selectedPlaylists.value);
+};
+
+const toggleSelectAll = () => {
+  if (selectedPlaylists.value.size === jsonAllData.value.length) {
+    selectedPlaylists.value = new Set();
+  } else {
+    selectedPlaylists.value = new Set(jsonAllData.value.map(p => p.id || p.name));
+  }
+};
+
+const deleteSelectedPlaylists = async () => {
+  if (selectedPlaylists.value.size === 0) {
+    toast.warning('请先选择要删除的播放列表');
+    return;
+  }
+
+  confirmModalTitle.value = '确认删除';
+  confirmModalMessage.value = `确定要删除 ${selectedPlaylists.value.size} 个播放列表吗？此操作不可恢复。`;
+  confirmModalCallback.value = async () => {
+    try {
+      const ids = Array.from(selectedPlaylists.value);
+      for (const id of ids) {
+        await invoke('delete_video_playlist', { playlistId: id });
+      }
+      
+      await showJsonContent();
+      selectedPlaylists.value = new Set();
+      toast.success(`已删除 ${ids.length} 个播放列表`);
+    } catch (error) {
+      console.error('Failed to delete playlists:', error);
+      toast.error('删除失败');
+    }
+  };
+  confirmModalVisible.value = true;
+};
+
+const deletePlaylist = async (id: string, name: string) => {
+  confirmModalTitle.value = '确认删除';
+  confirmModalMessage.value = `确定要删除播放列表「${name}」吗？此操作不可恢复。`;
+  confirmModalCallback.value = async () => {
+    try {
+      await invoke('delete_video_playlist', { playlistId: id });
+      await showJsonContent();
+      toast.success(`已删除播放列表「${name}」`);
+    } catch (error) {
+      console.error('Failed to delete playlist:', error);
+      toast.error('删除失败');
+    }
+  };
+  confirmModalVisible.value = true;
 };
 
 const onVideoPlay = () => {
@@ -682,7 +842,7 @@ const handleDragEnter = (e: DragEvent) => {
 
 const handleDragLeave = (e: DragEvent) => {
   e.preventDefault();
-  dragCount.value--;
+  dragCount.value = Math.max(0, dragCount.value - 1);
   if (dragCount.value === 0) isDragging.value = false;
 };
 
@@ -731,7 +891,70 @@ const handleDrop = async (e: DragEvent) => {
   }
 };
 
-onMounted(() => {
+const handleSidebarDragOver = (e: DragEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (e.dataTransfer?.types.includes('Files')) {
+    isSidebarDragOver.value = true;
+  }
+};
+
+const handleSidebarDragLeave = (e: DragEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+  const x = e.clientX;
+  const y = e.clientY;
+  
+  if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+    isSidebarDragOver.value = false;
+  }
+};
+
+const handleSidebarDrop = async (e: DragEvent) => {
+  e.preventDefault();
+  e.stopPropagation();
+  isSidebarDragOver.value = false;
+  
+  if (e.dataTransfer?.files) {
+    const files = Array.from(e.dataTransfer.files).filter(file => 
+      file.type.startsWith('video/') || 
+      ['.mkv', '.avi', '.mov', '.flv', '.wmv', '.m4v', '.mp4', '.webm', '.ogg'].some(ext => file.name.toLowerCase().endsWith(ext))
+    );
+    
+    if (files.length > 0) {
+      for (const file of files) {
+        const filePath = (file as any).path || file.name;
+        const videoItem: VideoItem = {
+          id: `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name: file.name,
+          url: filePath && !filePath.startsWith('blob:') ? convertFileSrc(filePath) : URL.createObjectURL(file),
+          path: filePath,
+          size: file.size,
+          duration: 0,
+          addedAt: Date.now(),
+        };
+        
+        playlist.value.push(videoItem);
+        
+        const tempVideo = document.createElement('video');
+        tempVideo.preload = 'metadata';
+        tempVideo.src = videoItem.url;
+        tempVideo.onloadedmetadata = () => {
+          videoItem.duration = tempVideo.duration;
+        };
+      }
+      
+      if (currentIndex.value === -1 && playlist.value.length > 0) {
+        currentIndex.value = 0;
+      }
+      
+      toast.success(`已添加 ${files.length} 个视频到播放列表`);
+    }
+  }
+};
+
+onMounted(async () => {
   document.addEventListener('fullscreenchange', () => {
     isFullscreen.value = !!document.fullscreenElement;
   });
@@ -741,6 +964,16 @@ onMounted(() => {
   window.addEventListener('dragleave', handleDragLeave);
   window.addEventListener('dragover', handleDragOver);
   window.addEventListener('drop', handleDrop);
+  
+  window.addEventListener('mousemove', handleProgressMouseMove);
+  window.addEventListener('mouseup', handleProgressMouseUp);
+  
+  window.addEventListener('mousemove', handleVideoInfoMouseMove);
+  window.addEventListener('mouseup', handleVideoInfoMouseUp);
+  
+  if (autoLoad.value) {
+    await loadPlaylist();
+  }
 });
 
 onUnmounted(() => {
@@ -750,6 +983,12 @@ onUnmounted(() => {
   window.removeEventListener('dragleave', handleDragLeave);
   window.removeEventListener('dragover', handleDragOver);
   window.removeEventListener('drop', handleDrop);
+  
+  window.removeEventListener('mousemove', handleProgressMouseMove);
+  window.removeEventListener('mouseup', handleProgressMouseUp);
+  
+  window.removeEventListener('mousemove', handleVideoInfoMouseMove);
+  window.removeEventListener('mouseup', handleVideoInfoMouseUp);
   
   if (hideTimer.value) clearTimeout(hideTimer.value);
   
@@ -762,6 +1001,10 @@ onUnmounted(() => {
 
 watch(isPlaying, () => {
   resetHideTimer();
+});
+
+watch([autoPlay, autoLoad], () => {
+  savePlayerConfig();
 });
 
 watch(currentIndex, async () => {
@@ -810,7 +1053,7 @@ watch(currentIndex, async () => {
       <div
         ref="containerRef"
         class="video-container"
-        :class="{ 'sidebar-open': sidebarOpen, 'empty': !currentVideo }"
+        :class="{ 'sidebar-open': sidebarOpen, 'empty': !currentVideo, 'drag-over': isDragging }"
         @mousemove="resetHideTimer"
         @mouseleave="() => { if (isPlaying) showControls = false; hoverTime = null; }"
         @click="() => { showSpeedMenu = false; showAspectMenu = false; }"
@@ -878,10 +1121,10 @@ watch(currentIndex, async () => {
           <button 
             v-if="!sidebarOpen && !multiVideoMode"
             class="toggle-sidebar-btn left"
-            @click="sidebarOpen = true"
-            title="显示播放列表"
+            @click="videoInfoVisible = !videoInfoVisible"
+            title="视频信息"
           >
-            <List :size="20" />
+            <Info :size="18" />
           </button>
 
           <button 
@@ -904,7 +1147,8 @@ watch(currentIndex, async () => {
               <div
                 ref="progressRef"
                 class="progress-bar-container"
-                @click="handleSeek"
+                :class="{ dragging: isDraggingProgress }"
+                @mousedown="handleProgressMouseDown"
                 @mousemove="handleProgressHover"
                 @mouseleave="hoverTime = null"
               >
@@ -1078,10 +1322,16 @@ watch(currentIndex, async () => {
           </div>
         </div>
 
-        <div class="sidebar-content">
+        <div 
+          class="sidebar-content"
+          :class="{ 'drag-over': isSidebarDragOver }"
+          @dragover="handleSidebarDragOver"
+          @dragleave="handleSidebarDragLeave"
+          @drop="handleSidebarDrop"
+        >
           <div v-if="playlist.length === 0" class="empty-playlist">
             <h4>播放列表为空</h4>
-            <p>添加视频文件开始播放</p>
+            <p>拖放视频文件到此处，或点击下方按钮选择文件</p>
             <button class="add-video-btn" @click="addVideoFiles">
               <Plus :size="16" />
               添加视频文件
@@ -1114,115 +1364,289 @@ watch(currentIndex, async () => {
                   </h4>
                   <div class="item-meta">
                     <span>{{ formatTime(video.duration) }}</span>
-                    <span>{{ formatFileSize(video.size) }}</span>
                   </div>
                 </div>
               </div>
-              <button class="remove-btn" @click.stop="removeVideo(index)" title="删除">
-                <X :size="14" />
-              </button>
+              <div class="item-actions">
+                <button 
+                  v-if="multiVideoMode && !isVideoInMultiPlayer(video)" 
+                  class="add-to-multi-btn" 
+                  @click.stop="addVideoToMultiPlayer(video)" 
+                  title="添加到多视频播放"
+                >
+                  <Plus :size="14" />
+                </button>
+                <button class="remove-btn" @click.stop="removeVideo(index)" title="删除">
+                  <X :size="14" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="sidebar-footer">
-          <div class="footer-section">
-            <div class="footer-section-title">播放控制</div>
-            <div class="footer-actions inline">
-              <button
-                class="footer-btn small repeat-btn"
-                :class="{ active: repeatMode !== 'none' }"
-                @click="toggleRepeatMode"
-                :title="repeatMode === 'none' ? '不循环' : repeatMode === 'one' ? '单曲循环' : '列表循环'"
-              >
-                <Repeat1 v-if="repeatMode === 'one'" :size="14" />
-                <Repeat v-else :size="14" />
-              </button>
-              <button 
-                class="footer-btn small toggle-btn" 
-                :class="{ active: autoPlay }"
-                @click="autoPlay = !autoPlay"
-                title="自动播放"
-              >
-                <Play :size="14" />
-              </button>
-              <button 
-                class="footer-btn small toggle-btn" 
-                :class="{ active: autoLoad }"
-                @click="autoLoad = !autoLoad"
-                title="自动加载"
-              >
-                <Grid3X3 :size="14" />
-              </button>
+          <div class="footer-row">
+            <div class="footer-group">
+              <span class="footer-group-label">播放</span>
+              <div class="footer-btns">
+                <button
+                  class="fbtn icon-only"
+                  :class="{ active: repeatMode !== 'none' }"
+                  @click="toggleRepeatMode"
+                  :title="repeatMode === 'none' ? '不循环' : repeatMode === 'one' ? '单曲循环' : '列表循环'"
+                >
+                  <Repeat1 v-if="repeatMode === 'one'" :size="14" />
+                  <Repeat v-else :size="14" />
+                </button>
+                <button class="fbtn icon-only" :class="{ active: autoPlay }" @click="autoPlay = !autoPlay" title="自动播放">
+                  <Play :size="14" />
+                </button>
+                <button class="fbtn icon-only" :class="{ active: autoLoad }" @click="autoLoad = !autoLoad" :title="autoLoad ? '进入页面自动加载播放列表 (已开启)' : '进入页面自动加载播放列表 (已关闭)'">
+                  <List :size="14" />
+                </button>
+              </div>
+            </div>
+            <div class="footer-group">
+              <span class="footer-group-label">列表</span>
+              <div class="footer-btns">
+                <button class="fbtn icon-only primary" @click="addVideoFiles" title="添加视频">
+                  <Plus :size="14" />
+                </button>
+                <button class="fbtn icon-only" @click="savePlaylist" title="保存列表">
+                  <Save :size="14" />
+                </button>
+                <button class="fbtn icon-only" @click="loadPlaylist" title="加载列表">
+                  <List :size="14" />
+                </button>
+                <button class="fbtn icon-only" @click="showJsonContent" title="查看JSON">
+                  <FileJson :size="14" />
+                </button>
+                <button class="fbtn icon-only danger" @click="clearPlaylist" title="清空列表">
+                  <Trash2 :size="14" />
+                </button>
+              </div>
             </div>
           </div>
-
-          <div class="footer-section">
-            <div class="footer-section-title">播放列表</div>
-            <div class="footer-actions inline">
-              <button class="footer-btn small primary" @click="addVideoFiles" title="添加视频">
-                <Plus :size="14" />
-              </button>
-              <button class="footer-btn small" @click="savePlaylist" title="保存列表">
-                <Save :size="14" />
-              </button>
-              <button class="footer-btn small" @click="loadPlaylist" title="加载列表">
-                <List :size="14" />
-              </button>
-              <button class="footer-btn small" @click="showJsonContent" title="查看JSON">
-                <FileJson :size="14" />
-              </button>
-              <button class="footer-btn small danger" @click="clearPlaylist" title="清空列表">
-                <Trash2 :size="14" />
-              </button>
-            </div>
-          </div>
-
-          <div class="footer-section">
-            <div class="footer-section-title">多视频播放</div>
-            <div class="footer-actions inline">
-              <button 
-                class="footer-btn small full-width" 
-                :class="{ active: multiVideoMode }"
-                @click="toggleMultiVideoMode"
-              >
-                <Grid3X3 :size="14" />
-              </button>
-            </div>
-          </div>
+          <button
+            class="fbtn full-width"
+            :class="{ active: multiVideoMode }"
+            @click="toggleMultiVideoMode"
+          >
+            <Grid3X3 :size="14" />
+            {{ multiVideoMode ? '退出多视频模式' : '多视频播放模式' }}
+          </button>
         </div>
       </aside>
     </div>
 
     <Modal
       v-model:visible="jsonModalVisible"
-      :title="`播放列表数据 (显示 ${Math.min(jsonDisplayCount, jsonTotalCount)} / ${jsonTotalCount} 条)`"
-      width="800px"
+      :title="`播放列表管理 (${jsonTotalCount} 条)`"
+      width="900px"
     >
-      <div class="json-content-wrapper">
-        <pre class="json-content">{{ jsonContent }}</pre>
+      <div class="json-modal-wrapper">
+        <div class="json-left-panel">
+          <div class="panel-header">
+            <div class="panel-title">播放列表</div>
+            <div class="panel-actions">
+              <label class="select-all-checkbox">
+                <input
+                  type="checkbox"
+                  :checked="jsonAllData.length > 0 && selectedPlaylists.size === jsonAllData.length"
+                  @change="toggleSelectAll"
+                />
+                <span>全选</span>
+              </label>
+            </div>
+          </div>
+          <div class="playlist-list">
+            <div
+              v-for="(item, index) in jsonAllData"
+              :key="item.id || index"
+              class="playlist-item"
+              :class="{ selected: selectedPlaylists.has(item.id || item.name) }"
+              @click="togglePlaylistSelection(item.id || item.name)"
+            >
+              <input
+                type="checkbox"
+                :checked="selectedPlaylists.has(item.id || item.name)"
+                class="item-checkbox"
+                @click.stop
+              />
+              <div class="item-info">
+                <div class="item-name">{{ item.name || '未命名' }}</div>
+                <div class="item-meta">
+                  <span>{{ item.videos?.length || 0 }} 个视频</span>
+                  <span v-if="item.createdAt">{{ new Date(item.createdAt).toLocaleDateString() }}</span>
+                </div>
+              </div>
+              <button
+                class="item-delete-btn"
+                @click.stop="deletePlaylist(item.id || item.name, item.name || '未命名')"
+                title="删除"
+              >
+                <Trash2 :size="14" />
+              </button>
+            </div>
+            <div v-if="jsonAllData.length === 0" class="empty-list">
+              暂无保存的播放列表
+            </div>
+          </div>
+        </div>
+        <div class="json-right-panel">
+          <div class="panel-header">
+            <div class="view-mode-toggle">
+              <button
+                class="mode-btn"
+                :class="{ active: jsonViewMode === 'list' }"
+                @click="jsonViewMode = 'list'"
+              >
+                详情
+              </button>
+              <button
+                class="mode-btn"
+                :class="{ active: jsonViewMode === 'json' }"
+                @click="jsonViewMode = 'json'"
+              >
+                JSON
+              </button>
+            </div>
+          </div>
+          <div v-if="jsonViewMode === 'list'" class="json-detail-panel">
+            <div v-if="selectedPlaylists.size === 1" class="detail-content">
+              <div class="detail-title">
+                {{ (() => {
+                  const id = Array.from(selectedPlaylists)[0];
+                  const item = jsonAllData.find(p => (p.id || p.name) === id);
+                  return item?.name || '未命名';
+                })()}}
+              </div>
+              <div class="detail-list">
+                <div
+                  v-for="(video, idx) in (() => {
+                    const id = Array.from(selectedPlaylists)[0];
+                    const item = jsonAllData.find(p => (p.id || p.name) === id);
+                    return item?.videos || [];
+                  })()"
+                  :key="idx"
+                  class="detail-video-item"
+                >
+                  <div class="detail-video-name">{{ video.name }}</div>
+                </div>
+              </div>
+            </div>
+            <div v-else class="detail-placeholder">
+              <FileJson :size="40" />
+              <p>选择一个播放列表查看详情</p>
+            </div>
+          </div>
+          <pre v-else class="json-content">{{ jsonContent }}</pre>
+        </div>
       </div>
       
       <template #footer>
-        <button 
-          v-if="jsonDisplayCount < jsonTotalCount"
-          class="btn btn-secondary"
-          @click="loadMoreJson"
-        >
-          加载更多 (还剩 {{ jsonTotalCount - jsonDisplayCount }} 条)
-        </button>
-        <button class="btn btn-secondary" @click="openJsonFolder">
-          <FolderOpen :size="14" />
-          打开文件夹
-        </button>
-        <button class="btn btn-secondary" @click="jsonModalVisible = false">
-          关闭
-        </button>
-        <button class="btn btn-primary" @click="copyJsonContent">
-          复制内容
-        </button>
+        <div class="json-footer">
+          <div class="footer-left">
+            <button 
+              v-if="selectedPlaylists.size > 0"
+              class="json-btn danger"
+              @click="deleteSelectedPlaylists"
+            >
+              <Trash2 :size="14" />
+              删除选中 ({{ selectedPlaylists.size }})
+            </button>
+            <button 
+              v-if="jsonViewMode === 'json' && jsonDisplayCount < jsonTotalCount"
+              class="json-btn secondary"
+              @click="loadMoreJson"
+            >
+              加载更多 (还剩 {{ jsonTotalCount - jsonDisplayCount }} 条)
+            </button>
+          </div>
+          <div class="footer-right">
+            <button class="json-btn secondary" @click="openJsonFolder">
+              <FolderOpen :size="14" />
+              打开文件夹
+            </button>
+            <button class="json-btn secondary" @click="jsonModalVisible = false">
+              关闭
+            </button>
+            <button v-if="jsonViewMode === 'json'" class="json-btn primary" @click="copyJsonContent">
+              复制内容
+            </button>
+          </div>
+        </div>
       </template>
     </Modal>
+
+    <Teleport to="body">
+      <Transition name="confirm-pop">
+        <div v-if="confirmModalVisible" class="confirm-modal">
+          <div class="confirm-header">
+            <div class="confirm-icon">
+              <Trash2 :size="20" />
+            </div>
+            <span class="confirm-title">{{ confirmModalTitle }}</span>
+          </div>
+          <p class="confirm-message">{{ confirmModalMessage }}</p>
+          <div class="confirm-actions">
+            <button class="confirm-btn cancel" @click="handleConfirmCancel">取消</button>
+            <button class="confirm-btn danger" @click="handleConfirmOk">确定清空</button>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
+
+    <Transition name="video-info-slide">
+      <div 
+        v-if="videoInfoVisible && currentVideo" 
+        class="video-info-panel"
+        :class="{ dragging: videoInfoDragging }"
+        :style="{
+          left: videoInfoPosition.x === 0 ? '50%' : `${videoInfoPosition.x}px`,
+          top: `${videoInfoPosition.y}px`,
+          transform: videoInfoPosition.x === 0 ? 'translateX(-50%)' : 'none'
+        }"
+        @mousedown="handleVideoInfoMouseDown"
+      >
+        <div class="info-panel-header">
+          <Info :size="14" />
+          <span>视频信息</span>
+          <button class="info-close-btn" @click="videoInfoVisible = false">
+            <X :size="12" />
+          </button>
+        </div>
+        <div class="info-panel-body">
+          <div class="info-item">
+            <span class="info-label">文件名</span>
+            <span class="info-value name">{{ currentVideo.name }}</span>
+          </div>
+          <div class="info-row">
+            <div class="info-item half">
+              <span class="info-label">时长</span>
+              <span class="info-value">{{ formatTime(currentVideo.duration) }}</span>
+            </div>
+            <div class="info-item half">
+              <span class="info-label">大小</span>
+              <span class="info-value">{{ formatFileSize(currentVideo.size) }}</span>
+            </div>
+          </div>
+          <div class="info-row">
+            <div class="info-item half">
+              <span class="info-label">进度</span>
+              <span class="info-value">{{ progress.toFixed(1) }}%</span>
+            </div>
+            <div class="info-item half">
+              <span class="info-label">状态</span>
+              <span class="info-value">
+                <span class="status-dot" :class="{ playing: isPlaying }"></span>
+                {{ isPlaying ? '播放中' : '已暂停' }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -1233,6 +1657,20 @@ watch(currentIndex, async () => {
   flex-direction: column;
   background-color: transparent;
   position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.video-player-page * {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.video-player-page input,
+.video-player-page textarea,
+.video-player-page .json-content {
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .drag-overlay {
@@ -1242,8 +1680,19 @@ watch(currentIndex, async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(12px);
+  background-color: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  animation: dragFadeIn 0.2s ease;
+}
+
+@keyframes dragFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .drag-content {
@@ -1251,10 +1700,22 @@ watch(currentIndex, async () => {
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  padding: 48px;
+  padding: 48px 64px;
   border-radius: 24px;
   border: 2px dashed var(--primary-color);
   background-color: var(--primary-light);
+  animation: dragPulse 2s ease-in-out infinite;
+}
+
+@keyframes dragPulse {
+  0%, 100% {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 20px rgba(var(--primary-color), 0.3);
+  }
+  50% {
+    border-color: rgba(var(--primary-color), 0.6);
+    box-shadow: 0 0 40px rgba(var(--primary-color), 0.5);
+  }
 }
 
 .drag-icon {
@@ -1267,6 +1728,16 @@ watch(currentIndex, async () => {
   background-color: var(--primary-light);
   border: 2px solid var(--primary-color);
   color: var(--primary-color);
+  animation: dragIconBounce 1s ease-in-out infinite;
+}
+
+@keyframes dragIconBounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 .drag-title {
@@ -1295,6 +1766,29 @@ watch(currentIndex, async () => {
   justify-content: center;
   overflow: hidden;
   transition: all 0.4s ease;
+}
+
+.video-container.drag-over {
+  background-color: rgba(var(--primary-color), 0.1);
+}
+
+.video-container.drag-over::before {
+  content: '';
+  position: absolute;
+  inset: 8px;
+  border: 2px dashed var(--primary-color);
+  border-radius: 16px;
+  pointer-events: none;
+  animation: dragBorderPulse 1s ease-in-out infinite;
+}
+
+@keyframes dragBorderPulse {
+  0%, 100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .video-container.empty {
@@ -1589,6 +2083,16 @@ watch(currentIndex, async () => {
 
 .progress-bar-container:hover {
   height: 8px;
+}
+
+.progress-bar-container.dragging {
+  height: 10px;
+  cursor: grabbing;
+}
+
+.progress-bar-container.dragging .progress-thumb {
+  opacity: 1;
+  transform: translateY(-50%) scale(1.2);
 }
 
 .progress-line {
@@ -1987,6 +2491,28 @@ watch(currentIndex, async () => {
   flex: 1;
   overflow-y: auto;
   padding: 12px;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.sidebar-content.drag-over {
+  background-color: rgba(var(--primary-color), 0.1);
+}
+
+.sidebar-content.drag-over::before {
+  content: '释放以添加视频';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 12px 24px;
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 10;
+  pointer-events: none;
 }
 
 .empty-playlist {
@@ -2048,6 +2574,7 @@ watch(currentIndex, async () => {
   border: 1px solid var(--border-color);
   cursor: pointer;
   transition: all 0.2s ease;
+  -webkit-user-drag: none;
 }
 
 .playlist-item.draggable {
@@ -2056,6 +2583,13 @@ watch(currentIndex, async () => {
 
 .playlist-item.draggable:active {
   cursor: grabbing;
+}
+
+.playlist-item.dragging {
+  opacity: 0.6;
+  transform: scale(0.98);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
 }
 
 .playlist-item:hover {
@@ -2137,6 +2671,37 @@ watch(currentIndex, async () => {
   color: var(--text-tertiary);
 }
 
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.playlist-item:hover .item-actions {
+  opacity: 1;
+}
+
+.add-to-multi-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--primary-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.add-to-multi-btn:hover {
+  background-color: var(--primary-light);
+  border-color: var(--primary-color);
+}
+
 .remove-btn {
   display: flex;
   align-items: center;
@@ -2148,12 +2713,7 @@ watch(currentIndex, async () => {
   border: 1px solid var(--border-color);
   color: var(--text-secondary);
   cursor: pointer;
-  opacity: 0;
   transition: all 0.2s ease;
-}
-
-.playlist-item:hover .remove-btn {
-  opacity: 1;
 }
 
 .remove-btn:hover {
@@ -2163,49 +2723,258 @@ watch(currentIndex, async () => {
 }
 
 .sidebar-footer {
-  padding: 16px;
+  padding: 12px 14px;
   border-top: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
+  background: var(--bg-tertiary);
 }
 
-.footer-section {
+.footer-row {
+  display: flex;
+  gap: 12px;
+}
+
+.footer-group {
+  flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
-.footer-section-title {
-  font-size: 11px;
+.footer-group-label {
+  font-size: 10px;
   font-weight: 600;
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding-left: 4px;
+  padding-left: 2px;
 }
 
-.footer-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.footer-actions.inline {
+.footer-btns {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
-.footer-btn {
+.fbtn {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
+  padding: 0;
+  border-radius: 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fbtn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background-color: var(--bg-primary);
+}
+
+.fbtn.icon-only {
+  width: 34px;
+  height: 34px;
+}
+
+.fbtn.icon-only.primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.fbtn.icon-only.primary:hover {
+  opacity: 0.9;
+}
+
+.fbtn.icon-only.danger {
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+}
+
+.fbtn.icon-only.danger:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: #ef4444;
+}
+
+.fbtn.active {
+  background-color: var(--primary-light);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.fbtn.full-width {
+  width: 100%;
+  height: 36px;
+  padding: 0 14px;
+}
+
+.fbtn.full-width.active {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.json-modal-wrapper {
+  display: flex;
+  gap: 1px;
+  background-color: var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  max-height: 65vh;
+}
+
+.json-left-panel {
+  width: 360px;
+  background-color: var(--bg-tertiary);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-color);
+}
+
+.json-right-panel {
+  flex: 1;
+  background-color: var(--bg-tertiary);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.panel-header {
+  padding: 12px 16px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.select-all-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.select-all-checkbox input {
+  cursor: pointer;
+}
+
+.playlist-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 10px 12px;
   border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 4px;
+}
+
+.playlist-item:hover {
+  background-color: var(--bg-secondary);
+}
+
+.playlist-item.selected {
+  background-color: rgba(var(--primary-color-rgb, 102, 126, 234), 0.15);
+  border: 1px solid rgba(var(--primary-color-rgb, 102, 126, 234), 0.3);
+}
+
+.item-checkbox {
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+}
+
+.item-delete-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background-color: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.item-delete-btn:hover {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.empty-list {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.view-mode-toggle {
+  display: flex;
+  gap: 4px;
   background-color: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.mode-btn {
+  padding: 6px 16px;
+  border-radius: 4px;
+  border: none;
+  background-color: transparent;
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
@@ -2213,101 +2982,452 @@ watch(currentIndex, async () => {
   transition: all 0.2s ease;
 }
 
-.footer-btn.small {
-  padding: 8px 10px;
-  min-width: 36px;
-  height: 36px;
+.mode-btn:hover {
+  background-color: var(--bg-secondary);
 }
 
-.footer-btn:hover {
+.mode-btn.active {
   background-color: var(--bg-primary);
-}
-
-.footer-btn.primary {
-  background-color: var(--primary-color);
-  border-color: var(--primary-color);
-  color: white;
-}
-
-.footer-btn.primary:hover {
-  opacity: 0.9;
-}
-
-.footer-btn.danger {
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #ef4444;
-}
-
-.footer-btn.danger:hover {
-  background-color: rgba(239, 68, 68, 0.1);
-}
-
-.footer-btn.repeat-btn.active {
-  background-color: var(--primary-light);
   color: var(--primary-color);
-  border-color: var(--primary-color);
 }
 
-.footer-btn.full-width {
-  grid-column: 1 / -1;
+.json-detail-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
 }
 
-.footer-btn.active {
-  background-color: var(--primary-light);
-  color: var(--primary-color);
-  border-color: var(--primary-color);
+.detail-content {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
-.footer-btn.toggle-btn {
-  gap: 8px;
+.detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.toggle-switch {
-  position: relative;
-  width: 36px;
-  height: 20px;
-  background-color: rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  transition: all 0.3s ease;
-  cursor: pointer;
+.detail-list {
+  flex: 1;
+  overflow-y: auto;
 }
 
-.toggle-switch.on {
-  background-color: var(--primary-color);
+.detail-video-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.toggle-slider {
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 16px;
-  height: 16px;
-  background-color: white;
-  border-radius: 50%;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+.detail-video-name {
+  font-size: 13px;
+  color: var(--text-primary);
 }
 
-.toggle-switch.on .toggle-slider {
-  left: 18px;
+.detail-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-tertiary);
+  gap: 12px;
+}
+
+.detail-placeholder p {
+  margin: 0;
+  font-size: 13px;
 }
 
 .json-content-wrapper {
   max-height: 60vh;
   overflow-y: auto;
   background-color: var(--bg-tertiary);
-  border-radius: 8px;
-  padding: 16px;
+  border-radius: 12px;
+  padding: 0;
+  border: 1px solid var(--border-color);
+}
+
+.json-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.json-stats {
+  display: flex;
+  gap: 16px;
+}
+
+.stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .json-content {
   margin: 0;
-  padding: 0;
+  padding: 16px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.7;
   color: var(--text-primary);
   white-space: pre-wrap;
   word-wrap: break-word;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.json-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+
+.footer-left {
+  display: flex;
+  gap: 8px;
+}
+
+.footer-right {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.json-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  min-height: 36px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.json-btn.secondary {
+  background-color: var(--bg-tertiary);
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.json-btn.secondary:hover {
+  background-color: var(--bg-secondary);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.json-btn.primary {
+  background-color: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.json-btn.danger {
+  background-color: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+.json-btn.danger:hover {
+  background-color: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+}
+
+.json-btn.danger:hover {
+  background-color: rgba(239, 68, 68, 0.25);
+  border-color: #ef4444;
+}
+
+.json-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.json-btn.primary:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.confirm-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3000;
+  background-color: var(--bg-primary);
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  padding: 20px 24px;
+  min-width: 320px;
+  max-width: 400px;
+}
+
+.confirm-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.confirm-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background-color: rgba(239, 68, 68, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+}
+
+.confirm-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.confirm-message {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.confirm-btn {
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+}
+
+.confirm-btn.cancel {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.confirm-btn.cancel:hover {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.confirm-btn.danger {
+  background-color: #ef4444;
+  color: white;
+}
+
+.confirm-btn.danger:hover {
+  background-color: #dc2626;
+}
+
+.confirm-pop-enter-active {
+  animation: confirmPopIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.confirm-pop-leave-active {
+  animation: confirmPopOut 0.2s ease-in;
+}
+
+@keyframes confirmPopIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes confirmPopOut {
+  from {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.92);
+  }
+}
+
+.video-info-panel {
+  position: fixed;
+  z-index: 2500;
+  background-color: var(--bg-primary);
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  min-width: 300px;
+  max-width: 400px;
+  overflow: hidden;
+  cursor: move;
+  user-select: none;
+}
+
+.video-info-panel.dragging {
+  cursor: grabbing;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+}
+
+.info-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background-color: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.info-close-btn {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background-color: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.info-close-btn:hover {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.info-panel-body {
+  padding: 10px 12px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.info-item.half {
+  flex: 1;
+  padding: 4px 8px;
+}
+
+.info-row {
+  display: flex;
+  gap: 0;
+  margin-top: 4px;
+  background-color: var(--bg-secondary);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.info-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  width: 40px;
+}
+
+.info-value {
+  font-size: 12px;
+  color: var(--text-primary);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.info-value.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--primary-color);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.status-dot.playing {
+  background-color: #22c55e;
+  animation: statusPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.video-info-slide-enter-active {
+  animation: infoFadeIn 0.25s ease-out;
+}
+
+.video-info-slide-leave-active {
+  animation: infoFadeOut 0.2s ease-in;
+}
+
+@keyframes infoFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes infoFadeOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95);
+  }
 }
 </style>

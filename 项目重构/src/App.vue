@@ -7,6 +7,7 @@ import TitleBar from '@/components/layout/TitleBar.vue';
 import SplashScreen from '@/components/SplashScreen.vue';
 import SplashScreenMinimal from '@/components/SplashScreenMinimal.vue';
 import SplashScreenFade from '@/components/SplashScreenFade.vue';
+import Toast from '@/components/ui/Toast.vue';
 import { invoke } from '@tauri-apps/api/core';
 
 type SplashScreenType = 'full' | 'minimal' | 'fade' | 'none';
@@ -35,18 +36,45 @@ const INIT_STEPS = [
 const appStyle = computed(() => {
   console.log('Computing appStyle, currentWallpaper:', wallpaperStore.currentWallpaper ? 'exists' : 'empty');
   if (wallpaperStore.currentWallpaper) {
+    const currentId = wallpaperStore.currentWallpaperId;
+    const wallpaper = currentId ? wallpaperStore.getWallpaperById(currentId) : null;
+    const isPortrait = wallpaper?.orientation === 'portrait';
+    
+    if (isPortrait) {
+      return {
+        backgroundImage: `url(${wallpaperStore.currentWallpaper})`,
+        backgroundSize: 'contain',
+        backgroundPosition: 'center center',
+      };
+    }
+    
     return {
       backgroundImage: `url(${wallpaperStore.currentWallpaper})`,
       backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat',
-      backgroundAttachment: 'fixed',
-      backgroundColor: 'transparent',
+      backgroundPosition: 'center center',
     };
   }
-  return {
-    backgroundColor: 'var(--bg-primary)',
-  };
+  return {};
+});
+
+const wallpaperBgStyle = computed(() => {
+  if (!wallpaperStore.currentWallpaper) return null;
+  
+  const currentId = wallpaperStore.currentWallpaperId;
+  const wallpaper = currentId ? wallpaperStore.getWallpaperById(currentId) : null;
+  const isPortrait = wallpaper?.orientation === 'portrait';
+  
+  if (isPortrait) {
+    return {
+      backgroundImage: `url(${wallpaperStore.currentWallpaper})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center center',
+      filter: 'blur(60px) brightness(0.7)',
+      transform: 'scale(1.5)',
+    };
+  }
+  
+  return null;
 });
 
 const overlayStyle = computed(() => {
@@ -144,7 +172,13 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="app-container" :class="themeStore.theme" :style="appStyle">
+  <div class="app-container" :class="themeStore.theme">
+    <!-- Portrait Wallpaper Background (模糊层) -->
+    <div v-if="wallpaperBgStyle" class="wallpaper-bg" :style="wallpaperBgStyle"></div>
+    
+    <!-- Main Wallpaper (清晰层) -->
+    <div v-if="wallpaperStore.currentWallpaper" class="wallpaper-main" :style="appStyle"></div>
+    
     <!-- Splash Screen -->
     <SplashScreen
       v-if="showSplash && splashScreenEnabled && splashScreenType === 'full'"
@@ -188,6 +222,7 @@ onMounted(async () => {
           </div>
         </main>
       </div>
+      <Toast />
     </template>
   </div>
 </template>
@@ -200,6 +235,24 @@ onMounted(async () => {
   overflow: hidden;
   color: var(--text-primary);
   transition: background-image 0.3s ease, background-color 0.3s ease;
+  position: relative;
+  background-color: var(--bg-primary);
+}
+
+.wallpaper-bg {
+  position: absolute;
+  inset: -50px;
+  z-index: 0;
+  background-repeat: no-repeat;
+  overflow: hidden;
+}
+
+.wallpaper-main {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 .app-overlay {
@@ -207,6 +260,8 @@ onMounted(async () => {
   flex: 1;
   min-width: 0;
   background-color: transparent;
+  position: relative;
+  z-index: 2;
 }
 
 .loading-screen {

@@ -20,7 +20,7 @@ import ConversationList from '@/components/chat/ConversationList.vue';
 import ChatQuickNav from '@/components/chat/ChatQuickNav.vue';
 import ConfirmDialog from '@/components/common/ConfirmDialog.vue';
 import ImageViewer from '@/components/common/ImageViewer.vue';
-import type { ChatMessage } from '@/stores';
+import type { ChatMessage } from '@/stores/useConversationStore';
 
 const conversationStore = useConversationStore();
 const toast = useToast();
@@ -200,9 +200,9 @@ const generateResponse = async (userInput: string, images: string[] = []) => {
     role: 'assistant',
     content: '',
     timestamp: Date.now(),
-    model_id: conversationStore.activeModelId!,
-    model_name: conversationStore.activeModel.name,
-    is_streaming: true,
+    modelId: conversationStore.activeModelId!,
+    modelName: conversationStore.activeModel.name,
+    isStreaming: true,
   };
 
   await conversationStore.addMessage(
@@ -239,8 +239,8 @@ const generateResponse = async (userInput: string, images: string[] = []) => {
             {
               content: streamingContent.value,
               thinking: streamingThinking.value || undefined,
-              thinking_duration: stats.thinkingTime,
-              is_streaming: false,
+              thinkingDuration: stats.thinkingTime,
+              isStreaming: false,
             }
           );
 
@@ -277,7 +277,7 @@ const showNoModelMessage = async () => {
     role: 'assistant',
     content: '💡 提示\n\n当前未配置模型，您的消息已保存。\n\n请前往"模型管理"页面添加模型配置，然后继续对话。\n\n✅ 聊天功能正常工作',
     timestamp: Date.now(),
-    model_name: '系统提示',
+    modelName: '系统提示',
   };
 
   await conversationStore.addMessage(
@@ -298,7 +298,7 @@ const buildMessageHistory = (): ChatMessage[] => {
     return lastUserMessage ? [lastUserMessage] : [];
   }
 
-  return conversationStore.activeConversation.messages.filter(m => !m.is_streaming);
+  return conversationStore.activeConversation.messages.filter(m => !m.isStreaming);
 };
 
 const handleImageClick = (images: string[], index: number) => {
@@ -490,8 +490,8 @@ onUnmounted(() => {
               :message="message"
               :is-last="index === (conversationStore.activeConversation?.messages.length || 0) - 1"
               :compact-mode="conversationStore.compactMode"
-              :streaming-content="message.is_streaming ? streamingContent : undefined"
-              :streaming-thinking="message.is_streaming ? streamingThinking : undefined"
+              :streaming-content="message.isStreaming ? streamingContent : undefined"
+              :streaming-thinking="message.isStreaming ? streamingThinking : undefined"
               @image-click="handleImageClick"
               @regenerate="handleRegenerate"
               @delete="handleDeleteRequest"
@@ -544,9 +544,9 @@ onUnmounted(() => {
                 {{ conversationStore.activeConversation.messages.length }} 条消息
               </span>
               
-              <span v-if="conversationStore.activeConversation.total_tokens > 0" class="tag token-tag">
+              <span v-if="conversationStore.activeConversation?.totalTokens && conversationStore.activeConversation.totalTokens > 0" class="tag token-tag">
                 <Database :size="11" />
-                <span>{{ formatTokens(conversationStore.activeConversation.total_tokens) }}</span>
+                <span>{{ formatTokens(conversationStore.activeConversation.totalTokens) }}</span>
               </span>
               
               <span v-if="conversationStore.ollamaVerboseMode" class="tag verbose-tag">

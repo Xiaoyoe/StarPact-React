@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { ChevronUp, ChevronDown } from 'lucide-vue-next';
-import type { ChatMessage } from '@/stores';
+import type { ChatMessage } from '@/stores/useConversationStore';
 
 interface Props {
   messages: ChatMessage[];

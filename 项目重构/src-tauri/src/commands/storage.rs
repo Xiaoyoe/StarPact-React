@@ -6,8 +6,14 @@ use crate::services::storage::{
     backup::{create_backup, restore_backup, list_backups, delete_backup, BackupInfo},
 };
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::Path;
+use zip::{ZipArchive, ZipWriter};
+use zip::write::FileOptions;
+use std::io::{self, Write};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PromptTemplateResult {
     pub id: String,
     #[serde(rename = "type")]
@@ -18,6 +24,7 @@ pub struct PromptTemplateResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PromptTemplate {
     pub id: String,
     pub title: String,
@@ -150,6 +157,11 @@ pub async fn storage_update_config(updates: serde_json::Value) -> Result<(), Str
                         config.ui.splash_screen_type = val.to_string();
                     }
                 }
+                if let Some(splash_screen_use_wallpaper) = ui_obj.get("splash_screen_use_wallpaper") {
+                    if let Some(val) = splash_screen_use_wallpaper.as_bool() {
+                        config.ui.splash_screen_use_wallpaper = val;
+                    }
+                }
             }
         }
     })
@@ -259,6 +271,229 @@ pub async fn save_prompt_templates(templates: Vec<PromptTemplate>) -> Result<(),
     
     std::fs::write(&path, content)
         .map_err(|e| format!("Failed to write prompt templates: {}", e))?;
+    
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileNode {
+    pub name: String,
+    pub path: String,
+    pub is_dir: bool,
+    pub size: Option<u64>,
+    pub children: Option<Vec<FileNode>>,
+}
+
+fn build_file_tree(path: &Path, base_path: &Path) -> Result<FileNode, String> {
+    let name = path.file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .to_string();
+    
+    let relative_path = path.strip_prefix(base_path)
+        .map_err(|e| format!("Failed to get relative path: {}", e))?
+        .to_str()
+        .unwrap_or("")
+        .to_string();
+    
+    let is_dir = path.is_dir();
+    let size = if is_dir {
+        None
+    } else {
+        Some(path.metadata()
+            .map_err(|e| format!("Failed to get metadata: {}", e))?
+            .len())
+    };
+    
+    let children = if is_dir {
+        let mut child_nodes = Vec::new();
+        if let Ok(entries) = fs::read_dir(path) {
+            for entry in entries.flatten() {
+                let child_path = entry.path();
+                if let Ok(child_node) = build_file_tree(&child_path, base_path) {
+                    child_nodes.push(child_node);
+                }
+            }
+        }
+        child_nodes.sort_by(|a, b| {
+            if a.is_dir != b.is_dir {
+                b.is_dir.cmp(&a.is_dir)
+            } else {
+                a.name.cmp(&b.name)
+            }
+        });
+        Some(child_nodes)
+    } else {
+        None
+    };
+    
+    Ok(FileNode {
+        name,
+        path: relative_path,
+        is_dir,
+        size,
+        children,
+    })
+}
+
+#[tauri::command]
+pub async fn get_data_folder_structure() -> Result<Vec<FileNode>, String> {
+    let data_dir = get_data_dir();
+    ensure_data_dirs()?;
+    
+    let mut root_nodes = Vec::new();
+    
+    let important_dirs = [
+        "images",
+        "videos",
+        "wallpapers",
+        "cache",
+        "exports",
+        "backups",
+    ];
+    
+    for dir_name in important_dirs.iter() {
+        let dir_path = data_dir.join(dir_name);
+        if dir_path.exists() {
+            if let Ok(node) = build_file_tree(&dir_path, &data_dir) {
+                root_nodes.push(node);
+            }
+        }
+    }
+    
+    let db_path = data_dir.join("starpact.db");
+    if db_path.exists() {
+        if let Ok(node) = build_file_tree(&db_path, &data_dir) {
+            root_nodes.push(node);
+        }
+    }
+    
+    let config_path = data_dir.join("config.json");
+    if config_path.exists() {
+        if let Ok(node) = build_file_tree(&config_path, &data_dir) {
+            root_nodes.push(node);
+        }
+    }
+    
+    Ok(root_nodes)
+}
+
+fn add_dir_to_zip<W: Write + io::Seek>(
+    zip: &mut ZipWriter<W>,
+    base_path: &Path,
+    current_path: &Path,
+) -> Result<(), String> {
+    if current_path.is_dir() {
+        let entries = fs::read_dir(current_path)
+            .map_err(|e| format!("Failed to read directory: {}", e))?;
+        
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
+            let path = entry.path();
+            
+            let relative = path.strip_prefix(base_path)
+                .map_err(|e| format!("Failed to strip prefix: {}", e))?;
+            let name = relative.to_str()
+                .ok_or("Invalid path")?;
+            
+            if path.is_dir() {
+                zip.add_directory(name, FileOptions::default())
+                    .map_err(|e| format!("Failed to add directory: {}", e))?;
+                add_dir_to_zip(zip, base_path, &path)?;
+            } else {
+                let file_content = fs::read(&path)
+                    .map_err(|e| format!("Failed to read file: {}", e))?;
+                
+                zip.start_file(name, FileOptions::default())
+                    .map_err(|e| format!("Failed to start file: {}", e))?;
+                zip.write_all(&file_content)
+                    .map_err(|e| format!("Failed to write file: {}", e))?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn export_data(output_path: String) -> Result<(), String> {
+    let data_dir = get_data_dir();
+    ensure_data_dirs()?;
+    
+    let file = fs::File::create(&output_path)
+        .map_err(|e| format!("Failed to create output file: {}", e))?;
+    let mut zip = ZipWriter::new(file);
+    
+    add_dir_to_zip(&mut zip, &data_dir, &data_dir)?;
+    
+    zip.finish()
+        .map_err(|e| format!("Failed to finish zip: {}", e))?;
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn import_data(input_path: String) -> Result<(), String> {
+    let data_dir = get_data_dir();
+    
+    let file = fs::File::open(&input_path)
+        .map_err(|e| format!("Failed to open input file: {}", e))?;
+    let mut archive = ZipArchive::new(file)
+        .map_err(|e| format!("Failed to open zip archive: {}", e))?;
+    
+    for i in 0..archive.len() {
+        let mut file = archive.by_index(i)
+            .map_err(|e| format!("Failed to get file from archive: {}", e))?;
+        
+        let outpath = data_dir.join(file.name());
+        
+        if file.name().ends_with('/') {
+            fs::create_dir_all(&outpath)
+                .map_err(|e| format!("Failed to create directory: {}", e))?;
+        } else {
+            if let Some(p) = outpath.parent() {
+                if !p.exists() {
+                    fs::create_dir_all(p)
+                        .map_err(|e| format!("Failed to create parent directory: {}", e))?;
+                }
+            }
+            let mut outfile = fs::File::create(&outpath)
+                .map_err(|e| format!("Failed to create output file: {}", e))?;
+            io::copy(&mut file, &mut outfile)
+                .map_err(|e| format!("Failed to copy file: {}", e))?;
+        }
+    }
+    
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn open_data_folder() -> Result<(), String> {
+    let data_dir = get_data_dir();
+    
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&data_dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(&data_dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(&data_dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open folder: {}", e))?;
+    }
     
     Ok(())
 }

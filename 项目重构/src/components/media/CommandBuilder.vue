@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { Terminal as TerminalIcon, Copy, Plus, BookOpen, Save, FolderOpen, Trash2, Edit2, Check, X, FileText, Zap } from 'lucide-vue-next';
+import { useToast } from '@/composables/useToast';
+
+const toast = useToast();
 
 const templates = [
   { name: '视频转MP4 (H.264)', cmd: 'ffmpeg -i input.mp4 -c:v libx264 -preset medium -crf 23 -c:a aac -b:a 192k output.mp4', category: '视频转换' },
@@ -64,7 +67,7 @@ const handleCopy = () => {
 
 const handleAddRecord = () => {
   if (!command.value.trim()) {
-    alert('请输入命令');
+    toast.warning('请输入命令');
     return;
   }
   
