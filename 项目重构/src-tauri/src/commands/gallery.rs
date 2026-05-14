@@ -35,19 +35,26 @@ pub async fn select_folder(app: tauri::AppHandle, _title: String) -> Result<Opti
 }
 
 #[tauri::command]
-pub async fn list_files_in_folder(folder_path: String) -> Result<Vec<String>, String> {
+pub async fn list_files_in_folder(folder_path: String, recursive: Option<bool>) -> Result<Vec<String>, String> {
     let mut files = Vec::new();
     let path = PathBuf::from(&folder_path);
+    let is_recursive = recursive.unwrap_or(false);
     
-    if path.is_dir() {
-        if let Ok(entries) = fs::read_dir(&path) {
+    fn collect_files(path: &PathBuf, files: &mut Vec<String>, recursive: bool) {
+        if let Ok(entries) = fs::read_dir(path) {
             for entry in entries.flatten() {
                 let entry_path = entry.path();
                 if entry_path.is_file() {
                     files.push(entry_path.to_string_lossy().to_string());
+                } else if entry_path.is_dir() && recursive {
+                    collect_files(&entry_path, files, recursive);
                 }
             }
         }
+    }
+    
+    if path.is_dir() {
+        collect_files(&path, &mut files, is_recursive);
     }
     
     Ok(files)

@@ -736,9 +736,12 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
         let mut stmt = conn.prepare(r#"
-            SELECT id, name, created_at, updated_at, cover_image_id, description
-            FROM image_albums
-            ORDER BY created_at DESC
+            SELECT a.id, a.name, a.created_at, a.updated_at, a.cover_image_id, a.description,
+                   COALESCE(COUNT(i.id), 0) as image_count
+            FROM image_albums a
+            LEFT JOIN images i ON a.id = i.album_id
+            GROUP BY a.id
+            ORDER BY a.created_at DESC
         "#).map_err(|e| e.to_string())?;
         
         let albums = stmt.query_map([], |row| {
@@ -749,6 +752,7 @@ impl Database {
                 updated_at: row.get(3)?,
                 cover_image_id: row.get(4)?,
                 description: row.get(5)?,
+                image_count: row.get::<_, i64>(6)? as u32,
             })
         }).map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?;
@@ -760,9 +764,12 @@ impl Database {
         let conn = self.conn.lock().map_err(|e| e.to_string())?;
         
         let mut stmt = conn.prepare(r#"
-            SELECT id, name, created_at, updated_at, cover_image_id, description
-            FROM image_albums
-            WHERE id = ?1
+            SELECT a.id, a.name, a.created_at, a.updated_at, a.cover_image_id, a.description,
+                   COALESCE(COUNT(i.id), 0) as image_count
+            FROM image_albums a
+            LEFT JOIN images i ON a.id = i.album_id
+            WHERE a.id = ?1
+            GROUP BY a.id
         "#).map_err(|e| e.to_string())?;
         
         let result = stmt.query_row([id], |row| {
@@ -773,6 +780,7 @@ impl Database {
                 updated_at: row.get(3)?,
                 cover_image_id: row.get(4)?,
                 description: row.get(5)?,
+                image_count: row.get::<_, i64>(6)? as u32,
             })
         }).optional().map_err(|e| e.to_string())?;
         

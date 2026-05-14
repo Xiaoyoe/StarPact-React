@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
-import { useThemeStore, useAppStore, useConversationStore, useLanServerStore } from '@/stores';
+import { useThemeStore, useAppStore, useConversationStore, useLanServerStore, useLogStore } from '@/stores';
 import { useToast } from '@/composables/useToast';
+import WebShortcutsModal from '@/components/common/WebShortcutsModal.vue';
 import {
   MessageSquare, Bot, Settings, Plus, Search, Star,
   ChevronLeft, ChevronRight, Trash2,
@@ -16,11 +17,13 @@ const themeStore = useThemeStore();
 const appStore = useAppStore();
 const conversationStore = useConversationStore();
 const lanServerStore = useLanServerStore();
+const logStore = useLogStore();
 const toast = useToast();
 
 const appNameDisplay = ref<'chinese' | 'english'>('english');
 const bottomPanelsVisible = ref(true);
 const hoveredConv = ref<string | null>(null);
+const webShortcutsVisible = ref(false);
 
 const navItems = [
   { id: 'chat', icon: MessageSquare, label: '聊天', path: '/chat' },
@@ -37,7 +40,7 @@ const navItems = [
 const panelItems = [
   { id: 'model', icon: Sparkles, title: '模型指示器', subtitle: computed(() => conversationStore.activeModel?.name || '未选择模型') },
   { id: 'performance', icon: Timer, title: '性能查看', subtitle: '运行耗时与指标' },
-  { id: 'logs', icon: FileText, title: '系统日志', subtitle: '0 条记录' },
+  { id: 'logs', icon: FileText, title: '系统日志', subtitle: computed(() => `${logStore.logCounts.total} 条记录`), action: () => router.push('/logs') },
   { id: 'wallpaper', icon: Image, title: '壁纸设置', subtitle: '未设置壁纸' },
   { id: 'database', icon: Database, title: '数据库管理', subtitle: '查看本地存储数据' },
   { id: 'download-guide', icon: Download, title: '下载指南', subtitle: 'Ollama与FFmpeg安装' },
@@ -75,7 +78,11 @@ const handleThemeToggle = () => {
 };
 
 const handleWebShortcut = () => {
-  toast.info('快捷网页功能开发中');
+  webShortcutsVisible.value = true;
+};
+
+const handleOpenUrl = (url: string) => {
+  window.open(url, '_blank');
 };
 
 const handleOllamaManager = () => {
@@ -134,6 +141,12 @@ onMounted(async () => {
 </script>
 
 <template>
+  <WebShortcutsModal
+    :visible="webShortcutsVisible"
+    @close="webShortcutsVisible = false"
+    @open-url="handleOpenUrl"
+  />
+  
   <aside 
     class="sidebar"
     :class="{ collapsed: appStore.sidebarCollapsed }"
@@ -299,6 +312,7 @@ onMounted(async () => {
         v-for="panel in panelItems"
         :key="panel.id"
         class="panel-item"
+        @click="panel.action ? panel.action() : null"
       >
         <div class="panel-icon">
           <component :is="panel.icon" :size="14" />

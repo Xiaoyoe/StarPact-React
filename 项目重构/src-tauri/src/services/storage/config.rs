@@ -72,8 +72,6 @@ pub struct UiConfig {
     pub close_confirm: bool,
     #[serde(default = "default_true")]
     pub send_on_enter: bool,
-    #[serde(default = "default_lan_transfer_mode")]
-    pub lan_transfer_mode: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -97,7 +95,6 @@ fn default_width() -> u32 { 1280 }
 fn default_height() -> u32 { 800 }
 fn default_splash_screen_type() -> String { "full".to_string() }
 fn default_daily_quote_interval() -> u32 { 10 }
-fn default_lan_transfer_mode() -> String { "streaming".to_string() }
 
 impl AppConfig {
     pub fn load() -> Result<Self, String> {
@@ -182,14 +179,4 @@ pub fn save_module_path(module: String, path: String) -> Result<(), String> {
         .or_insert_with(ModuleConfig::default)
         .path = path;
     config.save()
-}
-
-pub fn get_lan_transfer_mode() -> String {
-    let config = CONFIG.lock().unwrap();
-    let mode = config.ui.lan_transfer_mode.clone();
-    if mode.is_empty() {
-        "streaming".to_string()
-    } else {
-        mode
-    }
 }

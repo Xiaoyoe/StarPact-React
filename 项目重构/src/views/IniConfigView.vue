@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useToast } from '@/composables/useToast';
+import LineNumberEditor from '@/components/common/LineNumberEditor.vue';
 import {
   Upload, FileText, Download, Save, RotateCcw, Copy,
-  HelpCircle, AlertCircle, CheckCircle, X, SlidersHorizontal, Eye, Play, Braces, Trash2
+  HelpCircle, AlertCircle, CheckCircle, X, SlidersHorizontal, Eye, Play, Braces, Trash2,
+  FileCode, Settings, Code2
 } from 'lucide-vue-next';
 
 const toast = useToast();
@@ -432,9 +434,9 @@ const handleTemplateChange = (value: string) => {
   iniData.value.templateContent = value;
 };
 
-const handleEditorInput = (e: Event) => {
+const handleEditorInput = (value: string) => {
   syncFromEditor.value = true;
-  editorContent.value = (e.target as HTMLTextAreaElement).value;
+  editorContent.value = value;
 };
 
 const splitterDragging = ref(false);
@@ -494,12 +496,8 @@ const getSliderPercent = (param: IniParameter): number => {
 
 <template>
   <div class="h-full flex flex-col overflow-hidden text-text-primary" style="background-color: transparent;">
-    <!-- Help Modal -->
     <Teleport to="body">
-      <Transition
-        enter-active-class="animate-fade-in"
-        leave-active-class="animate-fade-out"
-      >
+      <Transition enter-active-class="animate-fade-in" leave-active-class="animate-fade-out">
         <div
           v-if="helpVisible"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
@@ -559,12 +557,8 @@ const getSliderPercent = (param: IniParameter): number => {
       </Transition>
     </Teleport>
 
-    <!-- Confirm Modal -->
     <Teleport to="body">
-      <Transition
-        enter-active-class="animate-fade-in"
-        leave-active-class="animate-fade-out"
-      >
+      <Transition enter-active-class="animate-fade-in" leave-active-class="animate-fade-out">
         <div
           v-if="confirmModal.visible"
           class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
@@ -608,18 +602,21 @@ const getSliderPercent = (param: IniParameter): number => {
       </Transition>
     </Teleport>
 
-    <!-- Main Content -->
     <div ref="containerRef" class="flex-1 flex overflow-hidden">
-      <!-- Left: Code Editor -->
       <div
-        class="flex flex-col overflow-hidden"
+        class="flex flex-col overflow-hidden border-r border-border"
         :style="{ width: leftPanelWidth + '%', minWidth: '30%', maxWidth: '75%' }"
       >
-        <!-- Editor Header -->
         <div class="px-3.5 py-1.5 bg-background-secondary border-b border-border flex items-center justify-between flex-shrink-0">
-          <span class="text-xs font-medium text-text-secondary">
-            {{ currentFileName || 'untitled.modelfile' }}
-          </span>
+          <div class="flex items-center gap-2">
+            <Code2 :size="14" class="text-primary" />
+            <span class="text-xs font-medium text-text-secondary">
+              {{ currentFileName || 'untitled.modelfile' }}
+            </span>
+            <span v-if="isModified" class="text-[10px] px-1.5 py-0.5 rounded-full bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400">
+              已修改
+            </span>
+          </div>
           <div class="flex items-center gap-2 text-[11px] text-text-tertiary">
             <template v-if="enabled">
               <span>{{ lineCount }} 行</span>
@@ -631,8 +628,7 @@ const getSliderPercent = (param: IniParameter): number => {
           </div>
         </div>
 
-        <!-- Editor Body -->
-        <div class="flex-1 overflow-hidden p-0">
+        <div class="flex-1 overflow-hidden">
           <div v-if="!enabled" class="h-full flex flex-col items-center justify-center gap-4 bg-background-primary text-text-tertiary">
             <div class="w-[72px] h-[72px] rounded-5 bg-primary-light flex items-center justify-center">
               <FileText :size="32" class="text-primary opacity-60" />
@@ -653,21 +649,19 @@ const getSliderPercent = (param: IniParameter): number => {
             </div>
           </div>
           
-          <textarea
+          <LineNumberEditor
             v-else
-            :value="editorContent"
-            @input="handleEditorInput"
-            class="w-full h-full p-4 bg-background-primary text-text-primary font-mono text-sm resize-none outline-none border-none"
-            :style="{ fontSize: fontSize + 'px' }"
+            :model-value="editorContent"
             placeholder="在此输入或粘贴 INI / Modelfile 内容..."
-            spellcheck="false"
-          ></textarea>
+            :font-size="fontSize"
+            language="ini"
+            @update:model-value="handleEditorInput"
+          />
         </div>
       </div>
 
-      <!-- Splitter -->
       <div
-        class="w-[6px] min-w-[6px] cursor-col-resize flex items-center justify-center flex-shrink-0 transition-colors"
+        class="w-[6px] min-w-[6px] cursor-col-resize flex items-center justify-center flex-shrink-0 transition-colors z-10"
         :class="splitterDragging ? 'bg-primary-light' : 'hover:bg-primary-light bg-border'"
         @mousedown="handleSplitterMouseDown"
       >
@@ -677,9 +671,7 @@ const getSliderPercent = (param: IniParameter): number => {
         />
       </div>
 
-      <!-- Right: Parameter Panel -->
       <div class="flex-1 flex flex-col overflow-hidden bg-background-secondary">
-        <!-- Tabs -->
         <div class="flex items-center border-b border-border bg-background-secondary flex-shrink-0">
           <button
             @click="rightTab = 'params'"
@@ -699,7 +691,6 @@ const getSliderPercent = (param: IniParameter): number => {
           </button>
         </div>
 
-        <!-- Tab Content -->
         <div class="flex-1 overflow-y-auto p-3.5">
           <div v-if="!enabled" class="h-full flex flex-col items-center justify-center text-text-tertiary gap-2">
             <SlidersHorizontal :size="28" class="opacity-30" />
@@ -707,7 +698,6 @@ const getSliderPercent = (param: IniParameter): number => {
           </div>
           
           <template v-else-if="rightTab === 'params'">
-            <!-- FROM -->
             <div class="panel-section">
               <div 
                 class="panel-header"
@@ -722,10 +712,7 @@ const getSliderPercent = (param: IniParameter): number => {
                   :class="panelStates.from ? 'rotate-180' : 'rotate-0'"
                 >▼</span>
               </div>
-              <Transition
-                enter-active-class="animate-fade-in"
-                leave-active-class="animate-fade-out"
-              >
+              <Transition enter-active-class="animate-fade-in" leave-active-class="animate-fade-out">
                 <div v-if="panelStates.from" class="panel-content">
                   <input
                     type="text"
@@ -739,7 +726,6 @@ const getSliderPercent = (param: IniParameter): number => {
               </Transition>
             </div>
 
-            <!-- SYSTEM -->
             <div class="panel-section">
               <div 
                 class="panel-header"
@@ -754,10 +740,7 @@ const getSliderPercent = (param: IniParameter): number => {
                   :class="panelStates.system ? 'rotate-180' : 'rotate-0'"
                 >▼</span>
               </div>
-              <Transition
-                enter-active-class="animate-fade-in"
-                leave-active-class="animate-fade-out"
-              >
+              <Transition enter-active-class="animate-fade-in" leave-active-class="animate-fade-out">
                 <div v-if="panelStates.system" class="panel-content">
                   <textarea
                     :value="iniData?.systemContent ?? ''"
@@ -771,7 +754,6 @@ const getSliderPercent = (param: IniParameter): number => {
               </Transition>
             </div>
 
-            <!-- Parameters -->
             <div class="panel-section">
               <div 
                 class="panel-header"
@@ -789,10 +771,7 @@ const getSliderPercent = (param: IniParameter): number => {
                   :class="panelStates.parameters ? 'rotate-180' : 'rotate-0'"
                 >▼</span>
               </div>
-              <Transition
-                enter-active-class="animate-fade-in"
-                leave-active-class="animate-fade-out"
-              >
+              <Transition enter-active-class="animate-fade-in" leave-active-class="animate-fade-out">
                 <div v-if="panelStates.parameters" class="panel-content">
                   <template v-if="iniData && iniData.parameters.length > 0">
                     <div
@@ -858,7 +837,6 @@ const getSliderPercent = (param: IniParameter): number => {
               </Transition>
             </div>
 
-            <!-- TEMPLATE -->
             <div class="panel-section">
               <div 
                 class="panel-header"
@@ -873,10 +851,7 @@ const getSliderPercent = (param: IniParameter): number => {
                   :class="panelStates.template ? 'rotate-180' : 'rotate-0'"
                 >▼</span>
               </div>
-              <Transition
-                enter-active-class="animate-fade-in"
-                leave-active-class="animate-fade-out"
-              >
+              <Transition enter-active-class="animate-fade-in" leave-active-class="animate-fade-out">
                 <div v-if="panelStates.template" class="panel-content">
                   <textarea
                     :value="iniData?.templateContent ?? ''"
@@ -892,7 +867,6 @@ const getSliderPercent = (param: IniParameter): number => {
           </template>
           
           <template v-else>
-            <!-- Structure Preview -->
             <div class="panel-section">
               <div 
                 class="panel-header"
@@ -907,10 +881,7 @@ const getSliderPercent = (param: IniParameter): number => {
                   :class="panelStates.structure ? 'rotate-180' : 'rotate-0'"
                 >▼</span>
               </div>
-              <Transition
-                enter-active-class="animate-fade-in"
-                leave-active-class="animate-fade-out"
-              >
+              <Transition enter-active-class="animate-fade-in" leave-active-class="animate-fade-out">
                 <div v-if="panelStates.structure" class="panel-content">
                   <div v-if="iniData" class="text-xs font-mono leading-[1.8]">
                     <div class="flex gap-2 py-1 border-b border-border">
@@ -939,7 +910,6 @@ const getSliderPercent = (param: IniParameter): number => {
               </Transition>
             </div>
 
-            <!-- Statistics -->
             <div class="panel-section">
               <div 
                 class="panel-header"
@@ -954,10 +924,7 @@ const getSliderPercent = (param: IniParameter): number => {
                   :class="panelStates.statistics ? 'rotate-180' : 'rotate-0'"
                 >▼</span>
               </div>
-              <Transition
-                enter-active-class="animate-fade-in"
-                leave-active-class="animate-fade-out"
-              >
+              <Transition enter-active-class="animate-fade-in" leave-active-class="animate-fade-out">
                 <div v-if="panelStates.statistics" class="panel-content">
                   <div class="grid grid-cols-2 gap-2">
                     <div class="stat-card">
@@ -985,9 +952,7 @@ const getSliderPercent = (param: IniParameter): number => {
       </div>
     </div>
 
-    <!-- Bottom Toolbar -->
     <div class="bg-background-secondary border-t border-border px-4 py-2 flex items-center justify-between flex-shrink-0 gap-2">
-      <!-- Left: Logo & Status -->
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-hover flex items-center justify-center">
           <Braces :size="16" class="text-white" />
@@ -1006,7 +971,6 @@ const getSliderPercent = (param: IniParameter): number => {
         </div>
       </div>
 
-      <!-- Center: Action Buttons -->
       <div class="flex items-center gap-1">
         <button @click="handleUpload" class="btn-primary" title="上传文件">
           <Upload :size="13" />
@@ -1036,7 +1000,6 @@ const getSliderPercent = (param: IniParameter): number => {
         </button>
       </div>
 
-      <!-- Right: Settings -->
       <div class="flex items-center gap-1.5">
         <div class="flex items-center gap-0.5 bg-background-secondary rounded-md p-0.5 px-1">
           <button

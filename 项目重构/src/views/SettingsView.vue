@@ -74,7 +74,6 @@ const splashScreenEnabled = ref(true);
 const splashScreenType = ref<'full' | 'minimal' | 'fade'>('full');
 const splashScreenUseWallpaper = ref(true);
 const sendOnEnter = ref(true);
-const lanTransferMode = ref<'streaming' | 'buffered'>('streaming');
 
 const QUOTE_INTERVAL_OPTIONS = [
   { value: 10 as const, label: '10 秒' },
@@ -140,12 +139,6 @@ watch(sendOnEnter, async (newValue) => {
   await saveSettings('send_on_enter', newValue);
   toast.success(newValue ? 'Enter发送已启用' : 'Enter发送已禁用');
 });
-
-const handleLanTransferModeChange = async (value: 'streaming' | 'buffered') => {
-  lanTransferMode.value = value;
-  await saveSettings('lan_transfer_mode', value);
-  toast.success(value === 'streaming' ? '局域网传输已切换为流式模式' : '局域网传输已切换为缓冲模式');
-};
 
 const handleDailyQuoteIntervalChange = async (value: 10 | 3600 | 86400) => {
   dailyQuoteInterval.value = value;
@@ -415,9 +408,6 @@ const loadSettings = async () => {
       }
       if (config.ui.splash_screen_use_wallpaper !== undefined) {
         splashScreenUseWallpaper.value = config.ui.splash_screen_use_wallpaper;
-      }
-      if (config.ui.lan_transfer_mode) {
-        lanTransferMode.value = config.ui.lan_transfer_mode as 'streaming' | 'buffered';
       }
     }
   } catch (error) {
@@ -846,28 +836,13 @@ onMounted(async () => {
 
         <div class="setting-card">
           <div class="setting-header">
-            <div class="setting-title">局域网传输模式</div>
+            <div class="setting-title">局域网传输</div>
           </div>
-          <p class="setting-desc">设置局域网分享视频时的传输方式</p>
-          <div class="setting-options">
-            <button
-              v-for="option in [
-                { value: 'streaming' as const, label: '流式传输', desc: '推荐 · 低内存' },
-                { value: 'buffered' as const, label: '缓冲传输', desc: '兼容性好' }
-              ]"
-              :key="option.value"
-              class="option-button"
-              :class="{ active: lanTransferMode === option.value }"
-              @click="handleLanTransferModeChange(option.value)"
-            >
-              <div class="option-label">{{ option.label }}</div>
-              <div class="option-desc">{{ option.desc }}</div>
-            </button>
-          </div>
+          <p class="setting-desc">局域网分享视频时使用流式传输技术</p>
           <div class="setting-hint">
             <span class="hint-icon">💡</span>
-            流式传输：边读边发，内存占用恒定（约1MB），适合大文件<br/>
-            缓冲传输：先读取整个文件再发送，可能占用较多内存
+            流式传输：边读边发，内存占用恒定（约1MB），支持任意大小文件<br/>
+            支持视频进度拖动、断点续传，适合大文件和长时间视频
           </div>
         </div>
       </div>

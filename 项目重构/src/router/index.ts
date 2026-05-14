@@ -60,6 +60,12 @@ const routes: RouteRecordRaw[] = [
     component: () => import('@/views/CompareView.vue'),
     meta: { title: '文本对比' },
   },
+  {
+    path: '/logs',
+    name: 'Logs',
+    component: () => import('@/views/LogsView.vue'),
+    meta: { title: '系统日志' },
+  },
 ];
 
 const router = createRouter({

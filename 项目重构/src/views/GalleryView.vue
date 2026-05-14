@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/core';
 import { convertFileSrc } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
+import { open, confirm } from '@tauri-apps/plugin-dialog';
 import { useToast } from '@/composables/useToast';
 import { fileService } from '@/services';
 import Modal from '@/components/common/Modal.vue';
@@ -98,6 +98,8 @@ const jsonDisplayCount = ref(100);
 const jsonAllData = ref<any[]>([]);
 
 const isDragOver = ref(false);
+
+const recursiveScan = ref(false);
 
 const contextMenu = ref<{
   visible: boolean;
@@ -313,7 +315,12 @@ const deleteAlbum = async (albumId?: string) => {
   const targetAlbumId = albumId || contextMenu.value?.albumId;
   if (!targetAlbumId) return;
   
-  if (!confirm('确定要删除这个相册吗？相册内的所有图片也会被删除。')) {
+  const confirmed = await confirm('确定要删除这个相册吗？相册内的所有图片也会被删除。', {
+    title: '删除相册',
+    kind: 'warning',
+  });
+  
+  if (!confirmed) {
     contextMenu.value = null;
     return;
   }
@@ -410,7 +417,10 @@ const uploadFolder = async () => {
     loading.value = true;
     
     const imageExts = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'];
-    const files = await invoke<string[]>('list_files_in_folder', { folderPath });
+    const files = await invoke<string[]>('list_files_in_folder', { 
+      folderPath,
+      recursive: recursiveScan.value,
+    });
     
     const imageFiles = files.filter(file => {
       const ext = file.split('.').pop()?.toLowerCase() || '';
@@ -421,6 +431,21 @@ const uploadFolder = async () => {
       toast.info('文件夹中没有找到图片文件');
       loading.value = false;
       return;
+    }
+    
+    if (imageFiles.length > 1000) {
+      const confirmed = await confirm(
+        `文件夹中包含 ${imageFiles.length} 张图片，导入可能需要较长时间。是否继续？`,
+        {
+          title: '图片数量较多',
+          kind: 'warning',
+        }
+      );
+      
+      if (!confirmed) {
+        loading.value = false;
+        return;
+      }
     }
     
     uploadProgress.value = {
@@ -447,7 +472,7 @@ const uploadFolder = async () => {
       
       const batchData = batch.map(filePath => {
         const fileName = filePath.split(/[/\\]/).pop() || 'image.jpg';
-        return { sourcePath: filePath, fileName };
+        return { source_path: filePath, file_name: fileName };
       });
       
       try {
@@ -519,7 +544,12 @@ const toggleFavorite = async (imageId: string) => {
 };
 
 const deleteImage = async (imageId: string) => {
-  if (!confirm('确定要删除这张图片吗？')) return;
+  const confirmed = await confirm('确定要删除这张图片吗？', {
+    title: '删除图片',
+    kind: 'warning',
+  });
+  
+  if (!confirmed) return;
   
   try {
     await invoke('delete_image', { imageId });
@@ -599,7 +629,12 @@ const deleteSelected = async () => {
     return;
   }
   
-  if (!confirm(`确定要删除选中的 ${selectedIds.value.size} 张图片吗？`)) return;
+  const confirmed = await confirm(`确定要删除选中的 ${selectedIds.value.size} 张图片吗？`, {
+    title: '批量删除图片',
+    kind: 'warning',
+  });
+  
+  if (!confirmed) return;
   
   try {
     loading.value = true;
@@ -681,8 +716,8 @@ const handleDrop = async (e: DragEvent) => {
         
         const batchData = batch.map(file => {
           const filePath = (file as any).path;
-          return { sourcePath: filePath, fileName: file.name };
-        }).filter(item => item.sourcePath);
+          return { source_path: filePath, file_name: file.name };
+        }).filter(item => item.source_path);
         
         if (batchData.length === 0) continue;
         
@@ -933,6 +968,20 @@ const handleOutsideClick = (event: MouseEvent) => {
                       </button>
                     </div>
                   </div>
+                  
+                  <div class="settings-item">
+                    <div class="settings-item-info">
+                      <span class="settings-label">递归扫描子文件夹</span>
+                      <span class="settings-desc">上传文件夹时是否扫描子文件夹中的图片</span>
+                    </div>
+                    <button
+                      class="toggle-switch"
+                      :class="{ active: recursiveScan }"
+                      @click="recursiveScan = !recursiveScan"
+                    >
+                      <span class="toggle-slider"></span>
+                    </button>
+                  </div>
                 </div>
               </Transition>
             </div>
@@ -946,6 +995,22 @@ const handleOutsideClick = (event: MouseEvent) => {
               <CheckSquare :size="16" />
               {{ selectMode ? '取消' : '批量选择' }}
             </button>
+            
+            <!-- 批量操作按钮组 -->
+            <Transition name="fade">
+              <div v-if="selectMode" class="batch-actions-inline">
+                <span class="batch-count">{{ selectedIds.size }} 张</span>
+                <button class="batch-btn-inline" @click="selectAll" :disabled="selectedIds.size === displayImages.length" title="全选">
+                  <Check :size="14" />
+                </button>
+                <button class="batch-btn-inline" @click="deselectAll" :disabled="selectedIds.size === 0" title="取消选择">
+                  <Square :size="14" />
+                </button>
+                <button class="batch-btn-inline danger" @click="deleteSelected" :disabled="selectedIds.size === 0" title="删除选中">
+                  <Trash2 :size="14" />
+                </button>
+              </div>
+            </Transition>
             
             <!-- 瀑布流列数选择器 -->
             <Transition name="fade">
@@ -978,29 +1043,6 @@ const handleOutsideClick = (event: MouseEvent) => {
             </button>
           </div>
         </header>
-
-        <Transition name="slide-down">
-          <div v-if="selectMode" class="batch-toolbar">
-            <div class="batch-info">
-              <CheckSquare :size="16" />
-              <span>已选择 {{ selectedIds.size }} 张图片</span>
-            </div>
-            <div class="batch-actions">
-              <button class="batch-btn" @click="selectAll" :disabled="selectedIds.size === displayImages.length">
-                <Check :size="14" />
-                全选
-              </button>
-              <button class="batch-btn" @click="deselectAll" :disabled="selectedIds.size === 0">
-                <Square :size="14" />
-                取消选择
-              </button>
-              <button class="batch-btn danger" @click="deleteSelected" :disabled="selectedIds.size === 0">
-                <Trash2 :size="14" />
-                删除选中
-              </button>
-            </div>
-          </div>
-        </Transition>
 
         <div class="content-area" ref="gridContainerRef" :class="{ 'hide-scrollbar': !showScrollbar }">
           <div v-if="loading" class="loading-state">
@@ -1136,7 +1178,7 @@ const handleOutsideClick = (event: MouseEvent) => {
       </main>
     </div>
 
-    <!-- 底部抽屉式相册管理 -->
+    <!-- 右侧侧边栏相册管理 -->
     <Transition name="drawer">
       <div v-if="drawerVisible" class="album-drawer" @click="toggleDrawer">
         <div class="drawer-content" @click.stop>
@@ -1184,30 +1226,6 @@ const handleOutsideClick = (event: MouseEvent) => {
                 </div>
               </div>
               
-              <!-- 自定义相册 -->
-              <div
-                v-for="album in albums"
-                :key="album.id"
-                class="album-card"
-                :class="{ active: currentAlbumId === album.id }"
-                @click="currentAlbumId = album.id"
-              >
-                <div class="album-card-icon custom">
-                  <FolderOpen :size="20" />
-                </div>
-                <div class="album-card-info">
-                  <h3>{{ album.name }}</h3>
-                  <span class="album-count">{{ images.filter(i => i.album_id === album.id).length }} 张</span>
-                </div>
-                <button class="album-card-action" @click.stop="showAlbumMenu($event, album.id, album.name)" title="更多操作">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="1" />
-                    <circle cx="12" cy="5" r="1" />
-                    <circle cx="12" cy="19" r="1" />
-                  </svg>
-                </button>
-              </div>
-              
               <!-- 添加新相册 -->
               <div class="album-card add-album" @click="createAlbum">
                 <div class="album-card-icon add">
@@ -1218,6 +1236,30 @@ const handleOutsideClick = (event: MouseEvent) => {
                   <span class="album-count">点击创建</span>
                 </div>
               </div>
+              
+              <!-- 自定义相册 -->
+              <template v-for="album in albums" :key="album.id">
+                <div
+                  class="album-card"
+                  :class="{ active: currentAlbumId === album.id }"
+                  @click="currentAlbumId = album.id"
+                >
+                  <div class="album-card-icon custom">
+                    <FolderOpen :size="20" />
+                  </div>
+                  <div class="album-card-info">
+                    <h3>{{ album.name }}</h3>
+                    <span class="album-count">{{ images.filter(i => i.album_id === album.id).length }} 张</span>
+                  </div>
+                  <button class="album-card-action" @click.stop="showAlbumMenu($event, album.id, album.name)" title="更多操作">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="1" />
+                      <circle cx="12" cy="5" r="1" />
+                      <circle cx="12" cy="19" r="1" />
+                    </svg>
+                  </button>
+                </div>
+              </template>
             </div>
           </div>
         </div>
@@ -1407,6 +1449,8 @@ const handleOutsideClick = (event: MouseEvent) => {
   background-color: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   gap: 16px;
+  height: 56px;
+  flex-shrink: 0;
 }
 
 .toolbar-left {
@@ -1543,75 +1587,51 @@ const handleOutsideClick = (event: MouseEvent) => {
   text-align: center;
 }
 
-.batch-toolbar {
+.batch-actions-inline {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 24px;
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(59, 130, 246, 0.08));
-  border-bottom: 1px solid rgba(6, 182, 212, 0.15);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  background-color: rgba(var(--primary-color-rgb, 6, 182, 212), 0.1);
 }
 
-.batch-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--primary-color);
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.batch-info svg {
-  animation: pulse 2s ease-in-out infinite;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.6;
-  }
-}
-
-.batch-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.batch-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background-color: var(--bg-secondary);
-  color: var(--text-secondary);
+.batch-count {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
+  color: var(--primary-color);
+  padding: 0 8px;
+  min-width: 50px;
+  text-align: center;
+}
+
+.batch-btn-inline {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: none;
+  background-color: var(--bg-primary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.batch-btn:hover:not(:disabled) {
-  background-color: var(--bg-primary);
-  border-color: var(--primary-color);
-  color: var(--primary-color);
+.batch-btn-inline:hover:not(:disabled) {
+  background-color: var(--primary-color);
+  color: white;
 }
 
-.batch-btn:disabled {
+.batch-btn-inline:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.batch-btn.danger:hover:not(:disabled) {
-  background-color: rgba(239, 68, 68, 0.1);
-  border-color: #ef4444;
-  color: #ef4444;
+.batch-btn-inline.danger:hover:not(:disabled) {
+  background-color: #ef4444;
+  color: white;
 }
 
 .image-grid-container {
@@ -2124,42 +2144,40 @@ const handleOutsideClick = (event: MouseEvent) => {
 
 .album-drawer {
   position: fixed;
-  top: 0;
-  bottom: 0;
+  top: 90px;
+  bottom: 32px;
   left: 0;
   right: 0;
   z-index: 1500;
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: flex-end;
   pointer-events: auto;
+  padding-right: 16px;
 }
 
 .drawer-content {
-  width: 66.67%;
-  max-height: 45vh;
-  background: linear-gradient(180deg, 
-    rgba(var(--bg-primary-rgb, 255, 255, 255), 0.75) 0%,
-    rgba(var(--bg-primary-rgb, 255, 255, 255), 0.65) 100%
-  );
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  border-radius: 16px 16px 0 0;
-  border-top: 1px solid rgba(var(--border-color-rgb, 200, 200, 200), 0.3);
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.1);
+  width: 320px;
+  max-width: 90vw;
+  height: 100%;
+  background: rgba(var(--bg-primary-rgb, 255, 255, 255), 0.2);
+  border-radius: 16px;
+  border: 1px solid rgba(var(--border-color-rgb, 200, 200, 200), 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
   overflow: hidden;
-  animation: slideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  animation: slideLeft 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   pointer-events: auto;
-  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 
-@keyframes slideUp {
+@keyframes slideLeft {
   from {
-    transform: translateY(100%);
+    transform: translateX(100%);
     opacity: 0;
   }
   to {
-    transform: translateY(0);
+    transform: translateX(0);
     opacity: 1;
   }
 }
@@ -2240,15 +2258,15 @@ const handleOutsideClick = (event: MouseEvent) => {
 }
 
 .drawer-body {
-  padding: 12px 20px 20px;
+  padding: 16px;
   overflow-y: auto;
-  max-height: calc(45vh - 50px);
+  flex: 1;
 }
 
 .albums-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
 }
 
 .album-card {
@@ -2426,7 +2444,7 @@ const handleOutsideClick = (event: MouseEvent) => {
 
 .drawer-enter-active,
 .drawer-leave-active {
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .drawer-enter-from,
@@ -2436,18 +2454,7 @@ const handleOutsideClick = (event: MouseEvent) => {
 
 .drawer-enter-from .drawer-content,
 .drawer-leave-to .drawer-content {
-  transform: translateY(100%);
-}
-
-.slide-down-enter-active,
-.slide-down-leave-active {
-  transition: all 0.3s ease;
-}
-
-.slide-down-enter-from,
-.slide-down-leave-to {
-  opacity: 0;
-  transform: translateY(-10px);
+  transform: translateX(100%);
 }
 
 .fade-enter-active,

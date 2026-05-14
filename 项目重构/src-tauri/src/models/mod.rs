@@ -230,6 +230,8 @@ pub struct ImageAlbum {
     pub updated_at: u64,
     pub cover_image_id: Option<String>,
     pub description: Option<String>,
+    #[serde(default)]
+    pub image_count: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -4,16 +4,12 @@ import { invoke } from '@tauri-apps/api/core';
 import { useFFmpegStore } from '@/stores';
 import { useToast } from '@/composables/useToast';
 import FolderProcess from '@/components/media/FolderProcess.vue';
-import FormatConvert from '@/components/media/FormatConvert.vue';
-import AudioProcess from '@/components/media/AudioProcess.vue';
-import AdvancedTools from '@/components/media/AdvancedTools.vue';
-import IcoConvert from '@/components/media/IcoConvert.vue';
-import ImageFormatConvert from '@/components/media/ImageFormatConvert.vue';
+import MediaConvertTools from '@/components/media/MediaConvertTools.vue';
 import CommandBuilder from '@/components/media/CommandBuilder.vue';
 import VideoAnalysis from '@/components/media/VideoAnalysis.vue';
 import VideoEdit from '@/components/media/VideoEdit.vue';
 import {
-  FileType, Music, Settings, ListTodo, X, Trash2, Play, CheckCircle, Clock, Cog, Square, FolderOpen, ChevronDown, ChevronRight, Copy, Check, Image as ImageIcon, FileImage, FolderSync, Minimize2, Film, ChevronsUp, Terminal
+  Settings, ListTodo, X, Trash2, Play, CheckCircle, Cog, Square, FolderOpen, FolderSync, Minimize2, Film, ChevronsUp, Terminal
 } from 'lucide-vue-next';
 
 const ffmpegStore = useFFmpegStore();
@@ -102,11 +98,7 @@ async function selectFFmpegPath() {
 }
 
 const tabs = [
-  { key: 'format', label: '格式转换', icon: FileType },
-  { key: 'audio', label: '音频处理', icon: Music },
-  { key: 'advanced', label: '高级工具', icon: Settings },
-  { key: 'ico', label: 'ICO转换', icon: ImageIcon },
-  { key: 'imageFormat', label: '图片转换', icon: FileImage },
+  { key: 'convert', label: '媒体转换', icon: Settings },
   { key: 'command', label: '命令构建', icon: Terminal },
 ];
 
@@ -165,24 +157,8 @@ const formatTime = (timestamp: number) => {
         <FolderProcess />
       </div>
       
-      <div v-show="activeTab === 'format'" class="tab-content">
-        <FormatConvert />
-      </div>
-      
-      <div v-show="activeTab === 'audio'" class="tab-content">
-        <AudioProcess />
-      </div>
-      
-      <div v-show="activeTab === 'advanced'" class="tab-content">
-        <AdvancedTools />
-      </div>
-      
-      <div v-show="activeTab === 'ico'" class="tab-content">
-        <IcoConvert />
-      </div>
-      
-      <div v-show="activeTab === 'imageFormat'" class="tab-content">
-        <ImageFormatConvert />
+      <div v-show="activeTab === 'convert'" class="tab-content">
+        <MediaConvertTools />
       </div>
       
       <div v-show="activeTab === 'command'" class="tab-content">

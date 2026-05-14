@@ -349,12 +349,20 @@ const addVideoFiles = async () => {
     const files = Array.isArray(selected) ? selected : [selected];
 
     for (const filePath of files) {
+      let fileSize = 0;
+      try {
+        const stats = await fileService.getFileStats(filePath);
+        fileSize = stats.size;
+      } catch (e) {
+        console.warn('Failed to get file size:', e);
+      }
+
       const videoItem: VideoItem = {
         id: `video_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: filePath.split(/[/\\]/).pop() || '视频',
         url: convertFileSrc(filePath),
         path: filePath,
-        size: 0,
+        size: fileSize,
         duration: 0,
         addedAt: Date.now(),
       };
